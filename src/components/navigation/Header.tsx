@@ -52,7 +52,7 @@ export function Header({
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
               <span className="font-display font-black text-lg tracking-tight text-slate-900 dark:text-white group-hover:text-eagle-blue transition">
-                AGILA<span className="text-eagle-blue font-bold">Hub</span>
+                AGILA Hub
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-bumblebee-yellow inline-block" />
             </div>

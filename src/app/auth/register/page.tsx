@@ -161,7 +161,7 @@ export default function RegisterPage() {
           <ArrowLeft className="h-4 w-4" /> Already have an account? Sign In
         </Link>
         <Badge variant="gold" size="sm">
-          TFOE-PE REGISTERED
+          Fraternal Order of Eagles
         </Badge>
       </div>
 
@@ -184,7 +184,7 @@ export default function RegisterPage() {
               </div>
               <div>
                 <h1 className="text-xl font-black font-display text-slate-900 dark:text-white tracking-tight">
-                  AGILA<span className="text-eagle-blue font-bold">Hub</span>
+                  AGILA Hub
                 </h1>
                 <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-wider uppercase">
                   Member Onboarding & Identification

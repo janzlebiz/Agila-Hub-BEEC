@@ -71,8 +71,8 @@ export default function LoginPage() {
         >
           <ArrowLeft className="h-4 w-4" /> Back to Hub Overview
         </Link>
-        <span className="text-[10px] font-mono tracking-widest uppercase text-slate-400 font-bold">
-          SEC REG: NO. 102422
+        <span className="text-[10px] font-mono tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
+          SEC Reg. No. 102422
         </span>
       </div>
 
@@ -95,7 +95,7 @@ export default function LoginPage() {
               </div>
               <div>
                 <h1 className="text-xl font-black font-display text-slate-900 dark:text-white tracking-tight">
-                  AGILA<span className="text-eagle-blue font-bold">Hub</span>
+                  AGILA Hub
                 </h1>
                 <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-wider uppercase">
                   Authorized Member Portal

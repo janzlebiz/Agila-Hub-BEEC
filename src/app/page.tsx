@@ -27,6 +27,9 @@ import {
   Sparkles,
   Loader2,
   AlertCircle,
+  ExternalLink,
+  ChevronRight,
+  Landmark,
 } from "lucide-react";
 
 interface MemberRecord {
@@ -71,6 +74,7 @@ interface ContributionRecord {
   payment_method: string;
   status: string;
   contribution_date: string;
+  reference_number?: string | null;
 }
 
 interface DocumentRecord {
@@ -86,7 +90,7 @@ export default function HomePage() {
   const supabase = createClient();
 
   const [currentRole, setCurrentRole] = useState<"admin" | "officer" | "member">("admin");
-  const [activeTab, setActiveTab] = useState("home");
+  const [docketTab, setDocketTab] = useState<"assemblies" | "ledger" | "documents" | "community">("assemblies");
   const [isDark, setIsDark] = useState(false);
   const [textSize, setTextSize] = useState<"normal" | "large" | "xl">("normal");
 
@@ -99,8 +103,8 @@ export default function HomePage() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [pendingApplicants, setPendingApplicants] = useState<MemberRecord[]>([]);
 
-  // Interactive Live Actions
-  const [checkInInput, setCheckInInput] = useState("AGILA-GMM-2026");
+  // Interactive Live Check-in States
+  const [checkInCode, setCheckInCode] = useState("AGILA-GMM-2026");
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkInFeedback, setCheckInFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -175,7 +179,7 @@ export default function HomePage() {
 
       if (docData) setDocuments(docData as DocumentRecord[]);
 
-      // 6. Fetch Pending Applicants (for Admin/Officer view)
+      // 6. Fetch Pending Applicants
       const { data: pendData } = await supabase
         .from("members")
         .select("*")
@@ -230,17 +234,23 @@ export default function HomePage() {
         },
       }[currentRole];
 
-  // Live active check-in event
+  // Active check-in assembly
   const activeEvent = events.find((e) => e.checkin_open) || events[0];
 
-  // Handle Live Check-In RPC
+  // Total verified dues calculation
+  const totalVerifiedDues = contributions
+    .filter((c) => c.status === "verified")
+    .reduce((acc, c) => acc + Number(c.amount), 0);
+
+  // Handle Tactile Check-In
   const handleCheckIn = async (eventId: string) => {
+    if (!checkInCode.trim()) return;
     setCheckInLoading(true);
     setCheckInFeedback(null);
     try {
       const { data, error } = await supabase.rpc("check_in_event", {
         p_event_id: eventId,
-        p_checkin_code: checkInInput.trim(),
+        p_checkin_code: checkInCode.trim().toUpperCase(),
       });
 
       if (error) {
@@ -257,7 +267,7 @@ export default function HomePage() {
     }
   };
 
-  // Handle Applicant Approval RPC
+  // Handle Candidate Approval
   const handleApproveApplicant = async (memberId: string) => {
     setApprovingId(memberId);
     try {
@@ -277,7 +287,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col pb-24 sm:pb-12 text-slate-900 dark:text-white transition-colors duration-300">
-      {/* Top Glass Header with Brand, Role Selector, Theme Toggle, Text Size Scale */}
+      {/* Top Glass Header */}
       <Header
         currentRole={currentRole}
         onRoleChange={setCurrentRole}
@@ -288,77 +298,75 @@ export default function HomePage() {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-8">
-        {/* Mobile Greeting Banner & Controls */}
+        {/* Fraternal Greeting Section (Natural Voice, No Single-word Accent Splits) */}
         <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-bold text-eagle-blue-dark dark:text-bumblebee-yellow uppercase tracking-widest flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-forest-light animate-pulse" />
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block shadow-sm" />
                 Mabuhay ang Agila!
               </span>
-              <Badge variant="blue" size="sm">
-                LIVE POSTGRES DB
-              </Badge>
+              <span className="text-slate-300 dark:text-slate-600 font-bold">•</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                {activeProfile.club}
+              </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 dark:text-white tracking-tight">
-              Good day,{" "}
-              <span className="text-eagle-blue-dark dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-eagle-blue dark:via-blue-300 dark:to-bumblebee-yellow">
-                {activeProfile.name}!
-              </span>
+              Good day, {activeProfile.name}
             </h1>
-            <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-              Welcome to the authoritative AGILA Hub portal. Viewing with{" "}
-              <span className="text-eagle-blue font-bold uppercase">{currentRole}</span> permissions.
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
+              Authorized portal session active with {currentRole === "admin" ? "National Executive" : currentRole === "officer" ? "Club Officer" : "Charter Member"} credentials.
             </p>
           </div>
 
-          {/* Quick Stats Pill */}
+          {/* Quiet Standing Indicators */}
           <div className="flex items-center gap-3 flex-wrap">
-            <GlassCard className="py-2.5 px-4 flex items-center gap-3 !rounded-xl">
-              <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-forest-light/20 flex items-center justify-center text-emerald-700 dark:text-forest-light">
+            <div className="py-2.5 px-4 rounded-2xl bg-white/80 dark:bg-canvas-slate/80 border border-slate-200/90 dark:border-white/10 shadow-sm flex items-center gap-3">
+              <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold">
                 <CheckCircle2 className="h-4 w-4" />
               </div>
               <div>
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block uppercase tracking-wider">
-                  Dues Status
+                  Fraternal Standing
                 </span>
                 <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                  {contributions.some((c) => c.status === "verified") ? "Paid & Verified" : "Pending Ledger"}
+                  Good Standing • Dues Current
                 </span>
               </div>
-            </GlassCard>
+            </div>
 
-            <GlassCard className="py-2.5 px-4 flex items-center gap-3 !rounded-xl">
-              <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-eagle-blue/20 flex items-center justify-center text-eagle-blue-dark dark:text-blue-400">
-                <Calendar className="h-4 w-4" />
+            <div className="py-2.5 px-4 rounded-2xl bg-white/80 dark:bg-canvas-slate/80 border border-slate-200/90 dark:border-white/10 shadow-sm flex items-center gap-3">
+              <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-eagle-blue flex items-center justify-center font-bold">
+                <Landmark className="h-4 w-4" />
               </div>
               <div>
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block uppercase tracking-wider">
-                  Events Scheduled
+                  Regional Chapter
                 </span>
-                <span className="text-xs font-bold text-eagle-blue-dark dark:text-blue-300">
-                  {events.length} Upcoming
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Region V • Bicol Peninsula
                 </span>
               </div>
-            </GlassCard>
+            </div>
           </div>
         </section>
 
-        {/* Layout Grid: Left = Digital ID Card / Right = Active Modules */}
+        {/* Layout Grid: Left = Hero Official Credential & Tactile Passcode / Right = Fraternal Action Docket */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Col 1: Digital ID Card & Quick Attendance */}
+          
+          {/* Col 1: Hero Credential & Tactile Assembly Check-In */}
           <div className="lg:col-span-5 space-y-6">
             <div>
               <div className="flex items-center justify-between mb-3 px-1">
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-wider uppercase">
-                  Digital Membership Card
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-wider">
+                  Official Member Credential
                 </span>
-                <span className="text-[11px] text-eagle-blue-dark dark:text-bumblebee-yellow font-bold flex items-center gap-1">
-                  Tap for QR Verification
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  Verified RFID & QR
                 </span>
               </div>
 
-              {/* The Official Digital ID Card */}
+              {/* The Physical Executive Polycarbonate Credential */}
               <DigitalIdCard
                 fullName={activeProfile.name}
                 nickname={activeProfile.nickname}
@@ -370,318 +378,347 @@ export default function HomePage() {
               />
             </div>
 
-            {/* Quick Action: Live Event Check-in Card */}
+            {/* Tactile Assembly Check-In Card */}
             {activeEvent && (
-              <GlassCard variant="glow-blue" className="p-5">
+              <GlassCard variant="glow-blue" className="p-5 shadow-lg border-eagle-blue/20">
                 <div className="flex items-start justify-between">
                   <div>
                     <Badge variant={activeEvent.checkin_open ? "blue" : "neutral"} size="sm" className="mb-2">
-                      {activeEvent.checkin_open ? "LIVE CHECK-IN WINDOW" : "UPCOMING ASSEMBLY"}
+                      {activeEvent.checkin_open ? "Assembly Quorum Open" : "Upcoming Meeting"}
                     </Badge>
                     <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
                       {activeEvent.title.replace("[SEED] ", "")}
                     </h4>
                     <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
-                      <MapPin className="h-3.5 w-3.5 text-eagle-blue" />
+                      <MapPin className="h-3.5 w-3.5 text-eagle-blue shrink-0" />
                       {activeEvent.location || "Agila Clubhouse & Conference Hall, QC"}
                     </p>
                     <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
-                      <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-bumblebee-yellow" />
-                      Scheduled: {new Date(activeEvent.event_date).toLocaleDateString()}
+                      <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      Assembly Date: {new Date(activeEvent.event_date).toLocaleDateString()}
                     </p>
                   </div>
-                  <div className="h-12 w-12 rounded-xl bg-slate-100 dark:bg-white/10 flex items-center justify-center shrink-0 border border-slate-200 dark:border-white/20">
-                    <QrCode className="h-6 w-6 text-eagle-blue-dark dark:text-bumblebee-yellow" />
+                  <div className="h-12 w-12 rounded-2xl bg-white dark:bg-canvas-slate shadow-sm border border-slate-200 dark:border-white/10 flex items-center justify-center shrink-0">
+                    <QrCode className="h-6 w-6 text-slate-800 dark:text-white" />
                   </div>
                 </div>
 
+                {/* Tactile PIN / Check-in Feedback */}
                 {checkInFeedback && (
                   <div
-                    className={`mt-4 p-3 rounded-xl border flex items-center gap-2 text-xs font-medium animate-fadeIn ${
+                    className={`mt-4 p-3 rounded-xl border flex items-center gap-2 text-xs font-semibold animate-fadeIn ${
                       checkInFeedback.success
-                        ? "bg-forest-green/10 border-forest-green/30 text-forest-green dark:text-forest-light"
-                        : "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400"
+                        ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-800 dark:text-emerald-300"
+                        : "bg-rose-50 dark:bg-rose-950/30 border-rose-300 text-rose-800 dark:text-rose-300"
                     }`}
                   >
-                    {checkInFeedback.success ? <Check className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
+                    {checkInFeedback.success ? <Check className="h-4 w-4 shrink-0 text-emerald-600" /> : <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />}
                     <span>{checkInFeedback.message}</span>
                   </div>
                 )}
 
-                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">PIN:</span>
-                    <input
-                      type="text"
-                      value={checkInInput}
-                      onChange={(e) => setCheckInInput(e.target.value)}
-                      placeholder="PIN Code"
-                      className="h-8 px-2.5 w-36 rounded-lg bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/20 font-mono text-xs font-bold text-slate-900 dark:text-white uppercase focus:outline-none focus:ring-1 focus:ring-eagle-blue"
-                    />
+                {/* Tactile Passcode Input Block */}
+                <div className="mt-5 pt-4 border-t border-slate-200/80 dark:border-white/10">
+                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-2">
+                    Enter Official Assembly Passcode:
+                  </span>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={checkInCode}
+                        onChange={(e) => setCheckInCode(e.target.value.toUpperCase())}
+                        placeholder="ENTER CODE"
+                        className="w-full h-11 px-3.5 rounded-xl bg-slate-100/90 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 font-mono text-sm font-black tracking-widest text-slate-900 dark:text-white text-center uppercase focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={checkInFeedback?.success ? "secondary" : "primary"}
+                      disabled={checkInLoading}
+                      onClick={() => handleCheckIn(activeEvent.id)}
+                      className="h-11 px-5 text-xs font-bold shadow-md"
+                    >
+                      {checkInLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : checkInFeedback?.success ? (
+                        "✓ Attendance Confirmed"
+                      ) : (
+                        "Confirm Attendance"
+                      )}
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    variant={checkInFeedback?.success ? "secondary" : "primary"}
-                    disabled={checkInLoading}
-                    onClick={() => handleCheckIn(activeEvent.id)}
-                  >
-                    {checkInLoading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : checkInFeedback?.success ? (
-                      "✓ Check-in Verified"
-                    ) : (
-                      "Record Attendance"
-                    )}
-                  </Button>
                 </div>
               </GlassCard>
             )}
           </div>
 
-          {/* Col 2: Role-Tailored Workflows & System Modules */}
+          {/* Col 2: The Fraternal Action Docket & Circulars */}
           <div className="lg:col-span-7 space-y-6">
-            {/* Quick Navigation Tiles */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <GlassCard
-                variant="interactive"
-                className={`p-4 flex flex-col items-center text-center group ${
-                  activeTab === "meetings" ? "ring-2 ring-eagle-blue bg-white/95 dark:bg-white/10" : ""
-                }`}
-                onClick={() => setActiveTab(activeTab === "meetings" ? "home" : "meetings")}
-              >
-                <div className="h-10 w-10 rounded-xl bg-blue-100 dark:bg-eagle-blue/20 text-eagle-blue-dark dark:text-blue-300 group-hover:bg-eagle-blue group-hover:text-white transition flex items-center justify-center mb-2 shadow-sm">
-                  <Calendar className="h-5 w-5" />
-                </div>
-                <span className="font-display font-bold text-xs text-slate-900 dark:text-white">Meetings</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-                  {events.length} Events
-                </span>
-              </GlassCard>
+            
+            {/* The Unified Fraternal Action Docket (Replaced generic 4 square tiles) */}
+            <div className="rounded-3xl border border-slate-200/90 dark:border-white/10 bg-white/80 dark:bg-canvas-slate/80 backdrop-blur-deep p-2 shadow-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 bg-slate-100/80 dark:bg-white/[0.05] rounded-2xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setDocketTab("assemblies")}
+                  className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition ${
+                    docketTab === "assemblies"
+                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <Calendar className="h-3.5 w-3.5 text-eagle-blue" />
+                  <span>Assemblies ({events.length})</span>
+                </button>
 
-              <GlassCard
-                variant="interactive"
-                className={`p-4 flex flex-col items-center text-center group ${
-                  activeTab === "contributions" ? "ring-2 ring-forest-light bg-white/95 dark:bg-white/10" : ""
-                }`}
-                onClick={() => setActiveTab(activeTab === "contributions" ? "home" : "contributions")}
-              >
-                <div className="h-10 w-10 rounded-xl bg-emerald-100 dark:bg-forest-light/20 text-emerald-800 dark:text-emerald-300 group-hover:bg-forest group-hover:text-white transition flex items-center justify-center mb-2 shadow-sm">
-                  <CreditCard className="h-5 w-5" />
-                </div>
-                <span className="font-display font-bold text-xs text-slate-900 dark:text-white">Contributions</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-                  ₱{contributions.reduce((acc, c) => acc + Number(c.amount), 0).toLocaleString()} Dues
-                </span>
-              </GlassCard>
+                <button
+                  type="button"
+                  onClick={() => setDocketTab("ledger")}
+                  className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition ${
+                    docketTab === "ledger"
+                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Ledger (₱{totalVerifiedDues.toLocaleString()})</span>
+                </button>
 
-              <GlassCard
-                variant="interactive"
-                className={`p-4 flex flex-col items-center text-center group ${
-                  activeTab === "documents" ? "ring-2 ring-bumblebee-yellow bg-white/95 dark:bg-white/10" : ""
-                }`}
-                onClick={() => setActiveTab(activeTab === "documents" ? "home" : "documents")}
-              >
-                <div className="h-10 w-10 rounded-xl bg-amber-100 dark:bg-bumblebee-yellow/20 text-amber-900 dark:text-yellow-300 group-hover:bg-bumblebee-yellow group-hover:text-slate-950 transition flex items-center justify-center mb-2 shadow-sm">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <span className="font-display font-bold text-xs text-slate-900 dark:text-white">Documents</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-                  {documents.length} Bylaws/Vault
-                </span>
-              </GlassCard>
+                <button
+                  type="button"
+                  onClick={() => setDocketTab("documents")}
+                  className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition ${
+                    docketTab === "documents"
+                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <FileText className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Vault</span>
+                </button>
 
-              <GlassCard
-                variant="interactive"
-                className={`p-4 flex flex-col items-center text-center group ${
-                  activeTab === "community" ? "ring-2 ring-purple-500 bg-white/95 dark:bg-white/10" : ""
-                }`}
-                onClick={() => setActiveTab(activeTab === "community" ? "home" : "community")}
-              >
-                <div className="h-10 w-10 rounded-xl bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 group-hover:bg-purple-600 group-hover:text-white transition flex items-center justify-center mb-2 shadow-sm">
-                  <HeartHandshake className="h-5 w-5" />
-                </div>
-                <span className="font-display font-bold text-xs text-slate-900 dark:text-white">Community</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">Outreach</span>
-              </GlassCard>
+                <button
+                  type="button"
+                  onClick={() => setDocketTab("community")}
+                  className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition ${
+                    docketTab === "community"
+                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <HeartHandshake className="h-3.5 w-3.5 text-purple-500" />
+                  <span>Outreach</span>
+                </button>
+              </div>
+
+              {/* DOCKET CONTENT CONTAINER */}
+              <div className="p-4 sm:p-5">
+                {/* 1. ASSEMBLIES TAB */}
+                {docketTab === "assemblies" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Official Chapter Calendar & Assemblies
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Live Secretariat Schedule
+                      </span>
+                    </div>
+
+                    {events.map((evt) => (
+                      <div
+                        key={evt.id}
+                        className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-eagle-blue/30 transition"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h5 className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                              {evt.title.replace("[SEED] ", "")}
+                            </h5>
+                            {evt.checkin_open && (
+                              <Badge variant="green" size="sm">
+                                Quorum Active
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                            {evt.description}
+                          </p>
+                          <div className="flex items-center gap-4 text-[11px] text-slate-500 dark:text-slate-400 mt-2 font-medium">
+                            <span>📍 {evt.location || "QC Clubhouse"}</span>
+                            <span>📅 {new Date(evt.event_date).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+
+                        {evt.checkin_code && (
+                          <div className="shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setCheckInCode(evt.checkin_code || "")}
+                              className="px-3 py-1.5 rounded-xl bg-slate-200/80 dark:bg-white/10 text-xs font-mono font-bold text-slate-800 dark:text-white hover:bg-eagle-blue hover:text-white transition"
+                              title="Click to copy passcode to check-in box"
+                            >
+                              Code: {evt.checkin_code}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 2. FINANCIAL LEDGER TAB */}
+                {docketTab === "ledger" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Fraternal Dues & Contribution Records
+                      </span>
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                        Audited Secretariat Balance
+                      </span>
+                    </div>
+
+                    {contributions.map((c) => (
+                      <div
+                        key={c.id}
+                        className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex items-center justify-between"
+                      >
+                        <div>
+                          <span className="font-bold text-sm text-slate-900 dark:text-white block">
+                            {c.title.replace("[SEED] ", "")}
+                          </span>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                            {c.category} • Method: {c.payment_method} {c.reference_number ? `(${c.reference_number})` : ""}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-mono font-black text-sm text-slate-900 dark:text-white block">
+                            ₱{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </span>
+                          <span
+                            className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full mt-1 ${
+                              c.status === "verified"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                            }`}
+                          >
+                            {c.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 3. DOCUMENT VAULT TAB */}
+                {docketTab === "documents" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Official Ratified Bylaws & Executive Memoranda
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Encrypted Storage
+                      </span>
+                    </div>
+
+                    {documents.length === 0 ? (
+                      <div className="p-6 rounded-2xl bg-slate-50 dark:bg-white/[0.02] border border-slate-200/80 text-center text-xs text-slate-500">
+                        Constitution and chapter documents uploaded via Secretariat console.
+                      </div>
+                    ) : (
+                      documents.map((doc) => (
+                        <div
+                          key={doc.id}
+                          className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex items-center justify-between"
+                        >
+                          <div>
+                            <span className="font-bold text-sm text-slate-900 dark:text-white block">
+                              {doc.title.replace("[SEED] ", "")}
+                            </span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                              {doc.description || "Official fraternal instrument"}
+                            </span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex items-center gap-1.5 text-xs font-bold"
+                            onClick={() => window.open(doc.file_url, "_blank")}
+                          >
+                            <Download className="h-3.5 w-3.5" /> PDF
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* 4. COMMUNITY OUTREACH TAB */}
+                {docketTab === "community" && (
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
+                        <h5 className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                          Sierra Madre Watershed Reforestation
+                        </h5>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                        Annual environmental sustainability outreach organized by Bantayog Elite Eagles Club in partnership with regional LGUs.
+                      </p>
+                      <div className="flex items-center gap-4 text-[11px] text-slate-500 mt-2 font-medium">
+                        <span>Target: 1,000 Hardwood Saplings</span>
+                        <span>Lead: Environmental Committee</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* TAB VIEW: MEETINGS */}
-            {activeTab === "meetings" && (
-              <GlassCard variant="elevated" className="space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-eagle-blue" />
-                    <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                      Official Meetings & Assemblies
-                    </h3>
-                  </div>
-                  <Badge variant="blue" size="sm">
-                    {events.length} Records in Database
-                  </Badge>
-                </div>
-                <div className="space-y-3">
-                  {events.map((evt) => (
-                    <div
-                      key={evt.id}
-                      className="p-3.5 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-900 dark:text-white">
-                            {evt.title.replace("[SEED] ", "")}
-                          </span>
-                          {evt.checkin_open && <Badge variant="green" size="sm">CHECK-IN OPEN</Badge>}
-                        </div>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                          {evt.description}
-                        </p>
-                        <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 mt-2 font-medium">
-                          <span>📍 {evt.location || "QC Clubhouse"}</span>
-                          <span>📅 {new Date(evt.event_date).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                      <div className="shrink-0">
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={() => {
-                            setCheckInInput(evt.checkin_code || "");
-                            setActiveTab("home");
-                          }}
-                        >
-                          Check In Code: {evt.checkin_code}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
-
-            {/* TAB VIEW: CONTRIBUTIONS */}
-            {activeTab === "contributions" && (
-              <GlassCard variant="elevated" className="space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="h-5 w-5 text-forest-light" />
-                    <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                      Dues & Contribution Ledger
-                    </h3>
-                  </div>
-                  <Badge variant="green" size="sm">
-                    POSTGRES FINANCIAL LEDGER
-                  </Badge>
-                </div>
-                <div className="space-y-3">
-                  {contributions.map((c) => (
-                    <div
-                      key={c.id}
-                      className="p-3.5 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 flex items-center justify-between"
-                    >
-                      <div>
-                        <span className="font-bold text-sm text-slate-900 dark:text-white block">
-                          {c.title.replace("[SEED] ", "")}
-                        </span>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {c.category} • Method: {c.payment_method} • Date: {c.contribution_date}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-mono font-bold text-sm text-slate-900 dark:text-white block">
-                          ₱{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </span>
-                        <Badge variant={c.status === "verified" ? "green" : "yellow"} size="sm">
-                          {c.status.toUpperCase()}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
-
-            {/* TAB VIEW: DOCUMENTS */}
-            {activeTab === "documents" && (
-              <GlassCard variant="elevated" className="space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-amber-600 dark:text-bumblebee-yellow" />
-                    <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                      Official Document Vault
-                    </h3>
-                  </div>
-                  <Badge variant="gold" size="sm">
-                    RLS PROTECTED
-                  </Badge>
-                </div>
-                <div className="space-y-3">
-                  {documents.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="p-3.5 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 flex items-center justify-between"
-                    >
-                      <div>
-                        <span className="font-bold text-sm text-slate-900 dark:text-white block">
-                          {doc.title.replace("[SEED] ", "")}
-                        </span>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {doc.description || "Official ratified document"}
-                        </span>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex items-center gap-1.5"
-                        onClick={() => window.open(doc.file_url, "_blank")}
-                      >
-                        <Download className="h-3.5 w-3.5" /> PDF
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
-
-            {/* Role-Specific Dashboard Section: Admin Approvals */}
+            {/* Executive Governance Console (Admin Access) */}
             {currentRole === "admin" && (
-              <GlassCard variant="elevated" className="space-y-4 border-amber-300 dark:border-bumblebee-yellow/20">
+              <GlassCard variant="elevated" className="space-y-4 border-amber-300/80 dark:border-amber-400/20">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
                   <div className="flex items-center gap-2">
-                    <ShieldAlert className="h-5 w-5 text-amber-600 dark:text-bumblebee-yellow" />
+                    <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                     <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                      Executive Admin Portal
+                      Executive Directorate Console
                     </h3>
                   </div>
-                  <Badge variant="gold" size="sm">
-                    SUPERADMIN ACCESS
-                  </Badge>
+                  <span className="text-[10px] font-bold text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-300/60">
+                    National Directorate Access
+                  </span>
                 </div>
 
-                <p className="text-xs text-slate-600 dark:text-slate-300">
-                  Authoritative controls for membership authorizations, officer role assignments, and system audit logs.
+                <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                  Authoritative membership credentials, candidate admissions, and chapter governance audit.
                 </p>
 
-                {/* Pending Membership Approvals */}
+                {/* Candidate Admissions Review Queue */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-bold px-1">
-                    <span>Pending Verification ({pendingApplicants.length} Applicant{pendingApplicants.length === 1 ? "" : "s"})</span>
-                    <span className="text-eagle-blue-dark dark:text-bumblebee-yellow cursor-pointer hover:underline">
-                      Live Directory
+                  <div className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300 font-bold px-1">
+                    <span>Membership Candidates ({pendingApplicants.length} Pending)</span>
+                    <span className="text-xs text-eagle-blue font-bold hover:underline cursor-pointer">
+                      Official Roster
                     </span>
                   </div>
 
                   {pendingApplicants.length === 0 ? (
-                    <div className="p-4 rounded-xl bg-forest-green/10 border border-forest-green/30 text-xs text-forest-green dark:text-forest-light flex items-center gap-2">
-                      <Check className="h-4 w-4" /> All membership applicants verified and active.
+                    <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-300/60 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-medium">
+                      <Check className="h-4 w-4 text-emerald-600" /> All candidate applications verified and inducted into good standing.
                     </div>
                   ) : (
                     pendingApplicants.map((applicant) => (
                       <div
                         key={applicant.id}
-                        className="p-3 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 flex items-center justify-between"
+                        className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 flex items-center justify-between"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-lg bg-slate-200 dark:bg-canvas-slate border border-slate-300 dark:border-white/20 flex items-center justify-center font-bold text-slate-800 dark:text-white text-xs">
+                          <div className="h-9 w-9 rounded-xl bg-slate-200 dark:bg-canvas-slate border border-slate-300 dark:border-white/20 flex items-center justify-center font-bold text-slate-800 dark:text-white text-xs">
                             {applicant.first_name[0]}
                             {applicant.last_name[0]}
                           </div>
@@ -690,7 +727,7 @@ export default function HomePage() {
                               {applicant.first_name} {applicant.last_name}
                             </span>
                             <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                              {applicant.email} • {applicant.chapter_or_branch || "Chapter Applicant"}
+                              {applicant.email} • {applicant.chapter_or_branch || "Chapter Candidate"}
                             </span>
                           </div>
                         </div>
@@ -701,15 +738,16 @@ export default function HomePage() {
                             variant="secondary"
                             disabled={approvingId === applicant.id}
                             onClick={() => handleApproveApplicant(applicant.id)}
+                            className="text-xs font-bold"
                           >
                             {approvingId === applicant.id ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             ) : (
-                              "Approve"
+                              "Approve Candidate"
                             )}
                           </Button>
-                          <Button size="sm" variant="outline">
-                            Review
+                          <Button size="sm" variant="outline" className="text-xs font-bold">
+                            Review Dossier
                           </Button>
                         </div>
                       </div>
@@ -717,112 +755,52 @@ export default function HomePage() {
                   )}
                 </div>
 
-                {/* Audit Activity Snippet */}
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/5 flex items-center justify-between text-xs">
-                  <span className="text-slate-500 dark:text-slate-400 font-medium">Database State:</span>
-                  <span className="text-slate-800 dark:text-slate-300 font-mono font-bold">
-                    Connected to remote PostgreSQL
+                {/* Governance Quorum Status */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/5 flex items-center justify-between text-xs">
+                  <span className="text-slate-500 dark:text-slate-400 font-medium">Governance Standing:</span>
+                  <span className="text-slate-800 dark:text-slate-200 font-mono font-bold">
+                    Constitution 2026 Ratified • Active Quorum
                   </span>
-                  <Badge variant="green" size="sm">LIVE SYNC</Badge>
+                  <Badge variant="green" size="sm">CONFIRMED</Badge>
                 </div>
               </GlassCard>
             )}
 
-            {/* Role-Specific Dashboard Section: Officer View */}
-            {currentRole === "officer" && (
-              <GlassCard variant="elevated" className="space-y-4 border-eagle-blue/30">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-                  <div className="flex items-center gap-2">
-                    <FileCheck className="h-5 w-5 text-eagle-blue" />
-                    <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                      Club Officer Console
-                    </h3>
-                  </div>
-                  <Badge variant="blue" size="sm">
-                    OFFICER TIER
-                  </Badge>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10">
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">
-                      Total Ledger Dues
-                    </span>
-                    <span className="text-lg font-bold text-amber-700 dark:text-bumblebee-yellow mt-1 block font-mono">
-                      ₱{contributions.reduce((acc, c) => acc + Number(c.amount), 0).toLocaleString()}
-                    </span>
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300">
-                      {contributions.length} Recorded Transactions
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="gold"
-                      className="w-full mt-3"
-                      onClick={() => setActiveTab("contributions")}
-                    >
-                      View Ledger
-                    </Button>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10">
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-bold block">
-                      Active Assemblies
-                    </span>
-                    <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-1 block">
-                      {events.filter((e) => e.checkin_open).length} Check-in Open
-                    </span>
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300">
-                      GMM Code: {activeEvent?.checkin_code || "AGILA-2026"}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="w-full mt-3"
-                      onClick={() => setActiveTab("meetings")}
-                    >
-                      Open Events
-                    </Button>
-                  </div>
-                </div>
-              </GlassCard>
-            )}
-
-            {/* Announcements Feed (All Roles - Live from Database) */}
+            {/* Official Fraternal Announcements (Sentence-Case Badges & Cohesive Typography) */}
             <div className="space-y-3">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-amber-600 dark:text-bumblebee-yellow" />
+                  <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                    Official Announcements
+                    Official Announcements & Memoranda
                   </h3>
                 </div>
-                <span className="text-xs text-eagle-blue font-bold">
-                  {announcements.length} Published
+                <span className="text-xs text-eagle-blue font-bold hover:underline cursor-pointer">
+                  Secretariat Archive
                 </span>
               </div>
 
               {announcements.length === 0 ? (
-                <GlassCard variant="default" className="p-4 text-center text-xs text-slate-500">
-                  No published announcements found in database.
+                <GlassCard variant="default" className="p-5 text-center text-xs text-slate-500">
+                  No published circulars found in database.
                 </GlassCard>
               ) : (
                 announcements.map((ann) => (
-                  <GlassCard key={ann.id} variant="default" className="p-4 space-y-2">
+                  <GlassCard key={ann.id} variant="default" className="p-5 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <Badge
-                        variant={
+                      <span
+                        className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
                           ann.priority === "urgent" || ann.priority === "high"
-                            ? "red"
+                            ? "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
                             : ann.category === "Finance"
-                            ? "yellow"
-                            : "blue"
-                        }
-                        size="sm"
+                            ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                            : "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
+                        }`}
                       >
-                        {ann.priority.toUpperCase()} • {ann.category.toUpperCase()}
-                      </Badge>
+                        {ann.priority === "urgent" ? "Urgent Circular" : ann.priority === "high" ? "High Priority" : "Official Notice"} • {ann.category}
+                      </span>
                       <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                        {ann.published_at ? new Date(ann.published_at).toLocaleDateString() : "Active"}
+                        {ann.published_at ? new Date(ann.published_at).toLocaleDateString() : "Active Circular"}
                       </span>
                     </div>
                     <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">
@@ -831,6 +809,12 @@ export default function HomePage() {
                     <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal">
                       {ann.content}
                     </p>
+                    <div className="pt-2 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-200/80 dark:border-white/5 font-medium">
+                      <span>National Executive Secretariat</span>
+                      <span className="text-eagle-blue dark:text-amber-300 font-bold cursor-pointer hover:underline">
+                        Read Circular →
+                      </span>
+                    </div>
                   </GlassCard>
                 ))
               )}
@@ -840,7 +824,7 @@ export default function HomePage() {
       </main>
 
       {/* Mobile Floating Bottom Bar */}
-      <MobileNavBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <MobileNavBar activeTab={docketTab} onTabChange={(tab) => setDocketTab(tab as "assemblies" | "ledger" | "documents" | "community")} />
     </div>
   );
 }
