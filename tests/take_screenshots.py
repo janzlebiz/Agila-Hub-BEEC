@@ -2,10 +2,10 @@ import sys
 from playwright.sync_api import sync_playwright
 
 def run():
-    print("Launching Edge browser...")
+    print("Launching Google Chrome browser...")
     sys.stdout.flush()
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel="msedge", headless=True)
+        browser = p.chromium.launch(channel="chrome", headless=True)
         page = browser.new_page(viewport={"width": 1280, "height": 900})
         
         print("Navigating to http://localhost:3000...")

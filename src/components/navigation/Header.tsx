@@ -123,12 +123,14 @@ export function Header({
             <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-bumblebee-yellow shadow-sm" />
           </button>
 
-          {/* User Profile Avatar */}
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-eagle-blue to-forest-light p-0.5 shadow-md">
-            <div className="h-full w-full rounded-[10px] bg-white dark:bg-canvas-slate flex items-center justify-center">
-              <User className="h-4 w-4 text-slate-800 dark:text-white" />
-            </div>
-          </div>
+          {/* Auth Action: Sign In or Profile/Sign Out */}
+          <Link
+            href="/auth/login"
+            className="h-9 px-3 rounded-xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white hover:brightness-110 flex items-center gap-1.5 text-xs font-bold shadow-md transition active:scale-95"
+          >
+            <User className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Sign In / Claim ID</span>
+          </Link>
         </div>
       </div>
     </header>
