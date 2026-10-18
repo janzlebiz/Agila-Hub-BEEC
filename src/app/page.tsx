@@ -30,7 +30,17 @@ import {
   ExternalLink,
   ChevronRight,
   Landmark,
+  Camera,
+  Plus,
+  Search,
+  Receipt,
+  IdCard,
+  Eye,
+  X,
 } from "lucide-react";
+import { QrAttendanceScanner } from "@/components/scanner/QrAttendanceScanner";
+import { SubmitContributionModal } from "@/components/financial/SubmitContributionModal";
+import { MemberDirectoryModal, DirectoryMember } from "@/components/directory/MemberDirectoryModal";
 
 interface MemberRecord {
   id: string;
@@ -90,7 +100,7 @@ export default function HomePage() {
   const supabase = createClient();
 
   const [currentRole, setCurrentRole] = useState<"admin" | "officer" | "member">("admin");
-  const [docketTab, setDocketTab] = useState<"assemblies" | "ledger" | "documents" | "community">("assemblies");
+  const [docketTab, setDocketTab] = useState<"assemblies" | "ledger" | "directory" | "documents" | "community">("assemblies");
   const [isDark, setIsDark] = useState(false);
   const [textSize, setTextSize] = useState<"normal" | "large" | "xl">("normal");
 
@@ -102,6 +112,17 @@ export default function HomePage() {
   const [contributions, setContributions] = useState<ContributionRecord[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [pendingApplicants, setPendingApplicants] = useState<MemberRecord[]>([]);
+  const [allMembers, setAllMembers] = useState<DirectoryMember[]>([]);
+
+  // Phase A, B, and D Modal & Action States
+  const [isSubmitContribOpen, setIsSubmitContribOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isDirectoryOpen, setIsDirectoryOpen] = useState(false);
+  const [inspectedMember, setInspectedMember] = useState<DirectoryMember | null>(null);
+  const [verifyingContribId, setVerifyingContribId] = useState<string | null>(null);
+  const [previewReceiptUrl, setPreviewReceiptUrl] = useState<string | null>(null);
+  const [directorySearch, setDirectorySearch] = useState("");
+  const [directoryFilter, setDirectoryFilter] = useState<"all" | "admin" | "officer" | "member">("all");
 
   // Interactive Live Check-in States
   const [checkInCode, setCheckInCode] = useState("AGILA-GMM-2026");
@@ -186,6 +207,14 @@ export default function HomePage() {
         .eq("membership_status", "pending");
 
       if (pendData) setPendingApplicants(pendData as MemberRecord[]);
+
+      // 7. Fetch All Members for Roster / Directory
+      const { data: allMemData } = await supabase
+        .from("members")
+        .select("*")
+        .order("first_name", { ascending: true });
+
+      if (allMemData) setAllMembers(allMemData as DirectoryMember[]);
     } catch (err) {
       console.error("Error fetching live database data:", err);
     } finally {
@@ -198,7 +227,16 @@ export default function HomePage() {
   }, [fetchHubData]);
 
   // Profile data displayed on Digital ID
-  const activeProfile = authMember
+  const activeProfile = inspectedMember
+    ? {
+        name: `Kuya/Ate ${inspectedMember.first_name} ${inspectedMember.last_name}`,
+        nickname: inspectedMember.first_name,
+        idNumber: inspectedMember.member_number || "AGILA-PENDING",
+        club: inspectedMember.chapter_or_branch || "Bantayog Elite Eagles Club",
+        region: "National Executive / Region V",
+        status: inspectedMember.membership_status,
+      }
+    : authMember
     ? {
         name: `${authMember.first_name} ${authMember.last_name}`,
         nickname: authMember.first_name,
@@ -241,6 +279,38 @@ export default function HomePage() {
   const totalVerifiedDues = contributions
     .filter((c) => c.status === "verified")
     .reduce((acc, c) => acc + Number(c.amount), 0);
+
+  // Handle Officer Verification for Contributions
+  const handleVerifyContribution = async (contribId: string, status: "verified" | "rejected") => {
+    setVerifyingContribId(contribId);
+    try {
+      const { data, error } = await supabase.rpc("verify_contribution", {
+        p_contribution_id: contribId,
+        p_status: status,
+      });
+
+      if (!error && (data as { success: boolean })?.success) {
+        setContributions((prev) =>
+          prev.map((c) => (c.id === contribId ? { ...c, status } : c))
+        );
+      }
+    } catch (err) {
+      console.error("Error verifying contribution:", err);
+    } finally {
+      setVerifyingContribId(null);
+    }
+  };
+
+  // Filtered members for inline Roster tab
+  const filteredDirectoryMembers = allMembers.filter((m) => {
+    const term = directorySearch.toLowerCase();
+    const fullName = `${m.first_name} ${m.last_name}`.toLowerCase();
+    const memberNum = (m.member_number || "").toLowerCase();
+    const chapter = (m.chapter_or_branch || "").toLowerCase();
+    const matchesSearch = fullName.includes(term) || memberNum.includes(term) || chapter.includes(term);
+    const matchesRole = directoryFilter === "all" || m.role === directoryFilter;
+    return matchesSearch && matchesRole;
+  });
 
   // Handle Tactile Check-In
   const handleCheckIn = async (eventId: string) => {
@@ -366,6 +436,20 @@ export default function HomePage() {
                 </span>
               </div>
 
+              {/* Inspected member from directory banner */}
+              {inspectedMember && (
+                <div className="mb-2.5 p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-400/30 flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200 animate-fadeIn">
+                  <span>Inspecting: {activeProfile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setInspectedMember(null)}
+                    className="text-[11px] text-eagle-blue dark:text-amber-300 underline font-bold"
+                  >
+                    Reset to My ID
+                  </button>
+                </div>
+              )}
+
               {/* The Physical Executive Polycarbonate Credential */}
               <DigitalIdCard
                 fullName={activeProfile.name}
@@ -449,6 +533,28 @@ export default function HomePage() {
                     </Button>
                   </div>
                 </div>
+
+                {/* Secretariat Camera QR Scanner Trigger */}
+                {(currentRole === "admin" || currentRole === "officer") && (
+                  <div className="mt-4 pt-3 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between">
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                        Secretariat Officer Console:
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Scan incoming members at registration door
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsScannerOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white text-xs font-bold shadow-md hover:brightness-110 active:scale-95 transition"
+                    >
+                      <Camera className="h-3.5 w-3.5" />
+                      <span>Launch QR Scanner</span>
+                    </button>
+                  </div>
+                )}
               </GlassCard>
             )}
           </div>
@@ -458,57 +564,70 @@ export default function HomePage() {
             
             {/* The Unified Fraternal Action Docket (Replaced generic 4 square tiles) */}
             <div className="rounded-3xl border border-slate-200/90 dark:border-white/10 bg-white/80 dark:bg-canvas-slate/80 backdrop-blur-deep p-2 shadow-sm">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 bg-slate-100/80 dark:bg-white/[0.05] rounded-2xl text-xs font-bold">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 p-1 bg-slate-100/80 dark:bg-white/[0.05] rounded-2xl text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => setDocketTab("assemblies")}
-                  className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition ${
+                  className={`py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition ${
                     docketTab === "assemblies"
                       ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
                   <Calendar className="h-3.5 w-3.5 text-eagle-blue" />
-                  <span>Assemblies ({events.length})</span>
+                  <span className="truncate">Assemblies ({events.length})</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setDocketTab("ledger")}
-                  className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition ${
+                  className={`py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition ${
                     docketTab === "ledger"
                       ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
                   <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Ledger (₱{totalVerifiedDues.toLocaleString()})</span>
+                  <span className="truncate">Ledger (₱{totalVerifiedDues.toLocaleString()})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDocketTab("directory")}
+                  className={`py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition ${
+                    docketTab === "directory"
+                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <Users className="h-3.5 w-3.5 text-blue-500" />
+                  <span className="truncate">Roster ({allMembers.length})</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setDocketTab("documents")}
-                  className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition ${
+                  className={`py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition ${
                     docketTab === "documents"
                       ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
                   <FileText className="h-3.5 w-3.5 text-amber-500" />
-                  <span>Vault</span>
+                  <span className="truncate">Vault</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setDocketTab("community")}
-                  className={`py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 transition ${
+                  className={`py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition ${
                     docketTab === "community"
                       ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
                   <HeartHandshake className="h-3.5 w-3.5 text-purple-500" />
-                  <span>Outreach</span>
+                  <span className="truncate">Outreach</span>
                 </button>
               </div>
 
@@ -571,44 +690,166 @@ export default function HomePage() {
                 {/* 2. FINANCIAL LEDGER TAB */}
                 {docketTab === "ledger" && (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                        Fraternal Dues & Contribution Records
-                      </span>
-                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
-                        Audited Secretariat Balance
-                      </span>
+                    <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                          Fraternal Dues & Contribution Records
+                        </span>
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                          Audited Secretariat Balance: ₱{totalVerifiedDues.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => setIsSubmitContribOpen(true)}
+                        className="text-xs font-bold flex items-center gap-1.5 h-8 px-3 shadow-sm"
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Submit Dues / Donation
+                      </Button>
                     </div>
 
                     {contributions.map((c) => (
                       <div
                         key={c.id}
-                        className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex items-center justify-between"
+                        className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
                         <div>
-                          <span className="font-bold text-sm text-slate-900 dark:text-white block">
-                            {c.title.replace("[SEED] ", "")}
-                          </span>
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-slate-900 dark:text-white block">
+                              {c.title.replace("[SEED] ", "")}
+                            </span>
+                            <span
+                              className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                c.status === "verified"
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                  : c.status === "rejected"
+                                  ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                              }`}
+                            >
+                              {c.status}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium block mt-0.5">
                             {c.category} • Method: {c.payment_method} {c.reference_number ? `(${c.reference_number})` : ""}
                           </span>
                         </div>
-                        <div className="text-right">
+
+                        <div className="flex items-center sm:flex-col sm:items-end justify-between gap-2 shrink-0">
                           <span className="font-mono font-black text-sm text-slate-900 dark:text-white block">
                             ₱{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
-                          <span
-                            className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full mt-1 ${
-                              c.status === "verified"
-                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
-                            }`}
-                          >
-                            {c.status}
-                          </span>
+
+                          {/* Officer Verification Buttons for Pending Contributions */}
+                          {c.status === "pending" && (currentRole === "admin" || currentRole === "officer") && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <button
+                                type="button"
+                                disabled={verifyingContribId === c.id}
+                                onClick={() => handleVerifyContribution(c.id, "verified")}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-sm transition flex items-center gap-1"
+                              >
+                                {verifyingContribId === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                Verify
+                              </button>
+                              <button
+                                type="button"
+                                disabled={verifyingContribId === c.id}
+                                onClick={() => handleVerifyContribution(c.id, "rejected")}
+                                className="px-2 py-1 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-rose-100 hover:text-rose-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold transition"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* 3. ROSTER / DIRECTORY TAB */}
+                {docketTab === "directory" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                          Fraternal Member Directory & Chapter Roster
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          The Fraternal Order of Eagles • {allMembers.length} Registered Members
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <input
+                          type="text"
+                          value={directorySearch}
+                          onChange={(e) => setDirectorySearch(e.target.value)}
+                          placeholder="Search Kuya/Ate by name, member ID, or chapter..."
+                          className="w-full h-9 pl-9 pr-3 rounded-xl bg-slate-100 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs font-bold">
+                        {(["all", "admin", "officer", "member"] as const).map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => setDirectoryFilter(r)}
+                            className={`px-2.5 py-1.5 rounded-xl capitalize transition shrink-0 text-[11px] ${
+                              directoryFilter === r
+                                ? "bg-eagle-blue text-white shadow-sm font-bold"
+                                : "bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                            }`}
+                          >
+                            {r === "all" ? "All" : r === "admin" ? "Directorate" : r === "officer" ? "Officers" : "Members"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                      {filteredDirectoryMembers.map((m) => (
+                        <div
+                          key={m.id}
+                          className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-3 hover:border-eagle-blue/40 transition"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-amber-400 via-eagle-blue to-emerald-500 p-0.5 shrink-0 shadow-sm">
+                              <div className="h-full w-full rounded-[10px] bg-slate-100 dark:bg-canvas-slate flex items-center justify-center font-bold text-xs text-slate-900 dark:text-white">
+                                {m.first_name[0]}{m.last_name[0]}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                                  Kuya/Ate {m.first_name} {m.last_name}
+                                </span>
+                                <Badge variant={m.role === "admin" ? "gold" : m.role === "officer" ? "blue" : "neutral"} size="sm">
+                                  {m.role === "admin" ? "Directorate" : m.role === "officer" ? "Officer" : "Charter"}
+                                </Badge>
+                              </div>
+                              <span className="text-[11px] text-slate-500 font-medium block">
+                                {m.member_number || "AGILA-PENDING"} • {m.chapter_or_branch || "Bantayog Elite Eagles Club"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setInspectedMember(m)}
+                            className="text-xs font-bold shrink-0 h-8 px-2.5"
+                          >
+                            <IdCard className="h-3.5 w-3.5 mr-1 text-amber-500" /> Inspect ID
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -823,8 +1064,40 @@ export default function HomePage() {
         </div>
       </main>
 
+      {/* Modals for Phases A, B, and D */}
+      <QrAttendanceScanner
+        eventId={activeEvent?.id || ""}
+        eventTitle={activeEvent?.title || "Chapter Assembly"}
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onAttendanceRecorded={fetchHubData}
+      />
+
+      <SubmitContributionModal
+        isOpen={isSubmitContribOpen}
+        onClose={() => setIsSubmitContribOpen(false)}
+        memberId={authMember?.id}
+        memberName={activeProfile.name}
+        onContributionSubmitted={fetchHubData}
+      />
+
+      <MemberDirectoryModal
+        isOpen={isDirectoryOpen}
+        onClose={() => setIsDirectoryOpen(false)}
+        members={allMembers}
+        onSelectMember={(m) => {
+          setInspectedMember(m);
+          setIsDirectoryOpen(false);
+        }}
+      />
+
       {/* Mobile Floating Bottom Bar */}
-      <MobileNavBar activeTab={docketTab} onTabChange={(tab) => setDocketTab(tab as "assemblies" | "ledger" | "documents" | "community")} />
+      <MobileNavBar
+        activeTab={docketTab}
+        onTabChange={(tab) =>
+          setDocketTab(tab as "assemblies" | "ledger" | "directory" | "documents" | "community")
+        }
+      />
     </div>
   );
 }

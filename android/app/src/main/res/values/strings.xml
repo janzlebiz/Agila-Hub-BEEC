@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AGILA Hub</string>
+    <string name="title_activity_main">AGILA Hub</string>
+    <string name="package_name">org.tfoe.agilahub</string>
+    <string name="custom_url_scheme">org.tfoe.agilahub</string>
+</resources>

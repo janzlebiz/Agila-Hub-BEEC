@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Calendar, CreditCard, FileText, HeartHandshake } from "lucide-react";
+import { Calendar, CreditCard, FileText, HeartHandshake, Users } from "lucide-react";
 
 interface MobileNavBarProps {
   activeTab: string;
@@ -12,6 +12,7 @@ export function MobileNavBar({ activeTab, onTabChange }: MobileNavBarProps) {
   const tabs = [
     { id: "assemblies", label: "Assemblies", icon: Calendar },
     { id: "ledger", label: "Ledger", icon: CreditCard },
+    { id: "directory", label: "Roster", icon: Users },
     { id: "documents", label: "Vault", icon: FileText },
     { id: "community", label: "Outreach", icon: HeartHandshake },
   ];
