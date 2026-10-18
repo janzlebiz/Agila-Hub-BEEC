@@ -30,7 +30,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#080C16",
+  themeColor: "#FFFFFF",
 };
 
 export default function RootLayout({
@@ -39,8 +39,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`dark ${inter.variable} ${outfit.variable}`}>
-      <body className="min-h-screen liquid-mesh selection:bg-eagle-blue/30 selection:text-white antialiased">
+    <html lang="en" data-text-size="normal" className={`${inter.variable} ${outfit.variable}`}>
+      <body className="min-h-screen liquid-mesh selection:bg-eagle-blue/20 selection:text-eagle-blue-dark dark:selection:bg-eagle-blue/40 dark:selection:text-white antialiased transition-colors duration-300">
         {children}
       </body>
     </html>
