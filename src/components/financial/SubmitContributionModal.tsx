@@ -37,12 +37,13 @@ export function SubmitContributionModal({
   const [amount, setAmount] = useState("2400");
   const [paymentMethod, setPaymentMethod] = useState("GCash");
   const [referenceNumber, setReferenceNumber] = useState("");
-  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [receiptStoragePath, setReceiptStoragePath] = useState<string | null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Handle local image upload to private Supabase Storage 'receipts' bucket
+  // Handle image upload to private Supabase Storage 'receipts' bucket
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -50,44 +51,55 @@ export function SubmitContributionModal({
     setUploadingReceipt(true);
     setFeedback(null);
     try {
+      // R-04: Reject uploads if no authenticated user session exists (no unassigned fallback)
       const { data: { user } } = await supabase.auth.getUser();
-      const ownerFolder = user?.id || "unassigned";
+      if (!user || !user.id) {
+        setFeedback({
+          success: false,
+          message: "Authentication required: Please sign in to an active member account before uploading receipts.",
+        });
+        setUploadingReceipt(false);
+        return;
+      }
 
       const fileExt = file.name.split(".").pop();
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-      const filePath = `${ownerFolder}/${fileName}`;
+      const storagePath = `${user.id}/${fileName}`;
 
       const { data, error } = await supabase.storage
         .from("receipts")
-        .upload(filePath, file, { upsert: true });
+        .upload(storagePath, file, { upsert: false });
 
       if (error) {
         setFeedback({
           success: false,
           message: `Receipt upload failed: ${error.message}. Please retry with a valid image.`,
         });
-        setReceiptUrl(null);
+        setReceiptStoragePath(null);
+        setReceiptPreviewUrl(null);
         setUploadingReceipt(false);
         return;
       }
 
       if (data) {
-        // Generate secure private 7-day signed URL (never use public URLs for private receipts)
-        const { data: signedData, error: signError } = await supabase.storage
+        // Store permanent private Storage object path in state (R-04)
+        setReceiptStoragePath(storagePath);
+
+        // Generate temporary 1-hour signed URL strictly for in-modal preview
+        const { data: signedData } = await supabase.storage
           .from("receipts")
-          .createSignedUrl(filePath, 60 * 60 * 24 * 7);
+          .createSignedUrl(storagePath, 3600);
 
-        if (signError || !signedData?.signedUrl) {
-          throw new Error("Receipt uploaded to private storage, but failed to create secure signed URL.");
+        if (signedData?.signedUrl) {
+          setReceiptPreviewUrl(signedData.signedUrl);
         }
-
-        setReceiptUrl(signedData.signedUrl);
         setUploadingReceipt(false);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Receipt upload failed.";
       setFeedback({ success: false, message: msg });
-      setReceiptUrl(null);
+      setReceiptStoragePath(null);
+      setReceiptPreviewUrl(null);
       setUploadingReceipt(false);
     }
   };
@@ -104,35 +116,26 @@ export function SubmitContributionModal({
 
     try {
       // Derive member identity strictly server-side from auth.uid()
+      // Store permanent private storage path (receiptStoragePath) rather than expiring signed URL
       const { data, error } = await supabase.rpc("submit_self_contribution", {
         p_title: title.trim(),
         p_category: category,
         p_amount: Number(amount),
         p_payment_method: paymentMethod,
         p_reference_number: referenceNumber.trim() || `REF-${Date.now().toString().slice(-6)}`,
-        p_proof_receipt_url: receiptUrl,
+        p_proof_receipt_url: receiptStoragePath,
       });
 
+      // R-03: Fail closed. Do NOT fall back to legacy RPCs if secure RPC errors
       if (error) {
-        // Fallback to submit_member_contribution if migration is pending
-        const { data: fallbackData, error: fallbackError } = await supabase.rpc("submit_member_contribution", {
-          p_title: title.trim(),
-          p_category: category,
-          p_amount: Number(amount),
-          p_payment_method: paymentMethod,
-          p_reference_number: referenceNumber.trim() || `REF-${Date.now().toString().slice(-6)}`,
-          p_proof_receipt_url: receiptUrl,
-        });
-
-        if (fallbackError) {
-          setFeedback({ success: false, message: fallbackError.message });
-          return;
-        }
         setFeedback({
-          success: true,
-          message: (fallbackData as { message?: string })?.message || "Contribution record submitted successfully!",
+          success: false,
+          message: error.message || "Failed to submit contribution. Please ensure the backend security migration is applied.",
         });
-      } else if (data) {
+        return;
+      }
+
+      if (data) {
         const res = data as { success?: boolean; message?: string };
         if (res.success === false) {
           setFeedback({ success: false, message: res.message || "Failed to submit contribution." });
@@ -301,7 +304,7 @@ export function SubmitContributionModal({
                   <Loader2 className="h-4 w-4 animate-spin text-eagle-blue" />
                   Uploading receipt proof...
                 </div>
-              ) : receiptUrl ? (
+              ) : receiptStoragePath ? (
                 <div className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                   <FileCheck className="h-4 w-4" />
                   Receipt Attached (Ready to submit)

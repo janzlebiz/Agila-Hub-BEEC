@@ -10,25 +10,71 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- =============================================================================
+-- Prerequisites: Ensure Member Profile and Credential Columns Exist
+-- =============================================================================
+ALTER TABLE public.members
+    ADD COLUMN IF NOT EXISTS official_id_url TEXT,
+    ADD COLUMN IF NOT EXISTS id_card_front_url TEXT,
+    ADD COLUMN IF NOT EXISTS id_card_back_url TEXT,
+    ADD COLUMN IF NOT EXISTS blood_type TEXT DEFAULT 'O+',
+    ADD COLUMN IF NOT EXISTS emergency_contact_name TEXT,
+    ADD COLUMN IF NOT EXISTS emergency_contact_phone TEXT;
+
+-- =============================================================================
 -- 1. R-02: Cryptographic Hashed Claim Tokens & Officer Token Generation
 -- =============================================================================
+
+-- Create member_claim_tokens table self-contained if absent
+CREATE TABLE IF NOT EXISTS public.member_claim_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    member_id UUID NOT NULL REFERENCES public.members(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (timezone('utc'::text, now()) + INTERVAL '48 hours'),
+    consumed_at TIMESTAMPTZ DEFAULT NULL,
+    consumed_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_by_officer_id UUID REFERENCES public.members(id) ON DELETE SET NULL
+);
 
 -- Ensure token_hash column exists on member_claim_tokens
 ALTER TABLE public.member_claim_tokens 
     ADD COLUMN IF NOT EXISTS token_hash TEXT;
 
--- Remove any hardcoded or test demo seeds
-DELETE FROM public.member_claim_tokens 
-WHERE token_code IN ('EAGLE-CLAIM-2026', 'TEST-CLAIM-9999')
-   OR member_id IN (
-       SELECT id FROM public.members 
-       WHERE member_number IN ('AGILA-TEMP-999', 'AGILA-2024-001')
-   );
+-- Enable RLS on member_claim_tokens
+ALTER TABLE public.member_claim_tokens ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Officers manage claim tokens" ON public.member_claim_tokens;
+CREATE POLICY "Officers manage claim tokens"
+    ON public.member_claim_tokens FOR ALL
+    TO authenticated
+    USING (public.is_officer());
 
--- Hash any existing tokens that have token_code set
-UPDATE public.member_claim_tokens 
-SET token_hash = encode(digest(TRIM(token_code), 'sha256'), 'hex')
-WHERE token_hash IS NULL AND token_code IS NOT NULL;
+-- Migrate legacy plaintext tokens if token_code column exists, then purge demo seeds
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'member_claim_tokens' AND column_name = 'token_code'
+    ) THEN
+        -- Hash any existing tokens that have token_code set
+        UPDATE public.member_claim_tokens 
+        SET token_hash = encode(digest(TRIM(token_code), 'sha256'), 'hex')
+        WHERE token_hash IS NULL AND token_code IS NOT NULL;
+
+        -- Remove hardcoded demo or test tokens
+        DELETE FROM public.member_claim_tokens 
+        WHERE token_code IN ('EAGLE-CLAIM-2026', 'TEST-CLAIM-9999');
+
+        -- Nullify plaintext token_code values so no plaintext tokens persist
+        UPDATE public.member_claim_tokens SET token_code = NULL WHERE token_code IS NOT NULL;
+    END IF;
+END $$;
+
+-- Purge any orphaned demo seeds for test member numbers
+DELETE FROM public.member_claim_tokens 
+WHERE member_id IN (
+    SELECT id FROM public.members 
+    WHERE member_number IN ('AGILA-TEMP-999', 'AGILA-2024-001')
+);
 
 -- Ensure index on (member_id, token_hash)
 CREATE INDEX IF NOT EXISTS idx_member_claim_tokens_hash 
@@ -192,12 +238,12 @@ BEGIN
     -- Compute candidate token hash
     v_candidate_hash := encode(digest(TRIM(p_claim_token), 'sha256'), 'hex');
 
-    -- Validate claim token by cryptographic hash
+    -- Validate claim token ONLY by cryptographic hash (R-02)
     SELECT id, expires_at, consumed_at
     INTO v_token
     FROM public.member_claim_tokens
     WHERE member_id = v_member.id
-      AND (token_hash = v_candidate_hash OR token_code = TRIM(p_claim_token))
+      AND token_hash = v_candidate_hash
     FOR UPDATE;
 
     IF NOT FOUND THEN
@@ -222,11 +268,15 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'message', 'Conflict detected during account claim. Please retry.');
     END IF;
 
-    -- Mark token consumed
+    -- Mark token consumed atomically with single-use concurrency guard
     UPDATE public.member_claim_tokens
     SET consumed_at = timezone('utc'::text, now()),
         consumed_by_user_id = v_auth_uid
-    WHERE id = v_token.id;
+    WHERE id = v_token.id AND consumed_at IS NULL;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Claim token was consumed concurrently. Please retry.');
+    END IF;
 
     -- Non-repudiation audit logging
     INSERT INTO public.audit_logs (actor_id, action, target_entity, target_id, details)
@@ -1067,3 +1117,109 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.record_officer_attendance FROM anon;
 REVOKE EXECUTE ON FUNCTION public.record_officer_attendance FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.record_officer_attendance TO authenticated;
+
+-- =============================================================================
+-- 6. Comprehensive Elimination of Blanket SELECT Policies (F-03 & Security Advisor)
+-- =============================================================================
+
+-- Dynamically drop any unmanaged or legacy SELECT policies on public.members
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (
+        SELECT policyname 
+        FROM pg_policies 
+        WHERE schemaname = 'public' AND tablename = 'members'
+          AND cmd = 'SELECT'
+          AND policyname NOT IN ('Strict members visibility')
+    ) LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.members;', r.policyname);
+    END LOOP;
+END $$;
+
+-- Dynamically drop any unmanaged or legacy SELECT policies on public.contributions
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (
+        SELECT policyname 
+        FROM pg_policies 
+        WHERE schemaname = 'public' AND tablename = 'contributions'
+          AND cmd = 'SELECT'
+          AND policyname NOT IN ('Strict contributions visibility')
+    ) LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.contributions;', r.policyname);
+    END LOOP;
+END $$;
+
+-- Enforce strict members visibility: active members see active directory, users see self, officers see all
+DROP POLICY IF EXISTS "Strict members visibility" ON public.members;
+CREATE POLICY "Strict members visibility"
+    ON public.members FOR SELECT
+    TO authenticated
+    USING (
+        (public.is_active_member() AND membership_status = 'active')
+        OR user_id = auth.uid()
+        OR public.is_officer()
+    );
+
+-- Enforce strict contributions visibility: authenticated members see own, officers see all
+DROP POLICY IF EXISTS "Strict contributions visibility" ON public.contributions;
+CREATE POLICY "Strict contributions visibility"
+    ON public.contributions FOR SELECT
+    TO authenticated
+    USING (
+        member_id IN (SELECT id FROM public.members WHERE user_id = auth.uid())
+        OR public.is_officer()
+    );
+
+-- =============================================================================
+-- 7. Comprehensive Security Advisor Remediation: Revoke Anon/Public Grants
+-- =============================================================================
+DO $$
+DECLARE
+    func RECORD;
+BEGIN
+    FOR func IN (
+        SELECT p.proname, oidvectortypes(p.proargtypes) AS argtypes
+        FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public'
+          AND p.prosecdef = true
+          AND p.proname IN (
+              'is_active_member', 'is_officer', 'is_admin',
+              'check_in_event', 'approve_member_applicant',
+              'submit_member_contribution', 'verify_contribution',
+              'record_officer_attendance', 'update_member_official_id',
+              'update_member_profile', 'claim_member_account',
+              'generate_member_claim_token', 'get_financial_ledger_summary',
+              'submit_self_contribution', 'update_self_profile',
+              'update_self_official_id', 'check_in_self_event',
+              'officer_submit_contribution_for_member', 'officer_update_member_profile'
+          )
+    ) LOOP
+        EXECUTE format('REVOKE ALL ON FUNCTION public.%I(%s) FROM PUBLIC, anon;', func.proname, func.argtypes);
+        EXECUTE format('GRANT EXECUTE ON FUNCTION public.%I(%s) TO authenticated;', func.proname, func.argtypes);
+    END LOOP;
+END $$;
+
+-- =============================================================================
+-- 8. Schema Migration Version Tracking (Supabase Schema Migrations)
+-- =============================================================================
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'supabase_migrations' AND table_name = 'schema_migrations'
+    ) THEN
+        INSERT INTO supabase_migrations.schema_migrations (version)
+        VALUES 
+            ('20261019000004'),
+            ('20261019000005'),
+            ('20261019000006'),
+            ('20261019000007')
+        ON CONFLICT (version) DO NOTHING;
+    END IF;
+END $$;

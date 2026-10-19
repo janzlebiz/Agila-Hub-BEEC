@@ -215,16 +215,7 @@ export function OfficialIdScannerModal({
       });
 
       if (rpcError) {
-        // Fallback for pending migration
-        const { data: fallbackData, error: fallbackErr } = await supabase.rpc("update_member_official_id", {
-          p_id_url: finalFrontUrl,
-          p_front_url: finalFrontUrl,
-          p_back_url: finalBackUrl || null,
-        });
-        if (fallbackErr) throw fallbackErr;
-        if (fallbackData && !(fallbackData as { success?: boolean }).success) {
-          throw new Error((fallbackData as { message?: string }).message || "Failed to update official ID.");
-        }
+        throw new Error(rpcError.message || "Failed to update official ID. Secure RPC unavailable.");
       } else if (rpcData && !(rpcData as { success?: boolean; message?: string }).success) {
         throw new Error((rpcData as { success?: boolean; message?: string }).message || "Failed to update official ID in database.");
       }

@@ -453,18 +453,16 @@ export default function HomePage() {
         p_checkin_code: checkInCode.trim().toUpperCase(),
       });
 
+      // R-03: Fail closed. Do NOT fall back to legacy RPC if secure self check-in errors
       if (error) {
-        const { data: fallbackData, error: fallbackError } = await supabase.rpc("check_in_event", {
-          p_event_id: eventId,
-          p_checkin_code: checkInCode.trim().toUpperCase(),
+        setCheckInFeedback({
+          success: false,
+          message: error.message || "Self check-in failed. Please verify that the meeting check-in window is open.",
         });
-        if (fallbackError) {
-          setCheckInFeedback({ success: false, message: fallbackError.message });
-        } else {
-          const res = fallbackData as { success: boolean; message: string; already_checked_in?: boolean };
-          setCheckInFeedback({ success: res.success, message: res.message });
-        }
-      } else {
+        return;
+      }
+
+      if (data) {
         const res = data as { success: boolean; message: string; already_checked_in?: boolean };
         setCheckInFeedback({ success: res.success, message: res.message });
       }

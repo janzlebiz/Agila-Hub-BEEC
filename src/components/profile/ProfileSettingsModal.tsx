@@ -98,20 +98,7 @@ export function ProfileSettingsModal({
       });
 
       if (error) {
-        // Fallback for pending migration
-        const { data: fallbackData, error: fallbackErr } = await supabase.rpc("update_member_profile", {
-          p_first_name: firstName,
-          p_last_name: lastName,
-          p_phone: phone,
-          p_blood_type: bloodType,
-          p_emergency_name: emergencyName,
-          p_emergency_phone: emergencyPhone,
-          p_chapter: chapter,
-        });
-        if (fallbackErr) throw fallbackErr;
-        if (fallbackData && !(fallbackData as { success?: boolean }).success) {
-          throw new Error((fallbackData as { message?: string }).message || "Failed to update profile.");
-        }
+        throw new Error(error.message || "Failed to update profile. Secure RPC unavailable.");
       } else if (data && !(data as { success?: boolean }).success) {
         throw new Error((data as { message?: string }).message || "Failed to update profile details in database.");
       }
