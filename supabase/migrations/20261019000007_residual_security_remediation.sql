@@ -28,17 +28,37 @@ ALTER TABLE public.members
 CREATE TABLE IF NOT EXISTS public.member_claim_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     member_id UUID NOT NULL REFERENCES public.members(id) ON DELETE CASCADE,
-    token_hash TEXT NOT NULL,
+    token_code TEXT,
+    token_hash TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     expires_at TIMESTAMPTZ NOT NULL DEFAULT (timezone('utc'::text, now()) + INTERVAL '48 hours'),
     consumed_at TIMESTAMPTZ DEFAULT NULL,
     consumed_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_by UUID REFERENCES public.members(id) ON DELETE SET NULL,
     created_by_officer_id UUID REFERENCES public.members(id) ON DELETE SET NULL
 );
 
--- Ensure token_hash column exists on member_claim_tokens
+-- Ensure columns exist regardless of legacy table definition
 ALTER TABLE public.member_claim_tokens 
-    ADD COLUMN IF NOT EXISTS token_hash TEXT;
+    ADD COLUMN IF NOT EXISTS token_hash TEXT,
+    ADD COLUMN IF NOT EXISTS token_code TEXT,
+    ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES public.members(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS created_by_officer_id UUID REFERENCES public.members(id) ON DELETE SET NULL;
+
+-- Relax legacy NOT NULL / UNIQUE constraints on token_code if present
+DO $$
+BEGIN
+    ALTER TABLE public.member_claim_tokens ALTER COLUMN token_code DROP NOT NULL;
+EXCEPTION
+    WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER TABLE public.member_claim_tokens DROP CONSTRAINT IF EXISTS member_claim_tokens_token_code_key;
+EXCEPTION
+    WHEN OTHERS THEN NULL;
+END $$;
 
 -- Enable RLS on member_claim_tokens
 ALTER TABLE public.member_claim_tokens ENABLE ROW LEVEL SECURITY;
@@ -80,9 +100,37 @@ WHERE member_id IN (
 CREATE INDEX IF NOT EXISTS idx_member_claim_tokens_hash 
     ON public.member_claim_tokens (member_id, token_hash);
 
+-- Dynamically clean up any existing overloads of modified security-critical functions
+DO $$
+DECLARE
+    func RECORD;
+BEGIN
+    FOR func IN (
+        SELECT p.proname, oidvectortypes(p.proargtypes) AS argtypes
+        FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public'
+          AND p.proname IN (
+              'generate_member_claim_token',
+              'claim_member_account',
+              'submit_self_contribution',
+              'officer_submit_contribution_for_member',
+              'submit_member_contribution',
+              'update_self_profile',
+              'officer_update_member_profile',
+              'update_member_profile',
+              'update_self_official_id',
+              'update_member_official_id',
+              'check_in_self_event',
+              'check_in_event',
+              'record_officer_attendance'
+          )
+    ) LOOP
+        EXECUTE format('DROP FUNCTION IF EXISTS public.%I(%s) CASCADE;', func.proname, func.argtypes);
+    END LOOP;
+END $$;
+
 -- Officer-Authorized Cryptographic Claim Token Generator
-DROP FUNCTION IF EXISTS public.generate_member_claim_token(TEXT, INT);
-DROP FUNCTION IF EXISTS public.generate_member_claim_token(TEXT);
 CREATE OR REPLACE FUNCTION public.generate_member_claim_token(
     p_member_number TEXT,
     p_expires_in_hours INT DEFAULT 48
@@ -153,13 +201,11 @@ BEGIN
     -- Store only the cryptographic hash
     INSERT INTO public.member_claim_tokens (
         member_id,
-        token_code,
         token_hash,
         created_by,
         expires_at
     ) VALUES (
         v_target_member.id,
-        'HASHED_TOKEN',
         v_token_hash,
         v_officer.id,
         v_expires_at
@@ -190,11 +236,7 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.generate_member_claim_token(TEXT, INT) FROM anon, PUBLIC;
-GRANT EXECUTE ON FUNCTION public.generate_member_claim_token(TEXT, INT) TO authenticated;
-
 -- Upgrade claim_member_account to verify SHA-256 hash
-DROP FUNCTION IF EXISTS public.claim_member_account(TEXT, TEXT);
 CREATE OR REPLACE FUNCTION public.claim_member_account(
     p_member_number TEXT,
     p_claim_token TEXT
@@ -298,9 +340,6 @@ BEGIN
     );
 END;
 $$;
-
-REVOKE EXECUTE ON FUNCTION public.claim_member_account(TEXT, TEXT) FROM anon, PUBLIC;
-GRANT EXECUTE ON FUNCTION public.claim_member_account(TEXT, TEXT) TO authenticated;
 
 -- =============================================================================
 -- 2. R-03: Comprehensive Storage Policy Cleanup & Scoped Receipts Bucket
@@ -424,24 +463,6 @@ CREATE POLICY "receipts_delete_policy"
 -- 3. R-04 & R-05: Separation of Self-Service vs. Officer Operations
 -- =============================================================================
 
--- Clean up all legacy function signatures to prevent 42725 ambiguity
-DROP FUNCTION IF EXISTS public.record_officer_attendance(UUID, TEXT, UUID);
-DROP FUNCTION IF EXISTS public.record_officer_attendance(UUID, TEXT);
-DROP FUNCTION IF EXISTS public.submit_member_contribution(UUID, TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT);
-DROP FUNCTION IF EXISTS public.submit_member_contribution(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT, UUID);
-DROP FUNCTION IF EXISTS public.update_member_official_id(UUID, TEXT, TEXT, TEXT);
-DROP FUNCTION IF EXISTS public.update_member_official_id(TEXT, TEXT, TEXT, UUID);
-DROP FUNCTION IF EXISTS public.update_member_profile(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT);
-DROP FUNCTION IF EXISTS public.update_member_profile(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, UUID);
-DROP FUNCTION IF EXISTS public.check_in_event(UUID, TEXT, UUID);
-DROP FUNCTION IF EXISTS public.check_in_event(UUID, TEXT);
-DROP FUNCTION IF EXISTS public.check_in_self_event(UUID, TEXT);
-DROP FUNCTION IF EXISTS public.submit_self_contribution(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT);
-DROP FUNCTION IF EXISTS public.update_self_profile(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT);
-DROP FUNCTION IF EXISTS public.update_self_official_id(TEXT, TEXT, TEXT);
-DROP FUNCTION IF EXISTS public.officer_submit_contribution_for_member(UUID, TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT);
-DROP FUNCTION IF EXISTS public.officer_update_member_profile(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT);
-
 -- -----------------------------------------------------------------------------
 -- 3.1 Self-Service: submit_self_contribution (Bound exclusively to auth.uid())
 -- -----------------------------------------------------------------------------
@@ -523,9 +544,6 @@ BEGIN
     );
 END;
 $$;
-
-REVOKE EXECUTE ON FUNCTION public.submit_self_contribution(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) FROM anon, PUBLIC;
-GRANT EXECUTE ON FUNCTION public.submit_self_contribution(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) TO authenticated;
 
 -- -----------------------------------------------------------------------------
 -- 3.2 Officer Workflow: officer_submit_contribution_for_member
@@ -628,9 +646,6 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.officer_submit_contribution_for_member(UUID, TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) FROM anon, PUBLIC;
-GRANT EXECUTE ON FUNCTION public.officer_submit_contribution_for_member(UUID, TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) TO authenticated;
-
 -- Maintain submit_member_contribution for backward compatibility (strictly routes to self)
 CREATE OR REPLACE FUNCTION public.submit_member_contribution(
     p_member_id UUID DEFAULT NULL,
@@ -716,9 +731,6 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.update_self_profile(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) FROM anon, PUBLIC;
-GRANT EXECUTE ON FUNCTION public.update_self_profile(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
-
 -- -----------------------------------------------------------------------------
 -- 3.4 Officer Workflow: officer_update_member_profile
 -- -----------------------------------------------------------------------------
@@ -788,9 +800,6 @@ BEGIN
     RETURN jsonb_build_object('success', true, 'message', 'Member profile updated by officer.');
 END;
 $$;
-
-REVOKE EXECUTE ON FUNCTION public.officer_update_member_profile(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) FROM anon, PUBLIC;
-GRANT EXECUTE ON FUNCTION public.officer_update_member_profile(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 
 -- Maintain update_member_profile routing cleanly
 CREATE OR REPLACE FUNCTION public.update_member_profile(
@@ -872,9 +881,6 @@ BEGIN
     RETURN jsonb_build_object('success', true, 'message', 'Official digital credential updated.');
 END;
 $$;
-
-REVOKE EXECUTE ON FUNCTION public.update_self_official_id(TEXT, TEXT, TEXT) FROM anon, PUBLIC;
-GRANT EXECUTE ON FUNCTION public.update_self_official_id(TEXT, TEXT, TEXT) TO authenticated;
 
 -- Maintain update_member_official_id routing cleanly
 CREATE OR REPLACE FUNCTION public.update_member_official_id(
@@ -975,9 +981,6 @@ BEGIN
     RETURN jsonb_build_object('success', true, 'already_checked_in', false, 'message', 'Attendance successfully recorded! Mabuhay ang Agila!');
 END;
 $$;
-
-REVOKE EXECUTE ON FUNCTION public.check_in_self_event(UUID, TEXT) FROM anon, PUBLIC;
-GRANT EXECUTE ON FUNCTION public.check_in_self_event(UUID, TEXT) TO authenticated;
 
 -- Maintain check_in_event routing cleanly
 CREATE OR REPLACE FUNCTION public.check_in_event(
@@ -1126,9 +1129,6 @@ BEGIN
     );
 END;
 $$;
-
-REVOKE EXECUTE ON FUNCTION public.record_officer_attendance(UUID, TEXT) FROM anon, PUBLIC;
-GRANT EXECUTE ON FUNCTION public.record_officer_attendance(UUID, TEXT) TO authenticated;
 
 -- =============================================================================
 -- 6. Comprehensive Elimination of Blanket SELECT Policies (F-03 & Security Advisor)
