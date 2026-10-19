@@ -447,13 +447,23 @@ export default function HomePage() {
     setCheckInLoading(true);
     setCheckInFeedback(null);
     try {
-      const { data, error } = await supabase.rpc("check_in_event", {
+      // Self-service check-in bound strictly to authenticated session auth.uid()
+      const { data, error } = await supabase.rpc("check_in_self_event", {
         p_event_id: eventId,
         p_checkin_code: checkInCode.trim().toUpperCase(),
       });
 
       if (error) {
-        setCheckInFeedback({ success: false, message: error.message });
+        const { data: fallbackData, error: fallbackError } = await supabase.rpc("check_in_event", {
+          p_event_id: eventId,
+          p_checkin_code: checkInCode.trim().toUpperCase(),
+        });
+        if (fallbackError) {
+          setCheckInFeedback({ success: false, message: fallbackError.message });
+        } else {
+          const res = fallbackData as { success: boolean; message: string; already_checked_in?: boolean };
+          setCheckInFeedback({ success: res.success, message: res.message });
+        }
       } else {
         const res = data as { success: boolean; message: string; already_checked_in?: boolean };
         setCheckInFeedback({ success: res.success, message: res.message });

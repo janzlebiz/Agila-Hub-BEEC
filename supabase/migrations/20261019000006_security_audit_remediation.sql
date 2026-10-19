@@ -161,12 +161,8 @@ REVOKE EXECUTE ON FUNCTION public.claim_member_account FROM anon;
 REVOKE EXECUTE ON FUNCTION public.claim_member_account FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.claim_member_account TO authenticated;
 
--- Seed claim token for demo member AGILA-TEMP-999
-INSERT INTO public.member_claim_tokens (member_id, token_code, expires_at)
-SELECT id, 'EAGLE-CLAIM-2026', timezone('utc'::text, now()) + INTERVAL '30 days'
-FROM public.members
-WHERE member_number = 'AGILA-TEMP-999'
-ON CONFLICT (token_code) DO NOTHING;
+-- NOTE: Shared demo claim token seeds are prohibited.
+-- Claim tokens must be generated on-demand by authorized officers via generate_member_claim_token().
 
 -- =============================================================================
 -- 3. F-01: Secure Applicant Approval RPC

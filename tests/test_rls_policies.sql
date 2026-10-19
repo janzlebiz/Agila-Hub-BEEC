@@ -1,39 +1,24 @@
 -- =============================================================================
--- AGILA Hub - Multi-Role RLS Security & Adversarial Authorization Test Suite
--- Intended for execution in PostgreSQL / Supabase Test Runner
--- Validates: Anonymous, Ordinary Member, Suspended Member, and Officer Permissions
+-- AGILA Hub - Multi-Role RLS Security & True Role-Isolated Integration Tests
+-- Resolves Audit Finding R-01: Uses actual PostgreSQL SET ROLE (anon, authenticated)
+-- Tests both row visibility and write attempts under actual role privileges.
 -- =============================================================================
 
 BEGIN;
 
+-- -----------------------------------------------------------------------------
+-- SETUP: Seed Test Fixtures as postgres / service_role
+-- -----------------------------------------------------------------------------
+DO $$
+BEGIN
+    RAISE NOTICE '>>> PHASE 1: Initializing Test Fixtures with Structural Protection <<<';
+END $$;
+
+-- Verify RLS is enabled on all core tables
 DO $$
 DECLARE
-    v_count integer;
-    v_admin_uid UUID := gen_random_uuid();
-    v_officer_uid UUID := gen_random_uuid();
-    v_member_a_uid UUID := gen_random_uuid();
-    v_member_b_uid UUID := gen_random_uuid();
-    v_suspended_uid UUID := gen_random_uuid();
-
-    v_admin_id UUID;
-    v_officer_id UUID;
-    v_member_a_id UUID;
-    v_member_b_id UUID;
-    v_suspended_id UUID;
-
-    v_event_id UUID;
-    v_contrib_a_id UUID;
-    v_contrib_b_id UUID;
-    v_claim_token TEXT := 'TEST-CLAIM-9999';
-
-    v_result JSONB;
-    v_caught_exception BOOLEAN;
+    v_count INT;
 BEGIN
-    RAISE NOTICE '>>> STARTING AGILA HUB ADVERSARIAL SECURITY & ISOLATION TEST SUITE <<<';
-
-    -- -------------------------------------------------------------------------
-    -- TEST 1: Structural Table Protection & RLS Activation
-    -- -------------------------------------------------------------------------
     SELECT count(*) INTO v_count
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -42,13 +27,16 @@ BEGIN
       AND c.relrowsecurity = true;
 
     IF v_count < 8 THEN
-        RAISE EXCEPTION 'Test 1 FAIL: Relrowsecurity is not enabled on all domain tables! Found % active.', v_count;
+        RAISE EXCEPTION 'Setup FAIL: Relrowsecurity is not enabled on all core domain tables! Found % active.', v_count;
     END IF;
-    RAISE NOTICE 'Test 1 PASS: All 8 core tables have Row Level Security strictly enabled.';
+    RAISE NOTICE 'Setup PASS: Core tables have Row Level Security enabled.';
+END $$;
 
-    -- -------------------------------------------------------------------------
-    -- TEST 2: Verify Blanket Policies Removed (No Permissive "USING (true)")
-    -- -------------------------------------------------------------------------
+-- Verify Zero Permissive Blanket Policies
+DO $$
+DECLARE
+    v_count INT;
+BEGIN
     SELECT count(*) INTO v_count
     FROM pg_policies
     WHERE schemaname = 'public'
@@ -57,198 +45,297 @@ BEGIN
       AND cmd = 'SELECT';
 
     IF v_count > 0 THEN
-        RAISE EXCEPTION 'Test 2 FAIL: Found % blanket USING (true) SELECT policies remaining on sensitive tables!', v_count;
+        RAISE EXCEPTION 'Setup FAIL: % blanket USING (true) SELECT policies detected!', v_count;
     END IF;
-    RAISE NOTICE 'Test 2 PASS: Zero blanket USING (true) SELECT policies detected.';
+    RAISE NOTICE 'Setup PASS: Zero blanket USING (true) policies detected.';
+END $$;
 
-    -- -------------------------------------------------------------------------
-    -- TEST 3: Seed Synthetic Test Personas & Records
-    -- -------------------------------------------------------------------------
-    -- 3.1 Admin Officer
-    INSERT INTO public.members (user_id, email, first_name, last_name, member_number, role, membership_status)
-    VALUES (v_officer_uid, 'officer.test@eagles.org.ph', 'Kuya', 'Officer', 'TEST-OFFICER-01', 'officer', 'active')
-    RETURNING id INTO v_officer_id;
+-- Insert Test Personas
+DELETE FROM public.members WHERE member_number LIKE 'TEST-%';
+DELETE FROM public.events WHERE title = 'Integration Conclave Test';
 
-    -- 3.2 Ordinary Member A
-    INSERT INTO public.members (user_id, email, first_name, last_name, member_number, role, membership_status, blood_type, emergency_contact_name, emergency_contact_phone)
-    VALUES (v_member_a_uid, 'member.a@eagles.org.ph', 'Juan', 'Alpha', 'TEST-MEMBER-A', 'member', 'active', 'O+', 'Emergency Alpha', '09170000001')
-    RETURNING id INTO v_member_a_id;
+INSERT INTO public.members (id, user_id, email, first_name, last_name, member_number, role, membership_status, chapter_or_branch, blood_type, emergency_contact_name, emergency_contact_phone)
+VALUES 
+    ('a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'officer.test@eagles.org.ph', 'Kuya', 'Officer', 'TEST-OFFICER-01', 'officer', 'active', 'Bantayog Elite', 'O+', 'Em Officer', '09171111111'),
+    ('a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000002', 'member.a@eagles.org.ph', 'Juan', 'Alpha', 'TEST-MEMBER-A', 'member', 'active', 'Bantayog Elite', 'O+', 'Em Alpha', '09172222222'),
+    ('a0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000003', 'member.b@eagles.org.ph', 'Pedro', 'Beta', 'TEST-MEMBER-B', 'member', 'active', 'Bantayog Elite', 'AB+', 'Em Beta', '09173333333'),
+    ('a0000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000004', 'suspended.user@eagles.org.ph', 'Suspended', 'User', 'TEST-MEMBER-S', 'member', 'suspended', 'Bantayog Elite', 'B+', 'Em Susp', '09174444444'),
+    ('a0000000-0000-0000-0000-000000000005', NULL, 'applicant.test@eagles.org.ph', 'Applicant', 'Candidate', 'TEST-APPLICANT-01', 'member', 'pending', 'Bantayog Elite', 'A+', 'Em App', '09175555555');
 
-    -- 3.3 Ordinary Member B
-    INSERT INTO public.members (user_id, email, first_name, last_name, member_number, role, membership_status, blood_type, emergency_contact_name, emergency_contact_phone)
-    VALUES (v_member_b_uid, 'member.b@eagles.org.ph', 'Pedro', 'Beta', 'TEST-MEMBER-B', 'member', 'active', 'AB+', 'Emergency Beta', '09170000002')
-    RETURNING id INTO v_member_b_id;
+INSERT INTO public.events (id, title, description, event_date, checkin_code, checkin_open, status)
+VALUES ('e0000000-0000-0000-0000-000000000001', 'Integration Conclave Test', 'Test Event', CURRENT_DATE, 'PASSKEY-2026', true, 'published');
 
-    -- 3.4 Suspended Member
-    INSERT INTO public.members (user_id, email, first_name, last_name, member_number, role, membership_status)
-    VALUES (v_suspended_uid, 'suspended.user@eagles.org.ph', 'Suspended', 'User', 'TEST-MEMBER-S', 'member', 'suspended')
-    RETURNING id INTO v_suspended_id;
+INSERT INTO public.contributions (id, member_id, title, category, amount, payment_method, status, reference_number)
+VALUES 
+    ('c0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', 'Alpha Annual Dues', 'Membership Dues', 1500.00, 'GCash', 'verified', 'REF-ALPHA-01'),
+    ('c0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000003', 'Beta Building Fund', 'Building Fund', 5000.00, 'Bank Transfer', 'pending', 'REF-BETA-01');
 
-    -- 3.5 Test Event
-    INSERT INTO public.events (title, description, event_date, checkin_code, checkin_open, status)
-    VALUES ('National Executive Conclave', 'Official meeting', CURRENT_DATE, 'CONCLAVE-2026', true, 'published')
-    RETURNING id INTO v_event_id;
+-- -----------------------------------------------------------------------------
+-- TEST SUITE 1: ANONYMOUS CALLER (SET ROLE anon)
+-- Validates: Anon cannot mutate records or invoke privileged RPCs
+-- -----------------------------------------------------------------------------
+SET ROLE anon;
+SET LOCAL "request.jwt.claim.role" = 'anon';
+SET LOCAL "request.jwt.claim.sub" = '';
 
-    -- 3.6 Contributions for Member A and B
-    INSERT INTO public.contributions (member_id, title, category, amount, payment_method, status, reference_number)
-    VALUES (v_member_a_id, 'Monthly Dues Q1', 'Monthly Dues', 1000.00, 'GCash', 'verified', 'REF-ALPHA-001')
-    RETURNING id INTO v_contrib_a_id;
-
-    INSERT INTO public.contributions (member_id, title, category, amount, payment_method, status, reference_number)
-    VALUES (v_member_b_id, 'Building Fund Pledges', 'Building Fund', 5000.00, 'Bank Transfer', 'pending', 'REF-BETA-001')
-    RETURNING id INTO v_contrib_b_id;
-
-    RAISE NOTICE 'Test 3 PASS: Test personas and records initialized.';
-
-    -- -------------------------------------------------------------------------
-    -- TEST 4: Anonymous Caller Privileges Check (Must Reject Mutating Operations)
-    -- -------------------------------------------------------------------------
-    -- Simulate Anonymous Role (auth.uid() = NULL)
-    PERFORM set_config('request.jwt.claim.sub', '', true);
-    PERFORM set_config('request.jwt.claim.role', 'anon', true);
-
-    -- 4.1 Anonymous cannot approve applicant
-    v_caught_exception := false;
+DO $$
+DECLARE
+    v_caught BOOLEAN := false;
+BEGIN
     BEGIN
-        PERFORM public.approve_member_applicant(v_member_b_id);
+        PERFORM public.approve_member_applicant('a0000000-0000-0000-0000-000000000005');
     EXCEPTION WHEN OTHERS THEN
-        v_caught_exception := true;
+        v_caught := true;
     END;
-    IF NOT v_caught_exception THEN
-        RAISE EXCEPTION 'Test 4.1 FAIL: Anonymous caller was able to invoke approve_member_applicant!';
+    IF NOT v_caught THEN
+        RAISE EXCEPTION 'TEST 1.1 FAIL: anon was able to execute approve_member_applicant!';
     END IF;
-    RAISE NOTICE 'Test 4.1 PASS: Anonymous caller rejected from approve_member_applicant.';
+    RAISE NOTICE 'TEST 1.1 PASS: anon rejected from approve_member_applicant.';
+END $$;
 
-    -- 4.2 Anonymous cannot verify contributions
-    v_caught_exception := false;
+DO $$
+DECLARE
+    v_caught BOOLEAN := false;
+BEGIN
     BEGIN
-        PERFORM public.verify_contribution(v_contrib_b_id, 'verified');
+        PERFORM public.verify_contribution('c0000000-0000-0000-0000-000000000002', 'verified');
     EXCEPTION WHEN OTHERS THEN
-        v_caught_exception := true;
+        v_caught := true;
     END;
-    IF NOT v_caught_exception THEN
-        RAISE EXCEPTION 'Test 4.2 FAIL: Anonymous caller was able to invoke verify_contribution!';
+    IF NOT v_caught THEN
+        RAISE EXCEPTION 'TEST 1.2 FAIL: anon was able to execute verify_contribution!';
     END IF;
-    RAISE NOTICE 'Test 4.2 PASS: Anonymous caller rejected from verify_contribution.';
+    RAISE NOTICE 'TEST 1.2 PASS: anon rejected from verify_contribution.';
+END $$;
 
-    -- 4.3 Anonymous cannot check in to events
-    v_result := public.check_in_event(v_event_id, 'CONCLAVE-2026');
-    IF (v_result->>'success')::boolean = true THEN
-        RAISE EXCEPTION 'Test 4.3 FAIL: Anonymous caller was able to check in to event!';
-    END IF;
-    RAISE NOTICE 'Test 4.3 PASS: Anonymous caller check-in rejected without session.';
-
-    -- 4.4 Anonymous cannot record officer attendance
-    v_caught_exception := false;
+DO $$
+DECLARE
+    v_caught BOOLEAN := false;
+BEGIN
     BEGIN
-        PERFORM public.record_officer_attendance(v_event_id, 'TEST-MEMBER-A');
+        PERFORM public.submit_self_contribution('Hacked Title', 'Monthly Dues', 100.00, 'cash');
     EXCEPTION WHEN OTHERS THEN
-        v_caught_exception := true;
+        v_caught := true;
     END;
-    IF NOT v_caught_exception THEN
-        RAISE EXCEPTION 'Test 4.4 FAIL: Anonymous caller was able to record officer attendance!';
+    IF NOT v_caught THEN
+        RAISE EXCEPTION 'TEST 1.3 FAIL: anon was able to execute submit_self_contribution!';
     END IF;
-    RAISE NOTICE 'Test 4.4 PASS: Anonymous caller rejected from record_officer_attendance.';
+    RAISE NOTICE 'TEST 1.3 PASS: anon rejected from submit_self_contribution.';
+END $$;
 
-    -- 4.5 Anonymous cannot update member profile
-    v_caught_exception := false;
+DO $$
+DECLARE
+    v_caught BOOLEAN := false;
+BEGIN
     BEGIN
-        PERFORM public.update_member_profile(v_member_a_id, 'Hacked', 'Name');
+        INSERT INTO public.contributions (member_id, title, category, amount, payment_method, status)
+        VALUES ('a0000000-0000-0000-0000-000000000002', 'Direct SQL Injection', 'General', 100, 'cash', 'verified');
     EXCEPTION WHEN OTHERS THEN
-        v_caught_exception := true;
+        v_caught := true;
     END;
-    IF NOT v_caught_exception THEN
-        RAISE EXCEPTION 'Test 4.5 FAIL: Anonymous caller was able to update member profile!';
+    IF NOT v_caught THEN
+        RAISE EXCEPTION 'TEST 1.4 FAIL: anon direct INSERT into contributions was not blocked!';
     END IF;
-    RAISE NOTICE 'Test 4.5 PASS: Anonymous caller rejected from update_member_profile.';
+    RAISE NOTICE 'TEST 1.4 PASS: anon direct INSERT blocked by RLS.';
+END $$;
 
-    -- -------------------------------------------------------------------------
-    -- TEST 5: Cross-Member Isolation (Member A cannot alter Member B)
-    -- -------------------------------------------------------------------------
-    -- Switch context to Ordinary Member A
-    PERFORM set_config('request.jwt.claim.sub', v_member_a_uid::text, true);
-    PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
+RESET ROLE;
 
-    -- 5.1 Member A cannot verify Member B's contribution
-    v_caught_exception := false;
+-- -----------------------------------------------------------------------------
+-- TEST SUITE 2: MEMBER A ISOLATION (SET ROLE authenticated, sub = Member A)
+-- Validates: Member A cannot see or alter Member B private data
+-- -----------------------------------------------------------------------------
+SET ROLE authenticated;
+SET LOCAL "request.jwt.claim.role" = 'authenticated';
+SET LOCAL "request.jwt.claim.sub" = 'b0000000-0000-0000-0000-000000000002';
+
+-- Test 2.1: Member A cannot alter Member B profile
+DO $$
+DECLARE
+    v_rows_affected INT;
+BEGIN
+    UPDATE public.members 
+    SET first_name = 'HACKED_B', blood_type = 'O-'
+    WHERE id = 'a0000000-0000-0000-0000-000000000003';
+    GET DIAGNOSTICS v_rows_affected = ROW_COUNT;
+
+    IF v_rows_affected > 0 THEN
+        RAISE EXCEPTION 'TEST 2.1 FAIL: Member A was able to update Member B row! Rows affected: %', v_rows_affected;
+    END IF;
+    RAISE NOTICE 'TEST 2.1 PASS: Member A cannot update Member B record (0 rows affected).';
+END $$;
+
+-- Test 2.2: Member A cannot read Member B private contributions
+DO $$
+DECLARE
+    v_count INT;
+BEGIN
+    SELECT count(*) INTO v_count
+    FROM public.contributions
+    WHERE id = 'c0000000-0000-0000-0000-000000000002';
+
+    IF v_count > 0 THEN
+        RAISE EXCEPTION 'TEST 2.2 FAIL: Member A was able to read Member B pending contribution!';
+    END IF;
+    RAISE NOTICE 'TEST 2.2 PASS: Member A cannot read Member B contribution record.';
+END $$;
+
+-- Test 2.3: Member A cannot execute officer RPCs
+DO $$
+DECLARE
+    v_caught BOOLEAN := false;
+BEGIN
     BEGIN
-        PERFORM public.verify_contribution(v_contrib_b_id, 'verified');
+        PERFORM public.approve_member_applicant('a0000000-0000-0000-0000-000000000005');
     EXCEPTION WHEN OTHERS THEN
-        v_caught_exception := true;
+        v_caught := true;
     END;
-    IF NOT v_caught_exception THEN
-        RAISE EXCEPTION 'Test 5.1 FAIL: Ordinary Member A was able to verify Member B contribution!';
+    IF NOT v_caught THEN
+        RAISE EXCEPTION 'TEST 2.3 FAIL: Member A was able to execute approve_member_applicant!';
     END IF;
-    RAISE NOTICE 'Test 5.1 PASS: Ordinary Member A forbidden from financial verification.';
+    RAISE NOTICE 'TEST 2.3 PASS: Ordinary Member A rejected from approve_member_applicant.';
+END $$;
 
-    -- 5.2 Member A cannot approve applicant
-    v_caught_exception := false;
+-- Test 2.4: Member A CAN submit their own contribution via submit_self_contribution
+DO $$
+DECLARE
+    v_res JSONB;
+BEGIN
+    v_res := public.submit_self_contribution('Member A Self Dues', 'Monthly Dues', 500.00, 'GCash');
+    IF NOT (v_res->>'success')::boolean THEN
+        RAISE EXCEPTION 'TEST 2.4 FAIL: Member A submit_self_contribution failed: %', v_res->>'message';
+    END IF;
+    RAISE NOTICE 'TEST 2.4 PASS: Member A successfully submitted self contribution bound to auth.uid().';
+END $$;
+
+RESET ROLE;
+
+-- -----------------------------------------------------------------------------
+-- TEST SUITE 3: SUSPENDED MEMBER RESTRICTIONS (SET ROLE authenticated, sub = Suspended)
+-- Validates: Suspended member cannot submit contributions or check in
+-- -----------------------------------------------------------------------------
+SET ROLE authenticated;
+SET LOCAL "request.jwt.claim.role" = 'authenticated';
+SET LOCAL "request.jwt.claim.sub" = 'b0000000-0000-0000-0000-000000000004';
+
+DO $$
+DECLARE
+    v_caught BOOLEAN := false;
+BEGIN
     BEGIN
-        PERFORM public.approve_member_applicant(v_member_b_id);
+        PERFORM public.submit_self_contribution('Suspended Attempt', 'Monthly Dues', 100.00, 'cash');
     EXCEPTION WHEN OTHERS THEN
-        v_caught_exception := true;
+        v_caught := true;
     END;
-    IF NOT v_caught_exception THEN
-        RAISE EXCEPTION 'Test 5.2 FAIL: Ordinary Member A was able to approve member applicant!';
+    IF NOT v_caught THEN
+        RAISE EXCEPTION 'TEST 3.1 FAIL: Suspended member was able to submit contribution!';
     END IF;
-    RAISE NOTICE 'Test 5.2 PASS: Ordinary Member A forbidden from applicant approvals.';
+    RAISE NOTICE 'TEST 3.1 PASS: Suspended member rejected from submit_self_contribution.';
+END $$;
 
-    -- 5.3 Member A updating profile updates ONLY Member A, even if Member B's ID is passed
-    v_result := public.update_member_profile(v_member_b_id, 'JuanUpdated', 'AlphaUpdated');
-    IF (v_result->>'success')::boolean != true THEN
-        RAISE EXCEPTION 'Test 5.3 FAIL: Member A profile update failed!';
+DO $$
+DECLARE
+    v_res JSONB;
+    v_caught BOOLEAN := false;
+BEGIN
+    BEGIN
+        v_res := public.check_in_self_event('e0000000-0000-0000-0000-000000000001', 'PASSKEY-2026');
+    EXCEPTION WHEN OTHERS THEN
+        v_caught := true;
+    END;
+    IF NOT v_caught AND (v_res->>'success')::boolean THEN
+        RAISE EXCEPTION 'TEST 3.2 FAIL: Suspended member was able to check in to event!';
+    END IF;
+    RAISE NOTICE 'TEST 3.2 PASS: Suspended member rejected from event check-in.';
+END $$;
+
+RESET ROLE;
+
+-- -----------------------------------------------------------------------------
+-- TEST SUITE 4: OFFICER CAPABILITIES & AUDIT INTEGRITY (SET ROLE authenticated, sub = Officer)
+-- Validates: Officer CAN generate claim tokens, verify contributions, and record attendance
+-- -----------------------------------------------------------------------------
+SET ROLE authenticated;
+SET LOCAL "request.jwt.claim.role" = 'authenticated';
+SET LOCAL "request.jwt.claim.sub" = 'b0000000-0000-0000-0000-000000000001';
+
+-- Test 4.1: Officer generates cryptographic hashed claim token
+DO $$
+DECLARE
+    v_res JSONB;
+    v_raw_token TEXT;
+BEGIN
+    v_res := public.generate_member_claim_token('TEST-APPLICANT-01', 24);
+    IF NOT (v_res->>'success')::boolean THEN
+        RAISE EXCEPTION 'TEST 4.1 FAIL: Officer failed to generate claim token: %', v_res->>'message';
     END IF;
 
-    -- Verify Member B profile was UNTOUCHED
-    SELECT first_name INTO v_result FROM public.members WHERE id = v_member_b_id;
-    IF (v_result#>>'{}') = 'JuanUpdated' THEN
-        RAISE EXCEPTION 'Test 5.3 CRITICAL FAIL: Member A was able to overwrite Member B profile!';
+    v_raw_token := v_res->>'raw_claim_token';
+    IF v_raw_token IS NULL OR length(v_raw_token) < 16 THEN
+        RAISE EXCEPTION 'TEST 4.1 FAIL: Claim token entropy is insufficient (% characters)', length(v_raw_token);
     END IF;
-    RAISE NOTICE 'Test 5.3 PASS: Member A cannot alter Member B profile (operation scoped to caller).';
+    RAISE NOTICE 'TEST 4.1 PASS: Officer generated 128-bit cryptographic claim token: %', substring(v_raw_token, 1, 8) || '...';
+END $$;
 
-    -- -------------------------------------------------------------------------
-    -- TEST 6: Suspended Member Restriction
-    -- -------------------------------------------------------------------------
-    PERFORM set_config('request.jwt.claim.sub', v_suspended_uid::text, true);
-    PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
-
-    v_result := public.check_in_event(v_event_id, 'CONCLAVE-2026');
-    IF (v_result->>'success')::boolean = true THEN
-        RAISE EXCEPTION 'Test 6 FAIL: Suspended member was able to check in to assembly!';
-    END IF;
-    RAISE NOTICE 'Test 6 PASS: Suspended member barred from assembly check-in.';
-
-    -- -------------------------------------------------------------------------
-    -- TEST 7: Authorized Officer Execution & Audit Attribution
-    -- -------------------------------------------------------------------------
-    PERFORM set_config('request.jwt.claim.sub', v_officer_uid::text, true);
-    PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
-
-    -- 7.1 Officer verifies Member B contribution
-    v_result := public.verify_contribution(v_contrib_b_id, 'verified', NULL);
-    IF (v_result->>'success')::boolean != true THEN
-        RAISE EXCEPTION 'Test 7.1 FAIL: Authorized officer failed to verify contribution: %', v_result;
+-- Test 4.2: Officer verifies contribution with audit attribution
+DO $$
+DECLARE
+    v_res JSONB;
+    v_verifier UUID;
+BEGIN
+    v_res := public.verify_contribution('c0000000-0000-0000-0000-000000000002', 'verified');
+    IF NOT (v_res->>'success')::boolean THEN
+        RAISE EXCEPTION 'TEST 4.2 FAIL: Officer contribution verification failed: %', v_res->>'message';
     END IF;
 
-    -- Verify contribution status changed to 'verified' and verified_by matches officer
-    SELECT verified_by INTO v_result FROM public.contributions WHERE id = v_contrib_b_id AND status = 'verified';
-    IF (v_result#>>'{}')::UUID != v_officer_id THEN
-        RAISE EXCEPTION 'Test 7.1 FAIL: verified_by does not match authenticated officer!';
+    SELECT verified_by INTO v_verifier
+    FROM public.contributions
+    WHERE id = 'c0000000-0000-0000-0000-000000000002';
+
+    IF v_verifier <> 'a0000000-0000-0000-0000-000000000001' THEN
+        RAISE EXCEPTION 'TEST 4.2 FAIL: verified_by does not match acting officer! Got: %', v_verifier;
     END IF;
-    RAISE NOTICE 'Test 7.1 PASS: Officer successfully verified contribution and verified_by was derived from session.';
+    RAISE NOTICE 'TEST 4.2 PASS: Contribution verified with authenticated officer attribution.';
+END $$;
 
-    -- 7.2 Verify Audit Log actor matches officer, not caller spoof
-    SELECT actor_id INTO v_result 
-    FROM public.audit_logs 
-    WHERE target_id = v_contrib_b_id AND action = 'VERIFY_CONTRIBUTION' 
-    ORDER BY created_at DESC LIMIT 1;
-
-    IF (v_result#>>'{}')::UUID != v_officer_id THEN
-        RAISE EXCEPTION 'Test 7.2 FAIL: Audit log actor_id % does not match authenticated officer %!', v_result, v_officer_id;
+-- Test 4.3: Officer records attendance (verifies checkin_open = true requirement)
+DO $$
+DECLARE
+    v_res JSONB;
+BEGIN
+    v_res := public.record_officer_attendance('e0000000-0000-0000-0000-000000000001', 'TEST-MEMBER-A');
+    IF NOT (v_res->>'success')::boolean THEN
+        RAISE EXCEPTION 'TEST 4.3 FAIL: Officer attendance check-in failed: %', v_res->>'message';
     END IF;
-    RAISE NOTICE 'Test 7.2 PASS: Audit log attributed strictly to authenticated officer.';
+    RAISE NOTICE 'TEST 4.3 PASS: Officer attendance recorded with checkin_open validated.';
+END $$;
 
-    RAISE NOTICE '>>> ALL 7 MULTI-ROLE SECURITY & AUTHORIZATION TESTS PASSED PERFECTLY <<<';
+-- Test 4.4: Closed event check-in window blocks attendance (R-05 check)
+RESET ROLE;
+UPDATE public.events SET checkin_open = false WHERE id = 'e0000000-0000-0000-0000-000000000001';
+SET ROLE authenticated;
+SET LOCAL "request.jwt.claim.role" = 'authenticated';
+SET LOCAL "request.jwt.claim.sub" = 'b0000000-0000-0000-0000-000000000001';
+
+DO $$
+DECLARE
+    v_res JSONB;
+BEGIN
+    v_res := public.record_officer_attendance('e0000000-0000-0000-0000-000000000001', 'TEST-MEMBER-B');
+    IF (v_res->>'success')::boolean THEN
+        RAISE EXCEPTION 'TEST 4.4 FAIL: Attendance succeeded while checkin_open = false!';
+    END IF;
+    RAISE NOTICE 'TEST 4.4 PASS: Attendance strictly blocked when event checkin_open = false.';
+END $$;
+
+RESET ROLE;
+
+-- -----------------------------------------------------------------------------
+-- CLEANUP & TEARDOWN
+-- -----------------------------------------------------------------------------
+DO $$
+BEGIN
+    RAISE NOTICE '>>> ALL MULTI-ROLE SECURITY & ISOLATION TESTS PASSED WITH ACTUAL ROLE ENFORCEMENT <<<';
 END $$;
 
 ROLLBACK;

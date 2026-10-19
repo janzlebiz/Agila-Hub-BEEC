@@ -31,9 +31,9 @@ export default function RegisterPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Claim mode fields
-  const [memberNumber, setMemberNumber] = useState("AGILA-TEMP-999");
-  const [claimToken, setClaimToken] = useState("EAGLE-CLAIM-2026");
+  // Claim mode fields (issued privately by chapter Secretariat)
+  const [memberNumber, setMemberNumber] = useState("");
+  const [claimToken, setClaimToken] = useState("");
 
   // Common & New applicant fields
   const [firstName, setFirstName] = useState("");
@@ -273,7 +273,7 @@ export default function RegisterPage() {
                       required
                       value={memberNumber}
                       onChange={(e) => setMemberNumber(e.target.value)}
-                      placeholder="AGILA-TEMP-999"
+                      placeholder="e.g. BEEC-2024-001"
                       className="w-full h-11 px-3.5 rounded-xl bg-slate-100/90 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-eagle-blue/50 focus:border-eagle-blue transition"
                     />
                   </div>
@@ -287,7 +287,7 @@ export default function RegisterPage() {
                       required
                       value={claimToken}
                       onChange={(e) => setClaimToken(e.target.value)}
-                      placeholder="EAGLE-CLAIM-2026"
+                      placeholder="e.g. 32-hex claim token"
                       className="w-full h-11 px-3.5 rounded-xl bg-slate-100/90 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-eagle-blue/50 focus:border-eagle-blue transition"
                     />
                   </div>

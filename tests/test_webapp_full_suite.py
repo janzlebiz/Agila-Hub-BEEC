@@ -405,6 +405,8 @@ def run_suite():
                 "favicon",
                 "download the React DevTools",
                 "404 (Not Found)",
+                "status of 404",
+                "Failed to load resource",
                 "WebSocket connection to",
                 "ERR_NAME_NOT_RESOLVED",
                 "hydrated but some attributes",

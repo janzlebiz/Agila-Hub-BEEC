@@ -207,19 +207,26 @@ export function OfficialIdScannerModal({
         }
       }
 
-      // Authoritative database update with server-side validation
-      if (memberId) {
-        const { data: rpcData, error: rpcError } = await supabase.rpc("update_member_official_id", {
-          p_member_id: memberId,
+      // Authoritative database update with server-side validation bound to auth.uid()
+      const { data: rpcData, error: rpcError } = await supabase.rpc("update_self_official_id", {
+        p_id_url: finalFrontUrl,
+        p_front_url: finalFrontUrl,
+        p_back_url: finalBackUrl || null,
+      });
+
+      if (rpcError) {
+        // Fallback for pending migration
+        const { data: fallbackData, error: fallbackErr } = await supabase.rpc("update_member_official_id", {
           p_id_url: finalFrontUrl,
           p_front_url: finalFrontUrl,
           p_back_url: finalBackUrl || null,
         });
-
-        if (rpcError) throw rpcError;
-        if (rpcData && !(rpcData as { success?: boolean; message?: string }).success) {
-          throw new Error((rpcData as { success?: boolean; message?: string }).message || "Failed to update official ID in database.");
+        if (fallbackErr) throw fallbackErr;
+        if (fallbackData && !(fallbackData as { success?: boolean }).success) {
+          throw new Error((fallbackData as { message?: string }).message || "Failed to update official ID.");
         }
+      } else if (rpcData && !(rpcData as { success?: boolean; message?: string }).success) {
+        throw new Error((rpcData as { success?: boolean; message?: string }).message || "Failed to update official ID in database.");
       }
 
       // Trigger callback to replace ID in the app only upon verified success

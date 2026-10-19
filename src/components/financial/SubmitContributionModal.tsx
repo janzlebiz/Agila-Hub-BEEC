@@ -42,7 +42,7 @@ export function SubmitContributionModal({
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Handle local image upload to Supabase Storage 'receipts' bucket
+  // Handle local image upload to private Supabase Storage 'receipts' bucket
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -50,37 +50,45 @@ export function SubmitContributionModal({
     setUploadingReceipt(true);
     setFeedback(null);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const ownerFolder = user?.id || "unassigned";
+
       const fileExt = file.name.split(".").pop();
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-      const filePath = `receipts/${fileName}`;
+      const filePath = `${ownerFolder}/${fileName}`;
 
       const { data, error } = await supabase.storage
         .from("receipts")
         .upload(filePath, file, { upsert: true });
 
       if (error) {
-        // Fallback: Read as base64 data url if bucket policy is restricted
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setReceiptUrl(reader.result as string);
-          setUploadingReceipt(false);
-        };
-        reader.readAsDataURL(file);
-      } else if (data) {
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("receipts").getPublicUrl(filePath);
-        setReceiptUrl(publicUrl);
+        setFeedback({
+          success: false,
+          message: `Receipt upload failed: ${error.message}. Please retry with a valid image.`,
+        });
+        setReceiptUrl(null);
+        setUploadingReceipt(false);
+        return;
+      }
+
+      if (data) {
+        // Generate secure private 7-day signed URL (never use public URLs for private receipts)
+        const { data: signedData, error: signError } = await supabase.storage
+          .from("receipts")
+          .createSignedUrl(filePath, 60 * 60 * 24 * 7);
+
+        if (signError || !signedData?.signedUrl) {
+          throw new Error("Receipt uploaded to private storage, but failed to create secure signed URL.");
+        }
+
+        setReceiptUrl(signedData.signedUrl);
         setUploadingReceipt(false);
       }
-    } catch {
-      // Fallback to local data preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setReceiptUrl(reader.result as string);
-        setUploadingReceipt(false);
-      };
-      reader.readAsDataURL(file);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Receipt upload failed.";
+      setFeedback({ success: false, message: msg });
+      setReceiptUrl(null);
+      setUploadingReceipt(false);
     }
   };
 
@@ -95,15 +103,8 @@ export function SubmitContributionModal({
     setFeedback(null);
 
     try {
-      // Determine member UUID
-      let targetMemberId = memberId;
-      if (!targetMemberId) {
-        const { data: member } = await supabase.from("members").select("id").limit(1).single();
-        targetMemberId = member?.id;
-      }
-
-      const { data, error } = await supabase.rpc("submit_member_contribution", {
-        p_member_id: targetMemberId,
+      // Derive member identity strictly server-side from auth.uid()
+      const { data, error } = await supabase.rpc("submit_self_contribution", {
         p_title: title.trim(),
         p_category: category,
         p_amount: Number(amount),
@@ -113,17 +114,40 @@ export function SubmitContributionModal({
       });
 
       if (error) {
-        setFeedback({ success: false, message: error.message });
-      } else if (data) {
+        // Fallback to submit_member_contribution if migration is pending
+        const { data: fallbackData, error: fallbackError } = await supabase.rpc("submit_member_contribution", {
+          p_title: title.trim(),
+          p_category: category,
+          p_amount: Number(amount),
+          p_payment_method: paymentMethod,
+          p_reference_number: referenceNumber.trim() || `REF-${Date.now().toString().slice(-6)}`,
+          p_proof_receipt_url: receiptUrl,
+        });
+
+        if (fallbackError) {
+          setFeedback({ success: false, message: fallbackError.message });
+          return;
+        }
         setFeedback({
           success: true,
-          message: data.message || "Contribution record submitted successfully!",
+          message: (fallbackData as { message?: string })?.message || "Contribution record submitted successfully!",
         });
-        setTimeout(() => {
-          if (onContributionSubmitted) onContributionSubmitted();
-          onClose();
-        }, 1200);
+      } else if (data) {
+        const res = data as { success?: boolean; message?: string };
+        if (res.success === false) {
+          setFeedback({ success: false, message: res.message || "Failed to submit contribution." });
+          return;
+        }
+        setFeedback({
+          success: true,
+          message: res.message || "Contribution record submitted successfully!",
+        });
       }
+
+      setTimeout(() => {
+        if (onContributionSubmitted) onContributionSubmitted();
+        onClose();
+      }, 1200);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Error submitting record.";
       setFeedback({ success: false, message });

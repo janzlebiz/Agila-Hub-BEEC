@@ -86,8 +86,8 @@ export function ProfileSettingsModal({
     setProfileFeedback(null);
 
     try {
-      const { data, error } = await supabase.rpc("update_member_profile", {
-        p_member_id: member.id,
+      // Self-service profile update derived strictly from authenticated session
+      const { data, error } = await supabase.rpc("update_self_profile", {
         p_first_name: firstName,
         p_last_name: lastName,
         p_phone: phone,
@@ -97,9 +97,23 @@ export function ProfileSettingsModal({
         p_chapter: chapter,
       });
 
-      if (error) throw error;
-      if (data && !(data as { success?: boolean; message?: string }).success) {
-        throw new Error((data as { success?: boolean; message?: string }).message || "Failed to update profile details in database.");
+      if (error) {
+        // Fallback for pending migration
+        const { data: fallbackData, error: fallbackErr } = await supabase.rpc("update_member_profile", {
+          p_first_name: firstName,
+          p_last_name: lastName,
+          p_phone: phone,
+          p_blood_type: bloodType,
+          p_emergency_name: emergencyName,
+          p_emergency_phone: emergencyPhone,
+          p_chapter: chapter,
+        });
+        if (fallbackErr) throw fallbackErr;
+        if (fallbackData && !(fallbackData as { success?: boolean }).success) {
+          throw new Error((fallbackData as { message?: string }).message || "Failed to update profile.");
+        }
+      } else if (data && !(data as { success?: boolean }).success) {
+        throw new Error((data as { message?: string }).message || "Failed to update profile details in database.");
       }
 
       setProfileFeedback({ success: true, message: "Profile details updated successfully!" });
