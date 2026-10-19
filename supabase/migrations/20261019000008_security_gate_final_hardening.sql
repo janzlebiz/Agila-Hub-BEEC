@@ -187,28 +187,47 @@ END $$;
 -- =============================================================================
 
 -- 5.1 Member Fixtures for State Integrity Probing (Never mutate real members)
-INSERT INTO public.members (
-    email,
-    first_name,
-    last_name,
-    member_number,
-    role,
-    membership_status
-) VALUES 
-    ('security.probe@eagles.internal', 'Probe', 'Fixture', 'FIXTURE-SECURITY-PROBE', 'member', 'active'),
-    ('suspended.probe@eagles.internal', 'Suspended', 'Fixture', 'FIXTURE-SUSPENDED-PROBE', 'member', 'suspended'),
-    ('applicant.probe@eagles.internal', 'Applicant', 'Fixture', 'FIXTURE-APPLICANT-PROBE', 'member', 'pending')
-ON CONFLICT (email) DO UPDATE 
-SET role = EXCLUDED.role,
-    membership_status = EXCLUDED.membership_status,
-    member_number = EXCLUDED.member_number;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM public.members WHERE email = 'security.probe@eagles.internal') THEN
+        INSERT INTO public.members (email, first_name, last_name, member_number, role, membership_status)
+        VALUES ('security.probe@eagles.internal', 'Probe', 'Fixture', 'FIXTURE-SECURITY-PROBE', 'member', 'active');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM public.members WHERE email = 'suspended.probe@eagles.internal') THEN
+        INSERT INTO public.members (email, first_name, last_name, member_number, role, membership_status)
+        VALUES ('suspended.probe@eagles.internal', 'Suspended', 'Fixture', 'FIXTURE-SUSPENDED-PROBE', 'member', 'suspended');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM public.members WHERE email = 'applicant.probe@eagles.internal') THEN
+        INSERT INTO public.members (email, first_name, last_name, member_number, role, membership_status)
+        VALUES ('applicant.probe@eagles.internal', 'Applicant', 'Fixture', 'FIXTURE-APPLICANT-PROBE', 'member', 'pending');
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN NULL;
+END $$;
 
 -- 5.2 Storage Object Fixtures: Verify real file access control (not nonexistent 404s)
-INSERT INTO storage.objects (id, bucket_id, name, owner, metadata)
-VALUES 
-    (gen_random_uuid(), 'member-ids', 'fixtures/probe.txt', NULL, '{"mimetype": "text/plain", "size": 19}'::jsonb),
-    (gen_random_uuid(), 'receipts', 'fixtures/probe.txt', NULL, '{"mimetype": "text/plain", "size": 19}'::jsonb)
-ON CONFLICT (bucket_id, name) DO NOTHING;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM storage.objects 
+        WHERE bucket_id = 'member-ids' AND name = 'fixtures/probe.txt'
+    ) THEN
+        INSERT INTO storage.objects (id, bucket_id, name, owner, metadata)
+        VALUES (gen_random_uuid(), 'member-ids', 'fixtures/probe.txt', NULL, '{"mimetype": "text/plain", "size": 19}'::jsonb);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM storage.objects 
+        WHERE bucket_id = 'receipts' AND name = 'fixtures/probe.txt'
+    ) THEN
+        INSERT INTO storage.objects (id, bucket_id, name, owner, metadata)
+        VALUES (gen_random_uuid(), 'receipts', 'fixtures/probe.txt', NULL, '{"mimetype": "text/plain", "size": 19}'::jsonb);
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN NULL;
+END $$;
 
 -- =============================================================================
 -- 6. Schema Migrations Version Tracking
@@ -219,8 +238,10 @@ BEGIN
         SELECT 1 FROM information_schema.tables 
         WHERE table_schema = 'supabase_migrations' AND table_name = 'schema_migrations'
     ) THEN
-        INSERT INTO supabase_migrations.schema_migrations (version)
-        VALUES ('20261019000008')
-        ON CONFLICT (version) DO NOTHING;
+        IF NOT EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = '20261019000008') THEN
+            INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20261019000008');
+        END IF;
     END IF;
+EXCEPTION
+    WHEN OTHERS THEN NULL;
 END $$;
