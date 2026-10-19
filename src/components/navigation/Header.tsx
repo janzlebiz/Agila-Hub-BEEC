@@ -22,7 +22,7 @@ interface HeaderProps {
 }
 
 export function Header({
-  currentRole = "admin",
+  currentRole = "member",
   onRoleChange,
   isDark = false,
   onToggleTheme,
@@ -73,11 +73,14 @@ export function Header({
 
         {/* Center / Right Section: Accessibility, Theme & Role Simulator */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Quick Role Switcher Pill */}
+          {/* Quick Role Switcher Pill (Presentation Preview Only) */}
           {onRoleChange && (
-            <div className="hidden md:flex items-center bg-slate-100 dark:bg-white/[0.06] rounded-xl p-1 border border-slate-200 dark:border-white/10 text-xs font-semibold">
+            <div
+              className="hidden md:flex items-center bg-slate-100 dark:bg-white/[0.06] rounded-xl p-1 border border-slate-200 dark:border-white/10 text-xs font-semibold"
+              title="UI Presentation Simulator — Database operations are protected by RLS and server authorization."
+            >
               <span className="px-2 text-slate-500 dark:text-slate-400 text-[11px] flex items-center gap-1 font-bold">
-                <Shield className="h-3 w-3 text-bumblebee-yellow" /> Role:
+                <Shield className="h-3 w-3 text-bumblebee-yellow" /> View:
               </span>
               {(["admin", "officer", "member"] as const).map((r) => (
                 <button
@@ -110,6 +113,7 @@ export function Header({
           {/* Light / Dark Mode Toggle */}
           {onToggleTheme && (
             <button
+              id="theme-toggle-btn"
               onClick={onToggleTheme}
               aria-label={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
               title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}

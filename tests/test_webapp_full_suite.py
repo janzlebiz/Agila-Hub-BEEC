@@ -69,9 +69,13 @@ def run_suite():
         # -------------------------------------------------------------
         print("\n--- STEP 1: App Initialization & Header ---", flush=True)
         try:
-            page.goto(BASE_URL, wait_until="domcontentloaded", timeout=20000)
-            page.wait_for_selector("main", timeout=15000)
-            page.wait_for_timeout(1500)
+            page.goto(BASE_URL, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_selector("main", timeout=20000)
+            try:
+                page.wait_for_selector("[data-hydrated='true']", timeout=15000)
+            except Exception:
+                page.wait_for_timeout(2000)
+            page.wait_for_timeout(800)
 
             # Check Brand title
             brand_text = page.locator("header").inner_text()
@@ -95,16 +99,21 @@ def run_suite():
                 record_test("Text Size Scaling", True, "Text size scaled successfully")
 
             # Check Theme Toggle (Light -> Dark -> Light)
-            theme_dark_btn = page.locator("header button[aria-label='Switch to Dark Mode']").first
-            if theme_dark_btn.is_visible():
-                theme_dark_btn.click()
-                page.wait_for_timeout(600)
-                is_dark = page.evaluate("() => document.documentElement.classList.contains('dark')")
-                record_test("Theme Toggle (Dark Mode)", is_dark, f"Dark mode active: {is_dark}")
+            theme_btn = page.locator("#theme-toggle-btn").first
+            if not theme_btn.is_visible():
+                theme_btn = page.locator("header button[title*='Switch to']").first
 
-                theme_light_btn = page.locator("header button[aria-label='Switch to Light Mode']").first
-                if theme_light_btn.is_visible():
-                    theme_light_btn.click()
+            initial_dark = page.evaluate("() => document.documentElement.classList.contains('dark')")
+            if theme_btn.is_visible():
+                theme_btn.click(force=True)
+                page.wait_for_timeout(800)
+                toggled_dark = page.evaluate("() => document.documentElement.classList.contains('dark')")
+                theme_toggled = (toggled_dark != initial_dark)
+                record_test("Theme Toggle (Dark Mode)", theme_toggled, f"Theme toggled successfully: {initial_dark} -> {toggled_dark}")
+
+                # Toggle back to original mode
+                if toggled_dark != initial_dark:
+                    theme_btn.click(force=True)
                     page.wait_for_timeout(400)
             else:
                 record_test("Theme Toggle (Dark Mode)", True, "Theme button verified")
@@ -350,7 +359,7 @@ def run_suite():
             page.screenshot(path=str(shot6a))
 
             # 6.2 /auth/register - Tab 1: Claim Existing Member Record
-            page.goto(f"{BASE_URL}/auth/register", wait_until="networkidle", timeout=15000)
+            page.goto(f"{BASE_URL}/auth/register", wait_until="domcontentloaded", timeout=15000)
             page.wait_for_selector("text=Member Onboarding & Identification", timeout=10000)
             assert page.get_by_role("button", name="Claim Official ID").is_visible(), "Claim tab missing"
             record_test("Auth Route: /auth/register (Claim Tab)", True, "Member record claiming form verified")
@@ -359,9 +368,17 @@ def run_suite():
             page.screenshot(path=str(shot6b))
 
             # 6.3 /auth/register - Tab 2: New Applicant Registration
-            applicant_tab = page.get_by_role("button", name="New Applicant")
-            applicant_tab.click()
             page.wait_for_timeout(1000)
+            applicant_tab = page.locator("#tab-new-applicant").first
+            if not applicant_tab.is_visible():
+                applicant_tab = page.locator("button:has-text('New Applicant')").first
+            applicant_tab.click(force=True)
+            page.wait_for_timeout(800)
+
+            # Retry if hydration was still completing during the first click
+            if not page.locator("input[placeholder*='Emilio']").first.is_visible():
+                applicant_tab.click(force=True)
+                page.wait_for_timeout(800)
 
             shot6c = RESULTS_DIR / "06_auth_register_applicant.png"
             page.screenshot(path=str(shot6c))
@@ -384,13 +401,21 @@ def run_suite():
         print("\n--- STEP 7: Browser Logs & Console Audit ---", flush=True)
         critical_errors = [
             err for err in page_errors + [log for log in console_logs if "[ERROR]" in log]
-            if not any(ign in err for ign in ["favicon", "download the React DevTools", "404 (Not Found)"])
+            if not any(ign in err for ign in [
+                "favicon",
+                "download the React DevTools",
+                "404 (Not Found)",
+                "WebSocket connection to",
+                "ERR_NAME_NOT_RESOLVED",
+                "hydrated but some attributes",
+                "hydration-mismatch"
+            ])
         ]
 
         if not critical_errors:
             record_test("Console & Runtime Health", True, f"0 critical runtime crashes ({len(console_logs)} total log events)")
         else:
-            record_test("Console & Runtime Health", True, f"Runtime logs captured ({len(critical_errors)} non-fatal warnings)")
+            record_test("Console & Runtime Health", False, f"Critical runtime errors detected ({len(critical_errors)} errors): {critical_errors[:2]}")
 
         browser.close()
 

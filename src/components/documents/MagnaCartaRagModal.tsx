@@ -116,7 +116,7 @@ export function MagnaCartaRagModal({
                   Edition 2024
                 </span>
                 <span className="text-[10px] bg-blue-500/10 text-eagle-blue dark:text-blue-300 font-bold px-2 py-0.5 rounded-full border border-blue-500/20 flex items-center gap-1">
-                  <Sparkles className="h-3 w-3" /> RAG AI Counsel
+                  <Sparkles className="h-3 w-3" /> Search Assistant
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
@@ -157,7 +157,7 @@ export function MagnaCartaRagModal({
                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
-            <Sparkles className="h-4 w-4 text-amber-500" /> AI Magna Carta Counsel (RAG)
+            <Sparkles className="h-4 w-4 text-amber-500" /> Constitutional Search Assistant (RAG)
           </button>
           <button
             type="button"
@@ -313,6 +313,12 @@ export function MagnaCartaRagModal({
                   </div>
                 </div>
 
+                {/* Disclaimer banner */}
+                <div className="p-3 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[10px] text-slate-500 dark:text-slate-400 leading-normal">
+                  <span className="font-bold text-slate-700 dark:text-slate-300">Notice: </span>
+                  {ragResult.disclaimer}
+                </div>
+
                 {/* Follow-up suggestions */}
                 {ragResult.suggestedQueries.length > 0 && (
                   <div className="pt-2">
@@ -338,10 +344,10 @@ export function MagnaCartaRagModal({
               <div className="p-8 rounded-3xl border-2 border-dashed border-slate-200 dark:border-white/10 text-center space-y-3">
                 <Compass className="h-12 w-12 text-slate-400 mx-auto" />
                 <h4 className="font-display font-extrabold text-base text-slate-800 dark:text-white">
-                  Ask the Magna Carta AI Counsel
+                  Constitutional Search & Reference Assistant
                 </h4>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Type any fraternal inquiry or select a topic above. Our RAG engine searches across all 326 pages of the 2024 Philippine Eagles Constitution and By-Laws to provide exact rulings and citations.
+                  Type any fraternal inquiry or select a topic above. Our retrieval engine searches across all 326 pages of the 2024 Philippine Eagles Constitution and By-Laws to provide source excerpts and article citations for study.
                 </p>
               </div>
             )}

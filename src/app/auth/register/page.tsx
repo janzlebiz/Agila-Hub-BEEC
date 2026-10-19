@@ -32,8 +32,8 @@ export default function RegisterPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Claim mode fields
-  const [memberNumber, setMemberNumber] = useState("AGILA-2024-001");
-  const [verifyLastName, setVerifyLastName] = useState("Dela Cruz");
+  const [memberNumber, setMemberNumber] = useState("AGILA-TEMP-999");
+  const [claimToken, setClaimToken] = useState("EAGLE-CLAIM-2026");
 
   // Common & New applicant fields
   const [firstName, setFirstName] = useState("");
@@ -51,41 +51,19 @@ export default function RegisterPage() {
 
     try {
       if (mode === "claim") {
-        // Step 1: Verify pre-seeded member record in public.members
-        const { data: memberRecord, error: verifyError } = await supabase
-          .from("members")
-          .select("id, email, first_name, last_name, member_number, membership_status, user_id")
-          .ilike("member_number", memberNumber.trim())
-          .ilike("last_name", verifyLastName.trim())
-          .maybeSingle();
-
-        if (verifyError || !memberRecord) {
-          setErrorMsg(
-            "Membership record not found. Please verify your official Member ID (e.g., AGILA-2024-001) and Last Name."
-          );
+        if (!memberNumber.trim() || !claimToken.trim()) {
+          setErrorMsg("Both Member ID and Official Claim Token are required.");
           setLoading(false);
           return;
         }
 
-        if (memberRecord.user_id) {
-          setErrorMsg(
-            "This Membership ID has already been claimed. If this is your account, please sign in instead."
-          );
-          setLoading(false);
-          return;
-        }
-
-        // Step 2: Sign up with Supabase Auth using the member's registered email or specified email
-        const targetEmail = email.trim() || memberRecord.email;
+        // Step 1: Create Supabase Auth account / authenticate
         const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: targetEmail,
+          email: email.trim(),
           password,
           options: {
             data: {
-              first_name: memberRecord.first_name,
-              last_name: memberRecord.last_name,
-              member_number: memberRecord.member_number,
-              claimed_member_id: memberRecord.id,
+              member_number: memberNumber.trim(),
             },
           },
         });
@@ -96,16 +74,34 @@ export default function RegisterPage() {
           return;
         }
 
-        // Step 3: Link user_id directly to the member record if session created
-        if (authData.user) {
-          await supabase
-            .from("members")
-            .update({ user_id: authData.user.id })
-            .eq("id", memberRecord.id);
+        // If email confirmation is required by Supabase auth configuration
+        if (!authData.session && !authData.user) {
+          setSuccessMsg("Account created! Please verify your email before claiming.");
+          setLoading(false);
+          return;
+        }
+
+        // Step 2: Atomic database token consumption & authoritative account binding
+        const { data: claimData, error: claimError } = await supabase.rpc("claim_member_account", {
+          p_member_number: memberNumber.trim(),
+          p_claim_token: claimToken.trim(),
+        });
+
+        if (claimError) {
+          setErrorMsg(claimError.message || "Failed to execute authoritative account claim.");
+          setLoading(false);
+          return;
+        }
+
+        if (claimData && !claimData.success) {
+          setErrorMsg(claimData.message || "Claim verification failed.");
+          setLoading(false);
+          return;
         }
 
         setSuccessMsg(
-          `Official ID ${memberRecord.member_number} verified! Welcome Kuya/Ate ${memberRecord.first_name}. Redirecting to hub...`
+          claimData?.message ||
+            `Official ID ${memberNumber} verified and claimed! Redirecting to hub...`
         );
         setTimeout(() => {
           router.push("/");
@@ -209,6 +205,7 @@ export default function RegisterPage() {
           <div className="grid grid-cols-2 p-1 mb-6 rounded-xl bg-slate-100 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 text-xs font-bold">
             <button
               type="button"
+              id="tab-claim-id"
               onClick={() => {
                 setMode("claim");
                 setErrorMsg(null);
@@ -224,6 +221,7 @@ export default function RegisterPage() {
             </button>
             <button
               type="button"
+              id="tab-new-applicant"
               onClick={() => {
                 setMode("new");
                 setErrorMsg(null);
@@ -260,9 +258,9 @@ export default function RegisterPage() {
               <>
                 <div className="p-3.5 rounded-xl bg-eagle-blue/5 dark:bg-eagle-blue/10 border border-eagle-blue/20 text-xs text-slate-600 dark:text-slate-300">
                   <p className="font-semibold text-eagle-blue dark:text-eagle-blue-light mb-1">
-                    Direct Directory Matching:
+                    Authorized One-Time Claim Token:
                   </p>
-                  Already pre-registered with Bantayog Elite or National Eagles? Enter your Member Number and Last Name to link your digital badge.
+                  Already pre-registered with Bantayog Elite or National Eagles? Enter your Member ID and the expiring claim token issued by the Secretariat to claim your digital portal.
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -275,22 +273,22 @@ export default function RegisterPage() {
                       required
                       value={memberNumber}
                       onChange={(e) => setMemberNumber(e.target.value)}
-                      placeholder="AGILA-2024-001"
+                      placeholder="AGILA-TEMP-999"
                       className="w-full h-11 px-3.5 rounded-xl bg-slate-100/90 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-eagle-blue/50 focus:border-eagle-blue transition"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Last Name (Verification)
+                      One-Time Claim Token
                     </label>
                     <input
                       type="text"
                       required
-                      value={verifyLastName}
-                      onChange={(e) => setVerifyLastName(e.target.value)}
-                      placeholder="Dela Cruz"
-                      className="w-full h-11 px-3.5 rounded-xl bg-slate-100/90 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-eagle-blue/50 focus:border-eagle-blue transition"
+                      value={claimToken}
+                      onChange={(e) => setClaimToken(e.target.value)}
+                      placeholder="EAGLE-CLAIM-2026"
+                      className="w-full h-11 px-3.5 rounded-xl bg-slate-100/90 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 text-xs font-mono font-bold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-eagle-blue/50 focus:border-eagle-blue transition"
                     />
                   </div>
                 </div>

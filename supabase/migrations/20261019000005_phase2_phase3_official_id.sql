@@ -13,28 +13,44 @@ ALTER TABLE public.members
     ADD COLUMN IF NOT EXISTS emergency_contact_name TEXT,
     ADD COLUMN IF NOT EXISTS emergency_contact_phone TEXT;
 
--- 2. Storage Bucket for ID Cards & Receipts
+-- 2. Storage Bucket for Official ID Cards (Private Bucket)
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('receipts', 'receipts', true)
-ON CONFLICT (id) DO NOTHING;
+VALUES ('member-ids', 'member-ids', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
 
 DO $$ BEGIN
-    CREATE POLICY "Public view receipts and ids"
+    DROP POLICY IF EXISTS "Public view receipts and ids" ON storage.objects;
+    CREATE POLICY "Authenticated view member ids"
         ON storage.objects FOR SELECT
-        USING (bucket_id = 'receipts');
+        TO authenticated
+        USING (
+            bucket_id = 'member-ids'
+            AND (
+                (storage.foldername(name))[1] = auth.uid()::text
+                OR public.is_officer()
+            )
+        );
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
 DO $$ BEGIN
-    CREATE POLICY "Authenticated or Anon upload ids"
+    DROP POLICY IF EXISTS "Authenticated or Anon upload ids" ON storage.objects;
+    CREATE POLICY "Authenticated upload member ids"
         ON storage.objects FOR INSERT
-        WITH CHECK (bucket_id = 'receipts');
+        TO authenticated
+        WITH CHECK (
+            bucket_id = 'member-ids'
+            AND (
+                (storage.foldername(name))[1] = auth.uid()::text
+                OR public.is_officer()
+            )
+        );
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
--- 3. RPC to update official Eagles ID scan
+-- 3. RPC to update official Eagles ID scan (Bound to authenticated caller)
 CREATE OR REPLACE FUNCTION public.update_member_official_id(
     p_member_id UUID,
     p_id_url TEXT,
@@ -46,23 +62,61 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+    v_caller_id UUID;
+    v_caller_role user_role;
+    v_target_id UUID;
 BEGIN
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Unauthorized: Authentication required.';
+    END IF;
+
+    SELECT id, role INTO v_caller_id, v_caller_role
+    FROM public.members
+    WHERE user_id = auth.uid() AND membership_status = 'active';
+
+    IF v_caller_id IS NULL THEN
+        RAISE EXCEPTION 'Unauthorized: Active member account required.';
+    END IF;
+
+    IF v_caller_role IN ('admin', 'officer') AND p_member_id IS NOT NULL THEN
+        v_target_id := p_member_id;
+    ELSE
+        v_target_id := v_caller_id;
+    END IF;
+
     UPDATE public.members
     SET 
         official_id_url = COALESCE(p_id_url, official_id_url),
         id_card_front_url = COALESCE(p_front_url, p_id_url, id_card_front_url),
         id_card_back_url = COALESCE(p_back_url, id_card_back_url),
         updated_at = timezone('utc'::text, now())
-    WHERE id = p_member_id;
+    WHERE id = v_target_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Member record not found.');
+    END IF;
+
+    -- Audit log
+    INSERT INTO public.audit_logs (actor_id, action, target_entity, target_id, details)
+    VALUES (
+        v_caller_id,
+        'UPDATE_OFFICIAL_ID',
+        'members',
+        v_target_id,
+        jsonb_build_object('target_id', v_target_id, 'updated_by', v_caller_id)
+    );
 
     RETURN jsonb_build_object(
         'success', true,
-        'message', 'Official Eagles ID updated successfully'
+        'message', 'Official Eagles ID updated successfully.'
     );
 END;
 $$;
 
--- 4. RPC to update member personal and emergency profile
+GRANT EXECUTE ON FUNCTION public.update_member_official_id TO authenticated;
+
+-- 4. RPC to update member personal and emergency profile (Bound to authenticated caller)
 CREATE OR REPLACE FUNCTION public.update_member_profile(
     p_member_id UUID,
     p_first_name TEXT,
@@ -78,7 +132,29 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+    v_caller_id UUID;
+    v_caller_role user_role;
+    v_target_id UUID;
 BEGIN
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Unauthorized: Authentication required.';
+    END IF;
+
+    SELECT id, role INTO v_caller_id, v_caller_role
+    FROM public.members
+    WHERE user_id = auth.uid() AND membership_status = 'active';
+
+    IF v_caller_id IS NULL THEN
+        RAISE EXCEPTION 'Unauthorized: Active member account required.';
+    END IF;
+
+    IF v_caller_role IN ('admin', 'officer') AND p_member_id IS NOT NULL THEN
+        v_target_id := p_member_id;
+    ELSE
+        v_target_id := v_caller_id;
+    END IF;
+
     UPDATE public.members
     SET 
         first_name = COALESCE(p_first_name, first_name),
@@ -89,14 +165,30 @@ BEGIN
         emergency_contact_phone = COALESCE(p_emergency_phone, emergency_contact_phone),
         chapter_or_branch = COALESCE(p_chapter, chapter_or_branch),
         updated_at = timezone('utc'::text, now())
-    WHERE id = p_member_id;
+    WHERE id = v_target_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Member profile record not found.');
+    END IF;
+
+    -- Audit log
+    INSERT INTO public.audit_logs (actor_id, action, target_entity, target_id, details)
+    VALUES (
+        v_caller_id,
+        'UPDATE_MEMBER_PROFILE',
+        'members',
+        v_target_id,
+        jsonb_build_object('target_id', v_target_id, 'updated_by', v_caller_id)
+    );
 
     RETURN jsonb_build_object(
         'success', true,
-        'message', 'Profile details updated successfully'
+        'message', 'Profile details updated successfully.'
     );
 END;
 $$;
+
+GRANT EXECUTE ON FUNCTION public.update_member_profile TO authenticated;
 
 -- 5. Enable Supabase Realtime for attendance, contributions, and announcements
 DO $$ BEGIN

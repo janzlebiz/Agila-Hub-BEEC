@@ -111,10 +111,11 @@ interface DocumentRecord {
 export default function HomePage() {
   const supabase = createClient();
 
-  const [currentRole, setCurrentRole] = useState<"admin" | "officer" | "member">("admin");
+  const [currentRole, setCurrentRole] = useState<"admin" | "officer" | "member">("member");
   const [docketTab, setDocketTab] = useState<"assemblies" | "ledger" | "directory" | "documents" | "community">("assemblies");
   const [isDark, setIsDark] = useState(false);
   const [textSize, setTextSize] = useState<"normal" | "large" | "xl">("normal");
+  const [hydrated, setHydrated] = useState(false);
 
   // Live Database States
   const [loading, setLoading] = useState(true);
@@ -163,6 +164,10 @@ export default function HomePage() {
 
   // Sync theme and text size to root html element
   useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
     const root = document.documentElement;
     if (isDark) {
       root.classList.add("dark");
@@ -180,72 +185,82 @@ export default function HomePage() {
     try {
       setLoading(true);
 
-      // 1. Check Authenticated Session
+      // 1. Check Authenticated Session & Load User Profile
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
+      let activeRole: "admin" | "officer" | "member" = "member";
+
       if (user) {
         const { data: memberData } = await supabase
           .from("members")
-          .select("*")
+          .select(
+            "id, first_name, last_name, email, phone, member_number, role, membership_status, chapter_or_branch, official_id_url, id_card_front_url, id_card_back_url, blood_type, emergency_contact_name, emergency_contact_phone"
+          )
           .eq("user_id", user.id)
           .maybeSingle();
 
         if (memberData) {
           setAuthMember(memberData as MemberRecord);
-          setCurrentRole(memberData.role as "admin" | "officer" | "member");
+          activeRole = memberData.role as "admin" | "officer" | "member";
+          setCurrentRole(activeRole);
           if (memberData.official_id_url) setOfficialIdUrl(memberData.official_id_url);
           if (memberData.id_card_back_url) setIdCardBackUrl(memberData.id_card_back_url);
           if (memberData.blood_type) setBloodType(memberData.blood_type);
         }
       }
 
-      // 2. Fetch Announcements
+      // 2. Fetch Announcements (Explicit safe columns)
       const { data: annData } = await supabase
         .from("announcements")
-        .select("*")
+        .select("id, title, content, category, priority, target_role, is_pinned, published_at")
         .order("is_pinned", { ascending: false })
         .order("published_at", { ascending: false });
 
       if (annData) setAnnouncements(annData as AnnouncementRecord[]);
 
-      // 3. Fetch Events
+      // 3. Fetch Events (Explicit safe columns)
       const { data: evtData } = await supabase
         .from("events")
-        .select("*")
+        .select("id, title, description, event_date, location, checkin_code, checkin_open, status")
         .order("event_date", { ascending: true });
 
       if (evtData) setEvents(evtData as EventRecord[]);
 
-      // 4. Fetch Contributions
+      // 4. Fetch Contributions (Explicit ledger columns; private payment references/receipts only via authorized roles)
       const { data: contData } = await supabase
         .from("contributions")
-        .select("*")
+        .select("id, member_id, title, category, amount, payment_method, status, contribution_date, reference_number")
         .order("contribution_date", { ascending: false });
 
       if (contData) setContributions(contData as ContributionRecord[]);
 
-      // 5. Fetch Documents
+      // 5. Fetch Documents (Explicit safe columns)
       const { data: docData } = await supabase
         .from("documents")
-        .select("*")
+        .select("id, title, description, category, file_url, file_type, access_level")
         .order("category", { ascending: true });
 
       if (docData) setDocuments(docData as DocumentRecord[]);
 
-      // 6. Fetch Pending Applicants
-      const { data: pendData } = await supabase
-        .from("members")
-        .select("*")
-        .eq("membership_status", "pending");
+      // 6. Fetch Pending Applicants (Strictly role-gated: only query if session is officer or admin)
+      if (activeRole === "admin" || activeRole === "officer") {
+        const { data: pendData } = await supabase
+          .from("members")
+          .select("id, first_name, last_name, email, phone, role, membership_status, chapter_or_branch")
+          .eq("membership_status", "pending");
 
-      if (pendData) setPendingApplicants(pendData as MemberRecord[]);
+        if (pendData) setPendingApplicants(pendData as MemberRecord[]);
+      } else {
+        setPendingApplicants([]);
+      }
 
-      // 7. Fetch All Members for Roster / Directory
+      // 7. Fetch Active Members for Roster / Directory (Excludes blood type, emergency contacts, receipts, and credential photos)
       const { data: allMemData } = await supabase
         .from("members")
-        .select("*")
+        .select("id, first_name, last_name, email, member_number, role, membership_status, chapter_or_branch")
+        .eq("membership_status", "active")
         .order("first_name", { ascending: true });
 
       if (allMemData) setAllMembers(allMemData as DirectoryMember[]);
@@ -253,7 +268,7 @@ export default function HomePage() {
       // 8. Fetch Assembly Headcount
       const { count: attCount } = await supabase
         .from("attendance")
-        .select("*", { count: "exact", head: true });
+        .select("id", { count: "exact", head: true });
       if (typeof attCount === "number") {
         setAssemblyHeadcount(32 + attCount);
       }
@@ -470,13 +485,13 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col pb-24 sm:pb-12 text-slate-900 dark:text-white transition-colors duration-300">
+    <div data-hydrated={hydrated} className="min-h-screen flex flex-col pb-24 sm:pb-12 text-slate-900 dark:text-white transition-colors duration-300">
       {/* Top Glass Header */}
       <Header
         currentRole={currentRole}
         onRoleChange={setCurrentRole}
         isDark={isDark}
-        onToggleTheme={() => setIsDark(!isDark)}
+        onToggleTheme={() => setIsDark((prev) => !prev)}
         textSize={textSize}
         onChangeTextSize={setTextSize}
         authMember={authMember}

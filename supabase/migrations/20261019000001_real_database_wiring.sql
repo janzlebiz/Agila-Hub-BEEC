@@ -2,24 +2,7 @@
 -- Migration: Real Database Operations & Seed Directory Enhancement
 -- =============================================================================
 
--- 1. Auto-confirm emails in auth.users upon creation (for smooth onboarding / testing)
-CREATE OR REPLACE FUNCTION public.auto_confirm_user_email()
-RETURNS trigger AS $$
-BEGIN
-    NEW.email_confirmed_at = COALESCE(NEW.email_confirmed_at, timezone('utc'::text, now()));
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = auth;
-
-DROP TRIGGER IF EXISTS on_auth_user_created_auto_confirm ON auth.users;
-CREATE TRIGGER on_auth_user_created_auto_confirm
-    BEFORE INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION public.auto_confirm_user_email();
-
--- Also confirm existing auth.users
-UPDATE auth.users SET email_confirmed_at = timezone('utc'::text, now()) WHERE email_confirmed_at IS NULL;
-
--- 2. Update public directory members to official domain: @eagles.org.ph
+-- 1. Update public directory members to official domain: @eagles.org.ph
 DO $$
 DECLARE
     v_user_id UUID;
@@ -37,27 +20,25 @@ UPDATE public.members SET email = 'ricardo.reyes@eagles.org.ph' WHERE member_num
 UPDATE public.members SET email = 'antonio.luna@eagles.org.ph' WHERE member_number = 'AGILA-2025-101';
 UPDATE public.members SET email = 'emilio.aguinaldo@eagles.org.ph' WHERE member_number = 'AGILA-TEMP-999';
 
--- 3. Enhance Announcements Policy: Allow public viewing for General / Public announcements
+-- 2. Enhance Announcements Policy: Allow public viewing for General / Public announcements
 DROP POLICY IF EXISTS "View announcements" ON public.announcements;
 CREATE POLICY "View announcements"
     ON public.announcements FOR SELECT
     USING (
-        -- Public announcements viewable by anyone
         category = 'General'
         OR is_pinned = true
         OR target_role = 'member'
-        -- Tiered announcements viewable by logged in role
         OR (target_role = 'officer' AND public.is_officer())
         OR (target_role = 'admin' AND public.is_admin())
     );
 
--- 4. Enhance Events Policy: Allow viewing published events
+-- 3. Enhance Events Policy: Allow viewing published events
 DROP POLICY IF EXISTS "Active members view published events" ON public.events;
 CREATE POLICY "Active members view published events"
     ON public.events FOR SELECT
     USING (status = 'published' OR status = 'ongoing' OR public.is_officer());
 
--- 5. Enhance Documents Policy: Allow active members or public
+-- 4. Enhance Documents Policy: Allow active members or public
 DROP POLICY IF EXISTS "View documents based on access level" ON public.documents;
 CREATE POLICY "View documents based on access level"
     ON public.documents FOR SELECT
@@ -68,7 +49,7 @@ CREATE POLICY "View documents based on access level"
         OR (access_level = 'admin' AND public.is_admin())
     );
 
--- 6. RPC Function for Secure Event PIN Check-in
+-- 5. RPC Function for Secure Event PIN Check-in (Strict auth & window checks, no arbitrary fallback)
 CREATE OR REPLACE FUNCTION public.check_in_event(
     p_event_id UUID,
     p_checkin_code TEXT,
@@ -76,26 +57,43 @@ CREATE OR REPLACE FUNCTION public.check_in_event(
 )
 RETURNS JSONB AS $$
 DECLARE
-    v_event RECORD;
+    v_caller_member_id UUID;
+    v_caller_status membership_status;
+    v_caller_role user_role;
     v_target_member_id UUID;
+    v_event RECORD;
     v_existing_attendance RECORD;
 BEGIN
-    -- Determine target member ID
-    IF p_member_id IS NOT NULL THEN
-        v_target_member_id := p_member_id;
-    ELSE
-        SELECT id INTO v_target_member_id FROM public.members WHERE user_id = auth.uid() LIMIT 1;
+    IF auth.uid() IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Authentication required to check in.');
     END IF;
 
-    IF v_target_member_id IS NULL THEN
-        -- Fallback to Kuya Juan Dela Cruz for demo/unlinked users
-        SELECT id INTO v_target_member_id FROM public.members WHERE member_number = 'AGILA-2024-001' LIMIT 1;
+    SELECT id, membership_status, role INTO v_caller_member_id, v_caller_status, v_caller_role
+    FROM public.members
+    WHERE user_id = auth.uid();
+
+    IF v_caller_member_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Member account profile not found for authenticated user.');
+    END IF;
+
+    IF v_caller_status != 'active' THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Only active members can check in to assemblies.');
+    END IF;
+
+    IF v_caller_role IN ('admin', 'officer') AND p_member_id IS NOT NULL THEN
+        v_target_member_id := p_member_id;
+    ELSE
+        v_target_member_id := v_caller_member_id;
     END IF;
 
     -- Validate Event
     SELECT * INTO v_event FROM public.events WHERE id = p_event_id;
     IF NOT FOUND THEN
-        RETURN jsonb_build_object('success', false, 'message', 'Event not found');
+        RETURN jsonb_build_object('success', false, 'message', 'Assembly event not found.');
+    END IF;
+
+    IF v_event.status NOT IN ('published', 'ongoing') OR v_event.checkin_open IS NOT TRUE THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Check-in is currently closed for this assembly.');
     END IF;
 
     -- Validate Check-in code
@@ -130,17 +128,39 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
--- 7. RPC Function for Approving Pending Applicants
+-- 6. RPC Function for Approving Pending Applicants (Server-side officer verification)
 CREATE OR REPLACE FUNCTION public.approve_member_applicant(
     p_member_id UUID
 )
 RETURNS JSONB AS $$
 DECLARE
     v_approver_id UUID;
+    v_target_status membership_status;
 BEGIN
-    SELECT id INTO v_approver_id FROM public.members WHERE user_id = auth.uid() LIMIT 1;
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Unauthorized: Authentication required.';
+    END IF;
+
+    SELECT id INTO v_approver_id 
+    FROM public.members 
+    WHERE user_id = auth.uid() 
+      AND role IN ('admin', 'officer') 
+      AND membership_status = 'active';
+
     IF v_approver_id IS NULL THEN
-        SELECT id INTO v_approver_id FROM public.members WHERE member_number = 'AGILA-2024-001' LIMIT 1;
+        RAISE EXCEPTION 'Forbidden: Only active officers or administrators can approve member applications.';
+    END IF;
+
+    SELECT membership_status INTO v_target_status
+    FROM public.members
+    WHERE id = p_member_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Applicant record not found.');
+    END IF;
+
+    IF v_target_status != 'pending' THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Target member is not in pending status.');
     END IF;
 
     UPDATE public.members
@@ -148,7 +168,11 @@ BEGIN
         approved_by = v_approver_id,
         approved_at = timezone('utc'::text, now()),
         updated_at = timezone('utc'::text, now())
-    WHERE id = p_member_id;
+    WHERE id = p_member_id AND membership_status = 'pending';
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'No pending records were updated.');
+    END IF;
 
     RETURN jsonb_build_object('success', true, 'message', 'Member application approved and activated.');
 END;

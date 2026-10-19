@@ -163,56 +163,68 @@ export function OfficialIdScannerModal({
       let finalFrontUrl = capturedFront;
       let finalBackUrl = capturedBack || undefined;
 
-      // If it's a data URL, upload to Supabase Storage
+      const { data: { user } } = await supabase.auth.getUser();
+      const userFolder = user?.id || "guest";
+
+      // If it's a data URL, upload to private member-ids storage bucket
       if (capturedFront.startsWith("data:")) {
         const frontBlob = dataUrlToBlob(capturedFront);
-        const fileName = `official_id_${memberId || "demo"}_front_${Date.now()}.jpg`;
+        const fileName = `${userFolder}/official_id_${Date.now()}_front.jpg`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from("receipts")
-          .upload(`ids/${fileName}`, frontBlob, {
+          .from("member-ids")
+          .upload(fileName, frontBlob, {
             contentType: "image/jpeg",
             upsert: true,
           });
 
         if (!uploadErr && uploadData) {
-          const { data: publicUrlData } = supabase.storage
-            .from("receipts")
-            .getPublicUrl(`ids/${fileName}`);
-          finalFrontUrl = publicUrlData.publicUrl;
+          const { data: signedData } = await supabase.storage
+            .from("member-ids")
+            .createSignedUrl(fileName, 60 * 60 * 24 * 7); // 7-day signed URL
+          if (signedData?.signedUrl) {
+            finalFrontUrl = signedData.signedUrl;
+          }
         }
       }
 
       if (capturedBack && capturedBack.startsWith("data:")) {
         const backBlob = dataUrlToBlob(capturedBack);
-        const fileName = `official_id_${memberId || "demo"}_back_${Date.now()}.jpg`;
+        const fileName = `${userFolder}/official_id_${Date.now()}_back.jpg`;
         const { data: uploadBackData, error: uploadBackErr } = await supabase.storage
-          .from("receipts")
-          .upload(`ids/${fileName}`, backBlob, {
+          .from("member-ids")
+          .upload(fileName, backBlob, {
             contentType: "image/jpeg",
             upsert: true,
           });
 
         if (!uploadBackErr && uploadBackData) {
-          const { data: publicUrlData } = supabase.storage
-            .from("receipts")
-            .getPublicUrl(`ids/${fileName}`);
-          finalBackUrl = publicUrlData.publicUrl;
+          const { data: signedBackData } = await supabase.storage
+            .from("member-ids")
+            .createSignedUrl(fileName, 60 * 60 * 24 * 7);
+          if (signedBackData?.signedUrl) {
+            finalBackUrl = signedBackData.signedUrl;
+          }
         }
       }
 
-      // Update database profile if memberId exists
+      // Authoritative database update with server-side validation
       if (memberId) {
-        await supabase.rpc("update_member_official_id", {
+        const { data: rpcData, error: rpcError } = await supabase.rpc("update_member_official_id", {
           p_member_id: memberId,
           p_id_url: finalFrontUrl,
           p_front_url: finalFrontUrl,
           p_back_url: finalBackUrl || null,
         });
+
+        if (rpcError) throw rpcError;
+        if (rpcData && !(rpcData as { success?: boolean; message?: string }).success) {
+          throw new Error((rpcData as { success?: boolean; message?: string }).message || "Failed to update official ID in database.");
+        }
       }
 
-      // Trigger callback to replace ID in the app
+      // Trigger callback to replace ID in the app only upon verified success
       onIdUpdated(finalFrontUrl, finalFrontUrl, finalBackUrl);
-      setSuccessMsg("Official Eagles ID replaced successfully!");
+      setSuccessMsg("Official Eagles ID replaced and verified successfully!");
       setTimeout(() => {
         onClose();
       }, 1200);

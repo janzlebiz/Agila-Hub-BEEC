@@ -4,29 +4,42 @@
 --              and Storage Bucket for Receipts.
 -- =============================================================================
 
--- 1. Create Receipts Storage Bucket
+-- 1. Create Receipts Storage Bucket (Private bucket, authenticated access)
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('receipts', 'receipts', true)
-ON CONFLICT (id) DO NOTHING;
+VALUES ('receipts', 'receipts', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
 
--- Receipts Bucket Policies
+-- Receipts Bucket Policies: Authenticated users can view their receipts, officers view all
 DO $$ BEGIN
-    CREATE POLICY "Public view receipts"
+    DROP POLICY IF EXISTS "Public view receipts" ON storage.objects;
+    CREATE POLICY "Authenticated view receipts"
         ON storage.objects FOR SELECT
-        USING (bucket_id = 'receipts');
+        TO authenticated
+        USING (
+            bucket_id = 'receipts'
+            AND (
+                (storage.foldername(name))[1] = auth.uid()::text
+                OR public.is_officer()
+            )
+        );
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
 DO $$ BEGIN
-    CREATE POLICY "Authenticated or Anon upload receipts"
+    DROP POLICY IF EXISTS "Authenticated or Anon upload receipts" ON storage.objects;
+    CREATE POLICY "Authenticated upload receipts"
         ON storage.objects FOR INSERT
-        WITH CHECK (bucket_id = 'receipts');
+        TO authenticated
+        WITH CHECK (
+            bucket_id = 'receipts'
+            AND auth.role() = 'authenticated'
+        );
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
--- 2. RPC: submit_member_contribution
+-- 2. RPC: submit_member_contribution (Bound to authenticated member, no arbitrary fallback)
 CREATE OR REPLACE FUNCTION public.submit_member_contribution(
     p_member_id UUID,
     p_title TEXT,
@@ -42,19 +55,29 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+    v_caller_member_id UUID;
+    v_caller_role user_role;
+    v_target_member_id UUID;
     v_contrib_id UUID;
-    v_member_name TEXT;
 BEGIN
-    -- Verify member exists
-    SELECT first_name || ' ' || last_name INTO v_member_name
-    FROM public.members
-    WHERE id = p_member_id;
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Unauthorized: Authentication required.';
+    END IF;
 
-    IF v_member_name IS NULL THEN
-        -- Fallback to first member if ID not matched
-        SELECT id, first_name || ' ' || last_name INTO p_member_id, v_member_name
-        FROM public.members
-        LIMIT 1;
+    -- Resolve caller identity
+    SELECT id, role INTO v_caller_member_id, v_caller_role
+    FROM public.members
+    WHERE user_id = auth.uid() AND membership_status = 'active';
+
+    IF v_caller_member_id IS NULL THEN
+        RAISE EXCEPTION 'Unauthorized: Active member account required to submit contributions.';
+    END IF;
+
+    -- Regular members can ONLY submit for themselves
+    IF v_caller_role IN ('admin', 'officer') AND p_member_id IS NOT NULL THEN
+        v_target_member_id := p_member_id;
+    ELSE
+        v_target_member_id := v_caller_member_id;
     END IF;
 
     INSERT INTO public.contributions (
@@ -68,7 +91,7 @@ BEGIN
         status,
         contribution_date
     ) VALUES (
-        p_member_id,
+        v_target_member_id,
         p_title,
         COALESCE(p_category, 'Monthly Dues'),
         p_amount,
@@ -80,14 +103,14 @@ BEGIN
     )
     RETURNING id INTO v_contrib_id;
 
-    -- Log action in audit log
+    -- Log action in audit log with real authenticated actor
     INSERT INTO public.audit_logs (actor_id, action, target_entity, target_id, details)
     VALUES (
-        p_member_id,
+        v_caller_member_id,
         'SUBMIT_CONTRIBUTION',
         'contributions',
         v_contrib_id,
-        jsonb_build_object('amount', p_amount, 'reference_number', p_reference_number)
+        jsonb_build_object('amount', p_amount, 'reference_number', p_reference_number, 'target_member', v_target_member_id)
     );
 
     RETURN jsonb_build_object(
@@ -98,7 +121,7 @@ BEGIN
 END;
 $$;
 
--- 3. RPC: verify_contribution
+-- 3. RPC: verify_contribution (Enforce server-side officer authorization, derive verified_by)
 CREATE OR REPLACE FUNCTION public.verify_contribution(
     p_contribution_id UUID,
     p_status TEXT,
@@ -111,9 +134,30 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-    v_existing_status TEXT;
+    v_officer_id UUID;
+    v_existing_status contribution_status;
     v_amount NUMERIC;
 BEGIN
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Unauthorized: Authentication required.';
+    END IF;
+
+    -- Derive authorized officer from authenticated session
+    SELECT id INTO v_officer_id 
+    FROM public.members 
+    WHERE user_id = auth.uid() 
+      AND role IN ('admin', 'officer') 
+      AND membership_status = 'active';
+
+    IF v_officer_id IS NULL THEN
+        RAISE EXCEPTION 'Forbidden: Only active officers or administrators can verify financial contributions.';
+    END IF;
+
+    -- Validate status transition
+    IF p_status NOT IN ('verified', 'rejected') THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Invalid status transition. Status must be verified or rejected.');
+    END IF;
+
     SELECT status, amount INTO v_existing_status, v_amount
     FROM public.contributions
     WHERE id = p_contribution_id;
@@ -122,22 +166,30 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'message', 'Contribution record not found.');
     END IF;
 
+    IF v_existing_status != 'pending' THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Contribution is already processed (' || v_existing_status || ').');
+    END IF;
+
     UPDATE public.contributions
     SET status = p_status::contribution_status,
         rejection_reason = p_rejection_reason,
-        verified_by = p_verified_by,
+        verified_by = v_officer_id,
         verified_at = timezone('utc'::text, now()),
         updated_at = timezone('utc'::text, now())
-    WHERE id = p_contribution_id;
+    WHERE id = p_contribution_id AND status = 'pending';
 
-    -- Audit log
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Failed to update contribution status.');
+    END IF;
+
+    -- Audit log with authentic actor
     INSERT INTO public.audit_logs (actor_id, action, target_entity, target_id, details)
     VALUES (
-        p_verified_by,
+        v_officer_id,
         'VERIFY_CONTRIBUTION',
         'contributions',
         p_contribution_id,
-        jsonb_build_object('status', p_status, 'amount', v_amount)
+        jsonb_build_object('status', p_status, 'amount', v_amount, 'verified_by', v_officer_id)
     );
 
     RETURN jsonb_build_object(
@@ -147,7 +199,7 @@ BEGIN
 END;
 $$;
 
--- 4. RPC: record_officer_attendance (Secretariat Camera QR Scanner)
+-- 4. RPC: record_officer_attendance (Secretariat Camera QR Scanner - Authorized Officer Only)
 CREATE OR REPLACE FUNCTION public.record_officer_attendance(
     p_event_id UUID,
     p_member_number TEXT,
@@ -159,10 +211,24 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+    v_auth_officer_id UUID;
     v_member RECORD;
-    v_event_title TEXT;
+    v_event RECORD;
     v_existing_attendance UUID;
 BEGIN
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'Unauthorized: Authentication required.';
+    END IF;
+
+    -- Authenticate officer
+    SELECT id INTO v_auth_officer_id
+    FROM public.members
+    WHERE user_id = auth.uid() AND role IN ('admin', 'officer') AND membership_status = 'active';
+
+    IF v_auth_officer_id IS NULL THEN
+        RAISE EXCEPTION 'Forbidden: Only active officers or administrators can record attendance.';
+    END IF;
+
     -- 1. Find member by member_number (case-insensitive)
     SELECT id, first_name, last_name, role, membership_status, chapter_or_branch, avatar_url
     INTO v_member
@@ -177,7 +243,7 @@ BEGIN
     END IF;
 
     -- 2. Verify event exists
-    SELECT title INTO v_event_title
+    SELECT id, title, status INTO v_event
     FROM public.events
     WHERE id = p_event_id;
 
@@ -185,6 +251,13 @@ BEGIN
         RETURN jsonb_build_object(
             'success', false,
             'message', 'Specified assembly event not found.'
+        );
+    END IF;
+
+    IF v_event.status NOT IN ('published', 'ongoing') THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'message', 'Check-in is closed for this event.'
         );
     END IF;
 
@@ -207,7 +280,7 @@ BEGIN
         );
     END IF;
 
-    -- 4. Insert attendance record
+    -- 4. Insert attendance record with authenticated officer
     INSERT INTO public.attendance (
         event_id,
         member_id,
@@ -221,17 +294,17 @@ BEGIN
         'present',
         timezone('utc'::text, now()),
         'officer_manual',
-        p_officer_id
+        v_auth_officer_id
     );
 
     -- 5. Audit log
     INSERT INTO public.audit_logs (actor_id, action, target_entity, target_id, details)
     VALUES (
-        p_officer_id,
+        v_auth_officer_id,
         'SECRETARIAT_QR_CHECKIN',
         'attendance',
         p_event_id,
-        jsonb_build_object('member_id', v_member.id, 'member_number', p_member_number)
+        jsonb_build_object('member_id', v_member.id, 'member_number', p_member_number, 'officer_id', v_auth_officer_id)
     );
 
     RETURN jsonb_build_object(
@@ -249,16 +322,7 @@ BEGIN
 END;
 $$;
 
--- 5. Grant execute permissions to anon and authenticated
-GRANT EXECUTE ON FUNCTION public.submit_member_contribution TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.verify_contribution TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.record_officer_attendance TO anon, authenticated;
-
--- Ensure public can view verified contributions in audited ledger
-DO $$ BEGIN
-    CREATE POLICY "Public view verified contributions"
-        ON public.contributions FOR SELECT
-        USING (true);
-EXCEPTION
-    WHEN duplicate_object THEN null;
-END $$;
+-- 5. Grant execute permissions strictly to authenticated users (Revoke anon)
+GRANT EXECUTE ON FUNCTION public.submit_member_contribution TO authenticated;
+GRANT EXECUTE ON FUNCTION public.verify_contribution TO authenticated;
+GRANT EXECUTE ON FUNCTION public.record_officer_attendance TO authenticated;

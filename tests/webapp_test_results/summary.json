@@ -1,5 +1,5 @@
 {
-  "elapsed_seconds": 22.93,
+  "elapsed_seconds": 48.96,
   "passed": 22,
   "failed": 0,
   "tests": [
@@ -21,7 +21,7 @@
     {
       "test": "Theme Toggle (Dark Mode)",
       "status": "PASSED",
-      "details": "Dark mode active: True"
+      "details": "Theme toggled successfully: False -> True"
     },
     {
       "test": "Overview Screenshot",
@@ -111,7 +111,7 @@
     {
       "test": "Console & Runtime Health",
       "status": "PASSED",
-      "details": "0 critical runtime crashes (4 total log events)"
+      "details": "0 critical runtime crashes (5 total log events)"
     }
   ],
   "console_errors_count": 0

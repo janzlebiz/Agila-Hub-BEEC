@@ -98,6 +98,9 @@ export function ProfileSettingsModal({
       });
 
       if (error) throw error;
+      if (data && !(data as { success?: boolean; message?: string }).success) {
+        throw new Error((data as { success?: boolean; message?: string }).message || "Failed to update profile details in database.");
+      }
 
       setProfileFeedback({ success: true, message: "Profile details updated successfully!" });
       onProfileUpdated({

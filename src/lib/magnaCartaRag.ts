@@ -24,12 +24,17 @@ export interface RagResponse {
   answer: string;
   citations: RagCitation[];
   suggestedQueries: string[];
-  confidence: "High" | "Medium" | "Verified";
+  confidence: "High" | "Medium" | "Verified" | "Insufficient Evidence";
+  isWeakMatch?: boolean;
+  disclaimer: string;
 }
 
 const articles: MagnaArticle[] = magnaCartaData.articles as MagnaArticle[];
 const qaPresets = magnaCartaData.qa_presets;
 const BASE_SOURCE_URL = magnaCartaData.source_url;
+
+const LEGAL_DISCLAIMER =
+  "Constitutional Search Assistance Notice: This search tool retrieves relevant excerpts and page citations from the 2024 Philippine Eagles Magna Carta (e-constitution.tfoe-peinc.com) for study and informational guidance. It does not constitute formal legal advice, judicial counsel, or binding administrative rulings by the National Directorate.";
 
 /**
  * Normalizes text for keyword token matching
@@ -39,11 +44,15 @@ function tokenize(text: string): string[] {
     .toLowerCase()
     .replace(/[^\w\s]/g, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 2 && !["the", "and", "for", "with", "this", "that", "from", "are", "what", "how"].includes(w));
+    .filter(
+      (w) =>
+        w.length > 2 &&
+        !["the", "and", "for", "with", "this", "that", "from", "are", "what", "how", "can", "our"].includes(w)
+    );
 }
 
 /**
- * Semantic keyword search across Magna Carta Articles
+ * Search across Magna Carta Articles with relevance scoring
  */
 export function searchMagnaCarta(query: string): { article: MagnaArticle; score: number }[] {
   const queryTokens = tokenize(query);
@@ -63,7 +72,7 @@ export function searchMagnaCarta(query: string): { article: MagnaArticle; score:
       if (numLower.includes(token)) score += 20;
       if (keywordsLower.includes(token)) score += 10;
 
-      // Count occurrences in content (capped)
+      // Count occurrences in content (capped at 10)
       const count = (contentLower.match(new RegExp(token, "g")) || []).length;
       score += Math.min(count, 10) * 1.5;
     }
@@ -77,8 +86,8 @@ export function searchMagnaCarta(query: string): { article: MagnaArticle; score:
 }
 
 /**
- * RAG Fraternal Counsel Engine
- * Formulates authoritative constitutional answers with exact citations
+ * Constitutional Search & Reference Assistant
+ * Formulates search guidance with exact article and page citations
  */
 export function askMagnaCartaCounsel(query: string): RagResponse {
   const cleanQuery = query.trim().toLowerCase();
@@ -109,24 +118,27 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
           "What are the grounds and procedures for member suspension or expulsion?",
         ].filter((q) => q.toLowerCase() !== preset.query.toLowerCase()),
         confidence: "Verified",
+        disclaimer: LEGAL_DISCLAIMER,
       };
     }
   }
 
-  // 2. Dynamic Retrieval-Augmented Generation across articles
+  // 2. Dynamic Retrieval across 21 articles
   const searchResults = searchMagnaCarta(query);
 
-  if (searchResults.length === 0) {
+  // If no match or weak match (< 12 relevance score), return explicit insufficient evidence response
+  if (searchResults.length === 0 || searchResults[0].score < 12) {
     return {
       query,
       answer:
-        "The query could not be directly matched to a specific constitutional article in the 2024 Magna Carta database. Please try searching for terms like 'dues', 'quorum', 'membership', 'PEIL', 'elections', or 'discipline', or consult the full e-Constitution portal.",
+        "Insufficient direct match found in the 2024 Magna Carta database for this query. The terms could not be conclusively paired with ratified constitutional provisions. Please consult your Chapter Secretariat, the National Legal Directorate, or search the official e-Constitution repository for formal verification.",
       citations: [
         {
           article_number: "MAGNA CARTA 2024",
           article_title: "The Philippine Eagles Constitution of 2024",
           page_range: "Pages 1–326",
-          excerpt: "Official e-Constitution portal available at e-constitution.tfoe-peinc.com",
+          excerpt:
+            "Official verbatim e-Constitution publication available at e-constitution.tfoe-peinc.com. Verify with your Chapter Secretariat for official rulings.",
           source_url: BASE_SOURCE_URL,
         },
       ],
@@ -134,15 +146,18 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
         "What are the qualifications and rights of an Eagle Member?",
         "What is the quorum requirement for chapter and assembly meetings?",
         "How are national dues and club contributions allocated and audited?",
+        "What are the rules governing election of chapter officers?",
       ],
-      confidence: "Medium",
+      confidence: "Insufficient Evidence",
+      isWeakMatch: true,
+      disclaimer: LEGAL_DISCLAIMER,
     };
   }
 
   const topMatch = searchResults[0].article;
   const secondaryMatch = searchResults[1]?.article;
 
-  // Extract relevant paragraph from topMatch content
+  // Extract verbatim relevant excerpt from topMatch content
   const paragraphs = topMatch.content.split("\n\n").filter((p) => p.trim().length > 30);
   const queryTokens = tokenize(query);
 
@@ -161,14 +176,14 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
     }
   }
 
-  // Clean excerpt
+  // Clean verbatim excerpt
   const cleanExcerpt = bestParagraph
     .replace(/--- Page \d+ ---/g, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 320);
+    .slice(0, 360);
 
-  const answer = `Pursuant to **${topMatch.number} (${topMatch.title})**, ${topMatch.summary} The official provisions dictate specific constitutional compliance for all Eagle leaders, chapters, and assemblies across the National Directorate.`;
+  const answer = `Based on constitutional indexing for **${topMatch.number} (${topMatch.title})**: ${topMatch.summary} Refer to the cited verbatim provisions below for exact legal terms and conditions ratified under the 2024 Philippine Eagles Constitution.`;
 
   const citations: RagCitation[] = [
     {
@@ -180,7 +195,7 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
     },
   ];
 
-  if (secondaryMatch) {
+  if (secondaryMatch && searchResults[1].score >= 10) {
     citations.push({
       article_number: secondaryMatch.number,
       article_title: secondaryMatch.title,
@@ -200,7 +215,9 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
       "What are the rules governing the national assembly and elections?",
     ],
     confidence: "High",
+    isWeakMatch: false,
+    disclaimer: LEGAL_DISCLAIMER,
   };
 }
 
-export { articles, BASE_SOURCE_URL };
+export { articles, BASE_SOURCE_URL, LEGAL_DISCLAIMER };
