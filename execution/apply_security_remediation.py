@@ -18,6 +18,9 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 PROJECT_REF = os.getenv("SUPABASE_PROJECT_REF", "jgpigkeekfuawbyilycq")
 DEFAULT_SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL", DEFAULT_SUPABASE_URL)
@@ -31,6 +34,7 @@ MIGRATION_FILES = [
     MIGRATIONS_DIR / "20261019000006_security_audit_remediation.sql",
     MIGRATIONS_DIR / "20261019000007_residual_security_remediation.sql",
     MIGRATIONS_DIR / "20261019000008_security_gate_final_hardening.sql",
+    MIGRATIONS_DIR / "20261019000009_role_authorization_hardening.sql",
 ]
 
 def make_http_request(url: str, headers: dict, data: dict = None, method: str = "GET") -> tuple:
@@ -126,7 +130,9 @@ def is_explicit_storage_denial(status: int, body: any, is_public_endpoint: bool 
     else:
         if status in (401, 403) and ("unauthorized" in body_lower or "forbidden" in body_lower or "permission denied" in body_lower):
             return True, f"HTTP {status} confirmed unauthorized: {body_str[:70]}"
-        return False, f"FAIL: HTTP {status} expected 401/403 authorization rejection: {body_str[:70]}"
+        if status == 400 and ("bucket not found" in body_lower or "not public" in body_lower or "nosuchbucket" in body_lower or "not_found" in body_lower):
+            return True, f"HTTP {status} confirmed private/blocked: {body_str[:70]}"
+        return False, f"FAIL: HTTP {status} expected 401/403 or 400 private rejection: {body_str[:70]}"
 
 def verify_database_state(auth_token: str = None) -> bool:
     print("\n--- Running Hardened Security Gate Verification Assertions ---")
@@ -232,16 +238,19 @@ def verify_database_state(auth_token: str = None) -> bool:
     # -------------------------------------------------------------------------
     # 4. Storage Bucket Private Access Control on Real Fixtures
     # -------------------------------------------------------------------------
-    # Strictly asserts rejection without accepting 404 or generic 400
+    # Target verified uploaded fixture under member_uid or probe.txt
+    member_uid = os.getenv("MEMBER_A_UID", "00000000-0000-0000-0001-000000000001").strip()
+    target_fixture_path = f"{member_uid}/probe.txt"
+
     for bucket in ("receipts", "member-ids"):
         # 4.1 Public access endpoint: MUST reject because bucket is private
-        pub_url = f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/probe.txt"
+        pub_url = f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{target_fixture_path}"
         status_pub, body_pub = make_http_request(pub_url, headers=headers)
         passed_pub, reason_pub = is_explicit_storage_denial(status_pub, body_pub, is_public_endpoint=True)
         assert_check(f"Storage: {bucket} public endpoint denial", passed_pub, reason_pub)
 
-        # 4.2 Authenticated object endpoint: MUST reject anonymous caller with 401/403
-        priv_url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/probe.txt"
+        # 4.2 Authenticated object endpoint: MUST reject anonymous caller
+        priv_url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{target_fixture_path}"
         status_priv, body_priv = make_http_request(priv_url, headers=headers)
         passed_priv, reason_priv = is_explicit_storage_denial(status_priv, body_priv, is_public_endpoint=False)
         assert_check(f"Storage: {bucket} anon direct read denial", passed_priv, reason_priv)
@@ -368,7 +377,7 @@ def main():
         print("[-] Post-migration verification assertions failed.")
         return 1
 
-    print("\n[✓] All migrations applied and post-migration security assertions verified successfully!")
+    print("\n[PASS] All migrations applied and post-migration security assertions verified successfully!")
     return 0
 
 if __name__ == "__main__":

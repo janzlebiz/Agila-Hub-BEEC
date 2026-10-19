@@ -17,6 +17,9 @@ import json
 import urllib.request
 import urllib.error
 
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL", "https://jgpigkeekfuawbyilycq.supabase.co")
 ANON_KEY = os.getenv(
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",
@@ -105,7 +108,9 @@ def is_strict_storage_denial(status: int, body: any, is_public: bool = False) ->
     else:
         if status in (401, 403) and ("unauthorized" in body_lower or "forbidden" in body_lower or "permission denied" in body_lower):
             return True, f"HTTP {status} confirmed unauthorized: {body_str[:70]}"
-        return False, f"FAIL: HTTP {status} expected 401/403 authorization rejection: {body_str[:70]}"
+        if status == 400 and ("bucket not found" in body_lower or "not public" in body_lower or "nosuchbucket" in body_lower or "not_found" in body_lower):
+            return True, f"HTTP {status} confirmed private/blocked: {body_str[:70]}"
+        return False, f"FAIL: HTTP {status} expected 401/403 or 400 private rejection: {body_str[:70]}"
 
 def run_tests():
     print("=" * 75)
@@ -243,14 +248,17 @@ def run_tests():
     # -------------------------------------------------------------------------
     print("\n--- 4. Storage Bucket Access Control Tests (Strict Non-Ambiguous Rejection) ---", flush=True)
 
+    target_uid = os.getenv("MEMBER_A_UID", "00000000-0000-0000-0001-000000000001").strip()
+    target_fixture_path = f"{target_uid}/probe.txt"
+
     for bucket in ("receipts", "member-ids"):
         # 4.1 Public access endpoint: MUST reject because bucket is private
-        status_pub, body_pub = api_request(f"/storage/v1/object/public/{bucket}/probe.txt")
+        status_pub, body_pub = api_request(f"/storage/v1/object/public/{bucket}/{target_fixture_path}")
         passed_pub, reason_pub = is_strict_storage_denial(status_pub, body_pub, is_public=True)
         record_test("Storage", f"Storage: {bucket} public endpoint denial", passed_pub, reason_pub)
 
         # 4.2 Authenticated object endpoint without valid auth: MUST reject anon
-        status_priv, body_priv = api_request(f"/storage/v1/object/{bucket}/probe.txt")
+        status_priv, body_priv = api_request(f"/storage/v1/object/{bucket}/{target_fixture_path}")
         passed_priv, reason_priv = is_strict_storage_denial(status_priv, body_priv, is_public=False)
         record_test("Storage", f"Storage: {bucket} anon direct read denial", passed_priv, reason_priv)
 

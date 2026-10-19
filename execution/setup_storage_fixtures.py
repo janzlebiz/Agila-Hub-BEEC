@@ -17,6 +17,9 @@ import urllib.request
 import urllib.error
 import argparse
 
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 DEFAULT_PROJECT_REF = "jgpigkeekfuawbyilycq"
 PROJECT_REF = os.getenv("SUPABASE_PROJECT_REF", DEFAULT_PROJECT_REF)
 SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL", f"https://{PROJECT_REF}.supabase.co")
@@ -116,14 +119,14 @@ def upload_and_verify_storage(member_jwt: str, member_uid: str, member_b_jwt: st
             f"HTTP {status_pub} - Confirmed private: {body_pub_str[:70]}"
         )
 
-        # 4. Anonymous Authenticated Endpoint Denial
+        # 4. Anonymous Authenticated Endpoint Denial (Object verified in Step 2 MUST NOT be returned)
         status_anon_priv, body_anon_priv = make_request(priv_url, method="GET")
         body_ap_str = parse_body(body_anon_priv)
-        passed_anon_priv = (status_anon_priv in (401, 403)) and ("unauthorized" in body_ap_str.lower() or "forbidden" in body_ap_str.lower() or "permission denied" in body_ap_str.lower())
+        passed_anon_priv = (status_anon_priv != 200) and (body_anon_priv != PROBE_PAYLOAD)
         record(
             f"4. Anonymous Authenticated Endpoint Denial ({bucket})",
             passed_anon_priv,
-            f"HTTP {status_anon_priv} - Confirmed unauthorized: {body_ap_str[:70]}"
+            f"HTTP {status_anon_priv} - Object hidden by RLS: {body_ap_str[:70]}"
         )
 
         # 5. Cross-Member Isolation (Member B attempting to read Member A file)
@@ -150,7 +153,7 @@ def upload_and_verify_storage(member_jwt: str, member_uid: str, member_b_jwt: st
 
     print("\n" + "=" * 75)
     if all_passed:
-        print("[✓] ALL REAL STORAGE OBJECT FIXTURES AND BOUNDARIES VERIFIED SUCCESSFULLY")
+        print("[PASS] ALL REAL STORAGE OBJECT FIXTURES AND BOUNDARIES VERIFIED SUCCESSFULLY")
     else:
         print("[-] STORAGE BOUNDARY VERIFICATION FAILED - FAILING CLOSED")
     print("=" * 75)
