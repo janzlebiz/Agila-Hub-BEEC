@@ -30,8 +30,8 @@ OFFICER_JWT = os.getenv("OFFICER_JWT", "").strip()
 ADMIN_JWT = os.getenv("ADMIN_JWT", "").strip()
 SUSPENDED_JWT = os.getenv("SUSPENDED_JWT", "").strip()
 
-# Set STRICT_ROLE_MATRIX=0 to allow running in anonymous-only mode (for CI without live test accounts)
-STRICT_ROLE_MATRIX = os.getenv("STRICT_ROLE_MATRIX", "1").strip() != "0"
+# Strict Role Matrix is MANDATORY and cannot be bypassed
+STRICT_ROLE_MATRIX = True
 
 results = []
 
@@ -86,6 +86,26 @@ def is_strict_permission_denied(status: int, body: any) -> bool:
         elif "permission denied" in str(body).lower() or "unauthorized" in str(body).lower():
             return True
     return False
+
+def is_strict_storage_denial(status: int, body: any, is_public: bool = False) -> tuple:
+    body_str = json.dumps(body) if isinstance(body, (dict, list)) else str(body)
+    body_lower = body_str.lower()
+
+    if status == 200:
+        return False, "CRITICAL LEAK: HTTP 200 received on private storage resource!"
+    if status == 404:
+        return False, "AMBIGUOUS: HTTP 404 (Object not found does not establish access control denial)"
+
+    if is_public:
+        if status == 400 and ("not public" in body_lower or "bucket not found" in body_lower):
+            return True, f"HTTP 400 confirmed private bucket: {body_str[:70]}"
+        if status in (401, 403) and ("unauthorized" in body_lower or "forbidden" in body_lower or "permission denied" in body_lower):
+            return True, f"HTTP {status} confirmed access denied: {body_str[:70]}"
+        return False, f"FAIL: HTTP {status} unexpected storage response: {body_str[:70]}"
+    else:
+        if status in (401, 403) and ("unauthorized" in body_lower or "forbidden" in body_lower or "permission denied" in body_lower):
+            return True, f"HTTP {status} confirmed unauthorized: {body_str[:70]}"
+        return False, f"FAIL: HTTP {status} expected 401/403 authorization rejection: {body_str[:70]}"
 
 def run_tests():
     print("=" * 75)
@@ -149,7 +169,7 @@ def run_tests():
     record_test("Legacy-RPC", "Anon: rls_auto_enable", passed_rae, f"Status: {status} (Not executable by anon)")
 
     # -------------------------------------------------------------------------
-    # 3. DIRECT TABLE MUTATION & STATE IMMUTABILITY (Dedicated Fixture)
+    # 3. DIRECT TABLE MUTATION & STATE IMMUTABILITY (Independent Pre/Post Fetch)
     # -------------------------------------------------------------------------
     print("\n--- 3. Direct Table Mutation & State Integrity (Dedicated Probe Fixture) ---", flush=True)
 
@@ -162,40 +182,82 @@ def run_tests():
     passed_ins = status in (401, 403)
     record_test("Table-RLS", "Anon: Direct INSERT into contributions", passed_ins, f"Status: {status} (Direct table write blocked by RLS)")
 
-    # 3.2 State immutability check on FIXTURE-SECURITY-PROBE (Never touches real members)
-    # Attempt unauthorized elevation on fixture member
-    patch_status, patch_body = api_request(
-        "/rest/v1/members?member_number=eq.FIXTURE-SECURITY-PROBE",
-        method="PATCH",
-        data={"role": "admin"},
-        headers_extra={"Prefer": "return=representation"}
-    )
-    rows_altered = len(patch_body) if isinstance(patch_body, list) else 0
-    passed_immutability = (patch_status in (401, 403)) or (patch_status in (200, 204) and rows_altered == 0)
-    record_test(
-        "State-Integrity",
-        "Anon: Direct PATCH on member fixture (Zero rows altered)",
-        passed_immutability,
-        f"Status: {patch_status}, Rows altered: {rows_altered}"
-    )
+    # 3.2 State immutability check on FIXTURE-SECURITY-PROBE with independent pre/post fetch
+    auth_fetch_token = ADMIN_JWT or OFFICER_JWT or MEMBER_A_JWT
+    if auth_fetch_token:
+        # Pre-fetch
+        pre_status, pre_body = api_request(
+            "/rest/v1/members?member_number=eq.FIXTURE-SECURITY-PROBE",
+            auth_token=auth_fetch_token
+        )
+        pre_exists = pre_status == 200 and isinstance(pre_body, list) and len(pre_body) == 1
+        
+        if not pre_exists:
+            record_test(
+                "State-Integrity",
+                "Anon: Direct PATCH on member fixture (Pre/Post Verified)",
+                False,
+                f"FAIL: Fixture FIXTURE-SECURITY-PROBE could not be pre-fetched (Status {pre_status})"
+            )
+        else:
+            pre_state = pre_body[0]
+            # Unauthorized PATCH attempt by anon
+            patch_status, patch_body = api_request(
+                "/rest/v1/members?member_number=eq.FIXTURE-SECURITY-PROBE",
+                method="PATCH",
+                data={"role": "admin"},
+                headers_extra={"Prefer": "return=representation"}
+            )
+            rows_altered = len(patch_body) if isinstance(patch_body, list) else 0
+            patch_denied = (patch_status in (401, 403)) or (patch_status in (200, 204) and rows_altered == 0)
+
+            # Post-fetch
+            post_status, post_body = api_request(
+                "/rest/v1/members?member_number=eq.FIXTURE-SECURITY-PROBE",
+                auth_token=auth_fetch_token
+            )
+            post_state = post_body[0] if (post_status == 200 and isinstance(post_body, list) and len(post_body) == 1) else None
+
+            immutability_ok = (
+                patch_denied
+                and post_state is not None
+                and post_state == pre_state
+                and post_state.get("role") == pre_state.get("role")
+            )
+            record_test(
+                "State-Integrity",
+                "Anon: Direct PATCH on member fixture (Pre/Post Verified)",
+                immutability_ok,
+                f"Patch Status: {patch_status}, Rows altered: {rows_altered}, State preserved: {immutability_ok}"
+            )
+    else:
+        record_test(
+            "State-Integrity",
+            "Anon: Direct PATCH on member fixture (Pre/Post Verified)",
+            False,
+            "FAIL-CLOSED: Independent before/after fixture verification requires authenticated JWT (ADMIN_JWT/OFFICER_JWT/MEMBER_A_JWT)"
+        )
 
     # -------------------------------------------------------------------------
-    # 4. STORAGE ACCESS CONTROL ON REAL EXISTING FIXTURES
+    # 4. STORAGE ACCESS CONTROL ON REAL FIXTURES
     # -------------------------------------------------------------------------
-    print("\n--- 4. Storage Bucket Access Control Tests (Real Probe Object: 'fixtures/probe.txt') ---", flush=True)
+    print("\n--- 4. Storage Bucket Access Control Tests (Strict Non-Ambiguous Rejection) ---", flush=True)
 
     for bucket in ("receipts", "member-ids"):
-        # Test designated fixture object
-        status, body = api_request(f"/storage/v1/object/{bucket}/fixtures/probe.txt")
-        # Must NOT be 200 (if 200, public leak exists!)
-        # Private bucket returns HTTP 400 with "Bucket not found or not public" or 401/403
-        is_blocked = (status != 200) and (status in (400, 401, 403, 404))
-        record_test("Storage", f"Storage: {bucket} private read (probe fixture)", is_blocked, f"Status: {status} (Public access denied)")
+        # 4.1 Public access endpoint: MUST reject because bucket is private
+        status_pub, body_pub = api_request(f"/storage/v1/object/public/{bucket}/probe.txt")
+        passed_pub, reason_pub = is_strict_storage_denial(status_pub, body_pub, is_public=True)
+        record_test("Storage", f"Storage: {bucket} public endpoint denial", passed_pub, reason_pub)
+
+        # 4.2 Authenticated object endpoint without valid auth: MUST reject anon
+        status_priv, body_priv = api_request(f"/storage/v1/object/{bucket}/probe.txt")
+        passed_priv, reason_priv = is_strict_storage_denial(status_priv, body_priv, is_public=False)
+        record_test("Storage", f"Storage: {bucket} anon direct read denial", passed_priv, reason_priv)
 
     # -------------------------------------------------------------------------
-    # 5. MULTI-ROLE AUTHENTICATED MATRIX TESTS
+    # 5. MULTI-ROLE AUTHENTICATED MATRIX TESTS (Strict Mode Mandatory)
     # -------------------------------------------------------------------------
-    print("\n--- 5. Multi-Role Authenticated Authorization Matrix ---", flush=True)
+    print("\n--- 5. Multi-Role Authenticated Authorization Matrix (Strict Mode) ---", flush=True)
 
     matrix_roles = {
         "Member A (Active)": MEMBER_A_JWT,
@@ -208,69 +270,143 @@ def run_tests():
     missing_roles = [role for role, jwt in matrix_roles.items() if not jwt]
 
     if missing_roles:
-        print(f"[!] Warning: Multi-role JWTs missing for: {', '.join(missing_roles)}")
-        print("[!] To run full authenticated matrix against live Supabase:")
-        print("[!]   $env:MEMBER_A_JWT='...'; $env:MEMBER_B_JWT='...'; $env:OFFICER_JWT='...'; $env:ADMIN_JWT='...'; $env:SUSPENDED_JWT='...'; python tests/test_api_role_authorization.py")
-
-        if STRICT_ROLE_MATRIX:
-            record_test(
-                "Role-Matrix",
-                "Authenticated Role Matrix Coverage",
-                False,
-                f"FAIL: Missing required test credentials for: {', '.join(missing_roles)}"
-            )
-        else:
-            print("[i] Non-strict mode: Skipping missing authenticated roles.")
+        print(f"[-] STRICT GATE FAILURE: Missing authenticated JWT credentials for: {', '.join(missing_roles)}")
+        print("[-] The security gate requires all 5 authenticated roles to establish isolation and privilege boundaries:")
+        print("[-]   1. Member A (Active): Self-service permissions and member isolation")
+        print("[-]   2. Member B (Cross-Chapter): Cross-member tamper and read isolation")
+        print("[-]   3. Officer: Verifications, attendance recording, token generation")
+        print("[-]   4. Administrator: Administrative management")
+        print("[-]   5. Suspended Member: Rejection from active workflows")
+        print("[-] To provide credentials:")
+        print("[-]   $env:MEMBER_A_JWT='...'; $env:MEMBER_B_JWT='...'; $env:OFFICER_JWT='...'; $env:ADMIN_JWT='...'; $env:SUSPENDED_JWT='...'; python tests/test_api_role_authorization.py")
+        record_test(
+            "Role-Matrix",
+            "Authenticated Role Matrix Coverage (5 Roles)",
+            False,
+            f"FAIL-CLOSED: Missing required credentials for: {', '.join(missing_roles)}"
+        )
     else:
-        # 5.1 Member A self-service submission (positive test)
+        # 5.1 Member A: Active Member Tests
+        # Positive: Submit self-contribution
         status, body = api_request(
             "/rest/v1/rpc/submit_self_contribution",
             method="POST",
             data={"p_title": "Dues", "p_category": "monthly", "p_amount": 500, "p_payment_method": "cash"},
             auth_token=MEMBER_A_JWT
         )
-        passed_self = status in (200, 201)
+        passed_self = status in (200, 201) and (body.get("success") is True if isinstance(body, dict) else False)
         record_test("Role-Matrix", "Member A: Submit Self Contribution", passed_self, f"Status: {status}")
 
-        # 5.2 Member A unauthorized officer RPC (negative test) -> MUST REJECT
+        # Positive: Update own profile
+        status, body = api_request(
+            "/rest/v1/rpc/update_self_profile",
+            method="POST",
+            data={"p_phone": "09171234567", "p_blood_type": "O+"},
+            auth_token=MEMBER_A_JWT
+        )
+        passed_self_prof = status in (200, 201)
+        record_test("Role-Matrix", "Member A: Update Own Profile", passed_self_prof, f"Status: {status}")
+
+        # Negative: Member A attempting officer RPC (approve_member_applicant) -> MUST REJECT
         status, body = api_request(
             "/rest/v1/rpc/approve_member_applicant",
             method="POST",
             data={"p_member_id": "00000000-0000-0000-0000-000000000001"},
             auth_token=MEMBER_A_JWT
         )
-        passed_unauth = status in (401, 403, 400) and ("forbidden" in str(body).lower() or "unauthorized" in str(body).lower())
-        record_test("Role-Matrix", "Member A: Reject Officer Action", passed_unauth, f"Status: {status}")
+        passed_unauth = status in (401, 403, 400) and ("forbidden" in str(body).lower() or "unauthorized" in str(body).lower() or "officer" in str(body).lower())
+        record_test("Role-Matrix", "Member A: Rejection from Officer Action (approve_applicant)", passed_unauth, f"Status: {status}")
 
-        # 5.3 Member B cross-member tampering (negative test) -> MUST REJECT
+        # Negative: Member A attempting officer contribution verification -> MUST REJECT
+        status, body = api_request(
+            "/rest/v1/rpc/verify_contribution",
+            method="POST",
+            data={"p_contribution_id": "00000000-0000-0000-0000-000000000001", "p_status": "verified"},
+            auth_token=MEMBER_A_JWT
+        )
+        passed_unauth_verify = status in (401, 403, 400) and ("forbidden" in str(body).lower() or "unauthorized" in str(body).lower() or "officer" in str(body).lower())
+        record_test("Role-Matrix", "Member A: Rejection from Contribution Verification", passed_unauth_verify, f"Status: {status}")
+
+        # 5.2 Member B: Cross-Member Isolation Tests
+        # Negative: Member B attempting to alter Member A's profile via officer RPC -> MUST REJECT
         status, body = api_request(
             "/rest/v1/rpc/officer_update_member_profile",
             method="POST",
             data={"p_target_member_id": "00000000-0000-0000-0000-000000000001", "p_first_name": "TamperedByB"},
             auth_token=MEMBER_B_JWT
         )
-        passed_b = status in (401, 403, 400) and ("forbidden" in str(body).lower() or "unauthorized" in str(body).lower())
-        record_test("Role-Matrix", "Member B: Cross-Member Profile Update Rejected", passed_b, f"Status: {status}")
+        passed_b = status in (401, 403, 400) and ("forbidden" in str(body).lower() or "unauthorized" in str(body).lower() or "officer" in str(body).lower())
+        record_test("Role-Matrix", "Member B: Cross-Member Profile Tampering Rejected", passed_b, f"Status: {status}")
 
-        # 5.4 Suspended Member Action (negative test) -> MUST REJECT
+        # Negative: Member B reading Member A's private contribution records via REST
+        status, body = api_request(
+            "/rest/v1/contributions?title=eq.Alpha%20Annual%20Dues",
+            auth_token=MEMBER_B_JWT
+        )
+        # RLS must filter out other members' contributions (0 rows returned)
+        rows_visible = len(body) if isinstance(body, list) else -1
+        passed_cross_read = status == 200 and rows_visible == 0
+        record_test("Role-Matrix", "Member B: Cross-Member Contribution Isolation", passed_cross_read, f"Status: {status}, Rows visible: {rows_visible}")
+
+        # 5.3 Suspended Member Restrictions
+        # Negative: Suspended member attempting self-contribution -> MUST REJECT
         status, body = api_request(
             "/rest/v1/rpc/submit_self_contribution",
             method="POST",
             data={"p_title": "Suspended Dues", "p_category": "monthly", "p_amount": 500, "p_payment_method": "cash"},
             auth_token=SUSPENDED_JWT
         )
-        passed_susp = status in (401, 403, 400) and ("unauthorized" in str(body).lower() or "active" in str(body).lower())
+        passed_susp = status in (401, 403, 400) and ("unauthorized" in str(body).lower() or "active" in str(body).lower() or "suspended" in str(body).lower())
         record_test("Role-Matrix", "Suspended Member: Submission Rejected", passed_susp, f"Status: {status}")
 
-        # 5.5 Officer legitimate operation (positive test)
+        # Negative: Suspended member attempting event check-in -> MUST REJECT
+        status, body = api_request(
+            "/rest/v1/rpc/check_in_self_event",
+            method="POST",
+            data={"p_event_id": "00000000-0000-0000-0000-000000000001", "p_checkin_code": "PROBE"},
+            auth_token=SUSPENDED_JWT
+        )
+        passed_susp_checkin = status in (401, 403, 400) and ("unauthorized" in str(body).lower() or "active" in str(body).lower() or "suspended" in str(body).lower())
+        record_test("Role-Matrix", "Suspended Member: Event Check-in Rejected", passed_susp_checkin, f"Status: {status}")
+
+        # 5.4 Officer Operations (Positive Tests)
+        # Positive: Officer records attendance
         status, body = api_request(
             "/rest/v1/rpc/record_officer_attendance",
             method="POST",
             data={"p_event_id": "00000000-0000-0000-0000-000000000001", "p_member_number": "FIXTURE-SECURITY-PROBE"},
             auth_token=OFFICER_JWT
         )
-        passed_off = status in (200, 400) and ("not found" in str(body).lower() or "closed" in str(body).lower() or body.get("success") is not None)
-        record_test("Role-Matrix", "Officer: Authorized Attendance Invocation", passed_off, f"Status: {status}")
+        passed_off_att = status in (200, 400) and ("not found" in str(body).lower() or "closed" in str(body).lower() or body.get("success") is not None)
+        record_test("Role-Matrix", "Officer: Authorized Attendance Invocation", passed_off_att, f"Status: {status}")
+
+        # Positive: Officer generates claim token
+        status, body = api_request(
+            "/rest/v1/rpc/generate_member_claim_token",
+            method="POST",
+            data={"p_member_number": "FIXTURE-SECURITY-PROBE"},
+            auth_token=OFFICER_JWT
+        )
+        passed_off_token = status in (200, 400) and (body.get("success") is not None or "not found" in str(body).lower())
+        record_test("Role-Matrix", "Officer: Generate Claim Token Authorized", passed_off_token, f"Status: {status}")
+
+        # Positive: Officer views financial ledger summary
+        status, body = api_request(
+            "/rest/v1/rpc/get_financial_ledger_summary",
+            method="POST",
+            data={},
+            auth_token=OFFICER_JWT
+        )
+        passed_off_ledger = status in (200, 201)
+        record_test("Role-Matrix", "Officer: Financial Ledger Summary Accessible", passed_off_ledger, f"Status: {status}")
+
+        # 5.5 Administrator Operations (Positive Tests)
+        status, body = api_request(
+            "/rest/v1/members?limit=1",
+            auth_token=ADMIN_JWT
+        )
+        passed_admin = status == 200 and isinstance(body, list)
+        record_test("Role-Matrix", "Administrator: Directory Administration Access", passed_admin, f"Status: {status}")
 
     # -------------------------------------------------------------------------
     # SUMMARY

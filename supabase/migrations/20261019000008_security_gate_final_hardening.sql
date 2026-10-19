@@ -1,23 +1,23 @@
 -- =============================================================================
 -- Migration: 20261019000008_security_gate_final_hardening.sql
--- Description: Final Production Security Gate Hardening
+-- Description: Final Production Security Gate Hardening (Strict Fail-Closed)
 --   1. Eliminate anonymous/public access to legacy & privileged functions:
 --      - auto_confirm_user_email() [DROP trigger & function]
 --      - current_member() [REVOKE ALL from PUBLIC, anon; DROP obsolete function]
 --      - handle_new_user() [REVOKE ALL from PUBLIC, anon, authenticated; preserve trigger]
---      - rls_auto_enable() [DROP if event trigger/function; REVOKE ALL]
---   2. Enforce ALTER DEFAULT PRIVILEGES in public schema:
---      - Revoke default EXECUTE on functions from PUBLIC and anon
---   3. Function Search Path Hardening:
---      - Recreate update_timestamp() with SET search_path = public
---      - Dynamically enforce SET search_path = public on all functions in public schema
+--      - rls_auto_enable() [DROP event trigger if exists; REVOKE ALL; DROP function]
+--   2. Schema-Level Isolation & Default Privilege Hardening:
+--      - REVOKE CREATE ON SCHEMA public FROM PUBLIC, anon, authenticated
+--      - ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon
+--   3. Function Search Path & Ownership Hardening:
+--      - Minimal trusted search paths (public, extensions, pg_temp vs public, pg_temp)
+--      - Enforce postgres ownership across all public schema functions
 --   4. Blanket Revoke on all SECURITY DEFINER functions from PUBLIC & anon:
 --      - Grant EXECUTE only to authenticated on explicit application whitelist
---   5. Dedicated Non-Sensitive Test Fixtures for Zero-Impact Security Verification:
---      - public.members fixture: 'FIXTURE-SECURITY-PROBE'
---      - storage.objects fixture: 'fixtures/probe.txt' in receipts and member-ids
---   6. Version Tracking:
---      - Record 20261019000008 in schema_migrations
+--   5. Dedicated Non-Sensitive Member Test Fixtures (Strict fail-closed without error masking):
+--      - public.members fixture: 'FIXTURE-SECURITY-PROBE', 'FIXTURE-SUSPENDED-PROBE'
+--   6. Schema Migrations Version Tracking:
+--      - Record 20261019000008 in schema_migrations without silent error suppression
 -- =============================================================================
 
 -- =============================================================================
@@ -58,7 +58,7 @@ BEGIN
     END LOOP;
 END $$;
 
--- 1.3 handle_new_user(): Preserve signup trigger, but REVOKE direct execution from all client roles
+-- 1.3 handle_new_user(): Preserve signup trigger on auth.users, but REVOKE direct execution from all client roles
 DO $$
 DECLARE
     r RECORD;
@@ -73,15 +73,8 @@ BEGIN
     END LOOP;
 END $$;
 
--- 1.4 rls_auto_enable(): Drop any stray event trigger/function and revoke execution
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname = 'rls_auto_enable_trigger') THEN
-        DROP EVENT TRIGGER rls_auto_enable_trigger;
-    END IF;
-EXCEPTION
-    WHEN OTHERS THEN NULL;
-END $$;
+-- 1.4 rls_auto_enable(): Drop any event trigger and obsolete function (fail-closed, no masked errors)
+DROP EVENT TRIGGER IF EXISTS rls_auto_enable_trigger;
 
 DO $$
 DECLARE
@@ -99,28 +92,34 @@ BEGIN
 END $$;
 
 -- =============================================================================
--- 2. Prevent Future Privilege Leaks: Alter Default Function Privileges
+-- 2. Schema-Level Isolation & Default Privilege Hardening
 -- =============================================================================
+
+-- Prevent search-path hijacking: Non-superusers cannot create or replace objects in public
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+REVOKE CREATE ON SCHEMA public FROM anon;
+REVOKE CREATE ON SCHEMA public FROM authenticated;
+
+-- Prevent future privilege leaks on newly created functions
 ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM anon;
 
 -- =============================================================================
--- 3. Resolve Function Search Path Warnings Across All Public Functions
+-- 3. Resolve Function Search Path & Ownership Hardening
 -- =============================================================================
 
--- Recreate update_timestamp() with explicit search_path
+-- 3.1 Recreate update_timestamp() with explicit minimal trusted search_path
 CREATE OR REPLACE FUNCTION public.update_timestamp()
 RETURNS trigger AS $$
 BEGIN
     NEW.updated_at = timezone('utc'::text, now());
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SET search_path = public;
+$$ LANGUAGE plpgsql SET search_path = public, pg_temp;
 
--- Revoke execute from public/anon on trigger function update_timestamp
 REVOKE ALL ON FUNCTION public.update_timestamp() FROM PUBLIC, anon, authenticated;
 
--- Dynamically enforce SET search_path = public on every remaining function in schema public
+-- 3.2 Enforce postgres ownership across all public schema functions
 DO $$
 DECLARE
     r RECORD;
@@ -130,11 +129,40 @@ BEGIN
         FROM pg_proc p
         JOIN pg_namespace n ON p.pronamespace = n.oid
         WHERE n.nspname = 'public'
-          AND (p.proconfig IS NULL OR NOT EXISTS (
-              SELECT 1 FROM unnest(p.proconfig) cfg WHERE cfg LIKE 'search_path=%'
-          ))
     ) LOOP
-        EXECUTE format('ALTER FUNCTION public.%I(%s) SET search_path = public;', r.proname, r.argtypes);
+        EXECUTE format('ALTER FUNCTION public.%I(%s) OWNER TO postgres;', r.proname, r.argtypes);
+    END LOOP;
+END $$;
+
+-- 3.3 Set minimal trusted search path for functions requiring extensions (pgcrypto)
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (
+        SELECT p.proname, oidvectortypes(p.proargtypes) AS argtypes
+        FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public'
+          AND p.proname IN ('generate_member_claim_token', 'claim_member_account')
+    ) LOOP
+        EXECUTE format('ALTER FUNCTION public.%I(%s) SET search_path = public, extensions, pg_temp;', r.proname, r.argtypes);
+    END LOOP;
+END $$;
+
+-- 3.4 Set minimal trusted search path (public, pg_temp) on all other public functions
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (
+        SELECT p.proname, oidvectortypes(p.proargtypes) AS argtypes
+        FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public'
+          AND p.proname NOT IN ('generate_member_claim_token', 'claim_member_account')
+    ) LOOP
+        EXECUTE format('ALTER FUNCTION public.%I(%s) SET search_path = public, pg_temp;', r.proname, r.argtypes);
     END LOOP;
 END $$;
 
@@ -183,54 +211,30 @@ BEGIN
 END $$;
 
 -- =============================================================================
--- 5. Dedicated Non-Sensitive Fixtures for Zero-Impact Security Verification
+-- 5. Dedicated Non-Sensitive Fixtures (Fail-Closed, No Error Masking)
 -- =============================================================================
 
 -- 5.1 Member Fixtures for State Integrity Probing (Never mutate real members)
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM public.members WHERE email = 'security.probe@eagles.internal') THEN
+    IF NOT EXISTS (SELECT 1 FROM public.members WHERE member_number = 'FIXTURE-SECURITY-PROBE') THEN
         INSERT INTO public.members (email, first_name, last_name, member_number, role, membership_status)
         VALUES ('security.probe@eagles.internal', 'Probe', 'Fixture', 'FIXTURE-SECURITY-PROBE', 'member', 'active');
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM public.members WHERE email = 'suspended.probe@eagles.internal') THEN
+    IF NOT EXISTS (SELECT 1 FROM public.members WHERE member_number = 'FIXTURE-SUSPENDED-PROBE') THEN
         INSERT INTO public.members (email, first_name, last_name, member_number, role, membership_status)
         VALUES ('suspended.probe@eagles.internal', 'Suspended', 'Fixture', 'FIXTURE-SUSPENDED-PROBE', 'member', 'suspended');
     END IF;
 
-    IF NOT EXISTS (SELECT 1 FROM public.members WHERE email = 'applicant.probe@eagles.internal') THEN
+    IF NOT EXISTS (SELECT 1 FROM public.members WHERE member_number = 'FIXTURE-APPLICANT-PROBE') THEN
         INSERT INTO public.members (email, first_name, last_name, member_number, role, membership_status)
         VALUES ('applicant.probe@eagles.internal', 'Applicant', 'Fixture', 'FIXTURE-APPLICANT-PROBE', 'member', 'pending');
     END IF;
-EXCEPTION
-    WHEN OTHERS THEN NULL;
-END $$;
-
--- 5.2 Storage Object Fixtures: Verify real file access control (not nonexistent 404s)
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM storage.objects 
-        WHERE bucket_id = 'member-ids' AND name = 'fixtures/probe.txt'
-    ) THEN
-        INSERT INTO storage.objects (id, bucket_id, name, owner, metadata)
-        VALUES (gen_random_uuid(), 'member-ids', 'fixtures/probe.txt', NULL, '{"mimetype": "text/plain", "size": 19}'::jsonb);
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM storage.objects 
-        WHERE bucket_id = 'receipts' AND name = 'fixtures/probe.txt'
-    ) THEN
-        INSERT INTO storage.objects (id, bucket_id, name, owner, metadata)
-        VALUES (gen_random_uuid(), 'receipts', 'fixtures/probe.txt', NULL, '{"mimetype": "text/plain", "size": 19}'::jsonb);
-    END IF;
-EXCEPTION
-    WHEN OTHERS THEN NULL;
 END $$;
 
 -- =============================================================================
--- 6. Schema Migrations Version Tracking
+-- 6. Schema Migrations Version Tracking (Fail-Closed)
 -- =============================================================================
 DO $$
 BEGIN
@@ -242,6 +246,4 @@ BEGIN
             INSERT INTO supabase_migrations.schema_migrations (version) VALUES ('20261019000008');
         END IF;
     END IF;
-EXCEPTION
-    WHEN OTHERS THEN NULL;
 END $$;

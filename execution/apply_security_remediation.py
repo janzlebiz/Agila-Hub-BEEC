@@ -101,7 +101,34 @@ def is_explicit_permission_denied(status: int, body: any, function_name: str = "
 
     return False
 
-def verify_database_state() -> bool:
+def is_explicit_storage_denial(status: int, body: any, is_public_endpoint: bool = False) -> tuple:
+    """
+    Strict storage access denial verification:
+    - Rejects HTTP 404 (absent object is NOT proof of access denial).
+    - For public endpoint: Must return HTTP 400 with 'Bucket not found or not public' or 401/403.
+    - For private endpoint: Must return HTTP 401 or HTTP 403 with unauthorized/forbidden.
+    - HTTP 200 is a critical failure (leak).
+    """
+    body_str = json.dumps(body) if isinstance(body, (dict, list)) else str(body)
+    body_lower = body_str.lower()
+
+    if status == 200:
+        return False, "CRITICAL LEAK: HTTP 200 received on private storage resource!"
+    if status == 404:
+        return False, "AMBIGUOUS: HTTP 404 (Object not found does not establish access control denial)"
+
+    if is_public_endpoint:
+        if status == 400 and ("not public" in body_lower or "bucket not found" in body_lower):
+            return True, f"HTTP 400 confirmed private bucket: {body_str[:70]}"
+        if status in (401, 403) and ("unauthorized" in body_lower or "forbidden" in body_lower or "permission denied" in body_lower):
+            return True, f"HTTP {status} confirmed access denied: {body_str[:70]}"
+        return False, f"FAIL: HTTP {status} unexpected storage response: {body_str[:70]}"
+    else:
+        if status in (401, 403) and ("unauthorized" in body_lower or "forbidden" in body_lower or "permission denied" in body_lower):
+            return True, f"HTTP {status} confirmed unauthorized: {body_str[:70]}"
+        return False, f"FAIL: HTTP {status} expected 401/403 authorization rejection: {body_str[:70]}"
+
+def verify_database_state(auth_token: str = None) -> bool:
     print("\n--- Running Hardened Security Gate Verification Assertions ---")
     headers = {
         "apikey": ANON_KEY,
@@ -203,42 +230,105 @@ def verify_database_state() -> bool:
     assert_check("Anon Direct INSERT: contributions", passed_insert, f"HTTP {status} (Direct table write blocked by RLS)")
 
     # -------------------------------------------------------------------------
-    # 4. Storage Bucket Private Access Control on REAL Existing Fixture Object
+    # 4. Storage Bucket Private Access Control on Real Fixtures
     # -------------------------------------------------------------------------
-    # Test real designated fixture object: 'fixtures/probe.txt'
+    # Strictly asserts rejection without accepting 404 or generic 400
     for bucket in ("receipts", "member-ids"):
-        url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/fixtures/probe.txt"
-        status, body = make_http_request(url, headers=headers)
-        # Rejection must be explicit: HTTP 200 is a CRITICAL FAILURE (leak)
-        # Private bucket returns HTTP 400 with "Bucket not found or not public" or HTTP 401/403
-        is_blocked = (status != 200) and (status in (400, 401, 403, 404))
-        body_text = str(body)[:80]
-        assert_check(f"Storage: {bucket} private read (probe)", is_blocked, f"HTTP {status} (Public access denied: {body_text})")
+        # 4.1 Public access endpoint: MUST reject because bucket is private
+        pub_url = f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/probe.txt"
+        status_pub, body_pub = make_http_request(pub_url, headers=headers)
+        passed_pub, reason_pub = is_explicit_storage_denial(status_pub, body_pub, is_public_endpoint=True)
+        assert_check(f"Storage: {bucket} public endpoint denial", passed_pub, reason_pub)
+
+        # 4.2 Authenticated object endpoint: MUST reject anonymous caller with 401/403
+        priv_url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/probe.txt"
+        status_priv, body_priv = make_http_request(priv_url, headers=headers)
+        passed_priv, reason_priv = is_explicit_storage_denial(status_priv, body_priv, is_public_endpoint=False)
+        assert_check(f"Storage: {bucket} anon direct read denial", passed_priv, reason_priv)
 
     # -------------------------------------------------------------------------
-    # 5. State Immutability: Anonymous PATCH on Dedicated Test Fixture
+    # 5. State Immutability: Independent Pre-Fetch & Post-Fetch Verification
     # -------------------------------------------------------------------------
-    # Attempt unauthorized elevation on fixture member (never real members)
-    patch_status, patch_body = make_http_request(
-        f"{SUPABASE_URL}/rest/v1/members?member_number=eq.FIXTURE-SECURITY-PROBE",
-        headers={**headers, "Prefer": "return=representation"},
-        data={"role": "admin"},
-        method="PATCH"
-    )
-    # Must reject with 401/403 or return 0 modified rows
-    rows_altered = len(patch_body) if isinstance(patch_body, list) else 0
-    passed_fixture_patch = (patch_status in (401, 403)) or (patch_status in (200, 204) and rows_altered == 0)
-    assert_check("State Immutability: Anon PATCH on member fixture", passed_fixture_patch, f"HTTP {patch_status}, Rows altered: {rows_altered}")
+    # Resolves Gap 1: Must independently fetch before and after to verify zero mutation
+    target_fixture_num = "FIXTURE-SECURITY-PROBE"
+    if auth_token:
+        auth_headers = {
+            "apikey": ANON_KEY,
+            "Authorization": f"Bearer {auth_token}",
+            "Content-Type": "application/json",
+        }
+        # Step 5.1: Independent Pre-fetch with authorized credentials
+        pre_status, pre_body = make_http_request(
+            f"{SUPABASE_URL}/rest/v1/members?member_number=eq.{target_fixture_num}",
+            headers=auth_headers
+        )
+        fixture_exists = (pre_status == 200 and isinstance(pre_body, list) and len(pre_body) == 1)
+
+        if not fixture_exists:
+            assert_check(
+                "State Immutability: Fixture Pre-Fetch",
+                False,
+                f"FAIL: Fixture {target_fixture_num} not found or unreadable with auth token (Status {pre_status})"
+            )
+        else:
+            initial_state = pre_body[0]
+            initial_role = initial_state.get("role")
+
+            # Step 5.2: Attempt unauthorized elevation by anonymous caller
+            patch_status, patch_body = make_http_request(
+                f"{SUPABASE_URL}/rest/v1/members?member_number=eq.{target_fixture_num}",
+                headers={**headers, "Prefer": "return=representation"},
+                data={"role": "admin"},
+                method="PATCH"
+            )
+            rows_altered = len(patch_body) if isinstance(patch_body, list) else 0
+            patch_denied = (patch_status in (401, 403)) or (patch_status in (200, 204) and rows_altered == 0)
+
+            # Step 5.3: Independent Post-fetch with authorized credentials
+            post_status, post_body = make_http_request(
+                f"{SUPABASE_URL}/rest/v1/members?member_number=eq.{target_fixture_num}",
+                headers=auth_headers
+            )
+            post_state = post_body[0] if (post_status == 200 and isinstance(post_body, list) and len(post_body) == 1) else None
+
+            # Assert complete state immutability
+            immutability_verified = (
+                patch_denied
+                and post_state is not None
+                and post_state.get("role") == initial_role
+                and post_state == initial_state
+            )
+
+            assert_check(
+                "State Immutability: Anon PATCH on member fixture (Verified Pre/Post)",
+                immutability_verified,
+                f"Patch: HTTP {patch_status} (Rows: {rows_altered}), Pre-Role: {initial_role}, Post-Role: {post_state.get('role') if post_state else 'N/A'}"
+            )
+    else:
+        # Fail closed when auth token is absent: we cannot claim verified immutability without pre/post fetch
+        assert_check(
+            "State Immutability: Fixture Independent Pre/Post Fetch",
+            False,
+            "FAIL-CLOSED: Missing authorized token (--auth-token or AUTH_TOKEN/OFFICER_JWT/ADMIN_JWT) required for independent before/after fixture verification."
+        )
 
     return all_passed
 
 def main():
     parser = argparse.ArgumentParser(description="AGILA Hub Migration & Verification Runner")
-    parser.add_argument("--token", help="Supabase Personal Access Token")
+    parser.add_argument("--token", help="Supabase Personal Access Token for DDL migrations")
+    parser.add_argument("--auth-token", help="Authenticated JWT (Officer/Admin/Member) for pre/post-fetch fixture verification")
     parser.add_argument("--verify-only", action="store_true", help="Run assertions only without applying migrations")
     args = parser.parse_args()
 
     access_token = args.token or os.getenv("SUPABASE_ACCESS_TOKEN", "").strip()
+    auth_token = (
+        args.auth_token
+        or os.getenv("AUTH_TOKEN", "")
+        or os.getenv("OFFICER_JWT", "")
+        or os.getenv("ADMIN_JWT", "")
+        or os.getenv("MEMBER_A_JWT", "")
+    ).strip() or None
 
     print("=" * 70)
     print("AGILA HUB: HARDENED PRODUCTION SECURITY GATE RUNNER")
@@ -247,7 +337,7 @@ def main():
 
     if args.verify_only:
         print("[i] Running in --verify-only mode.")
-        success = verify_database_state()
+        success = verify_database_state(auth_token=auth_token)
         print("\n" + "=" * 70)
         if success:
             print("VERIFICATION RESULT: PASSED (All Hardened Gate Criteria Satisfied)")
@@ -273,7 +363,7 @@ def main():
         print("[-] Migration halted due to errors. Post-migration verification skipped.")
         return 1
 
-    verified = verify_database_state()
+    verified = verify_database_state(auth_token=auth_token)
     if not verified:
         print("[-] Post-migration verification assertions failed.")
         return 1
