@@ -81,6 +81,8 @@ CREATE INDEX IF NOT EXISTS idx_member_claim_tokens_hash
     ON public.member_claim_tokens (member_id, token_hash);
 
 -- Officer-Authorized Cryptographic Claim Token Generator
+DROP FUNCTION IF EXISTS public.generate_member_claim_token(TEXT, INT);
+DROP FUNCTION IF EXISTS public.generate_member_claim_token(TEXT);
 CREATE OR REPLACE FUNCTION public.generate_member_claim_token(
     p_member_number TEXT,
     p_expires_in_hours INT DEFAULT 48
@@ -188,11 +190,11 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.generate_member_claim_token FROM anon;
-REVOKE EXECUTE ON FUNCTION public.generate_member_claim_token FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.generate_member_claim_token TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.generate_member_claim_token(TEXT, INT) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.generate_member_claim_token(TEXT, INT) TO authenticated;
 
 -- Upgrade claim_member_account to verify SHA-256 hash
+DROP FUNCTION IF EXISTS public.claim_member_account(TEXT, TEXT);
 CREATE OR REPLACE FUNCTION public.claim_member_account(
     p_member_number TEXT,
     p_claim_token TEXT
@@ -297,9 +299,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.claim_member_account FROM anon;
-REVOKE EXECUTE ON FUNCTION public.claim_member_account FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.claim_member_account TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.claim_member_account(TEXT, TEXT) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.claim_member_account(TEXT, TEXT) TO authenticated;
 
 -- =============================================================================
 -- 2. R-03: Comprehensive Storage Policy Cleanup & Scoped Receipts Bucket
@@ -423,6 +424,24 @@ CREATE POLICY "receipts_delete_policy"
 -- 3. R-04 & R-05: Separation of Self-Service vs. Officer Operations
 -- =============================================================================
 
+-- Clean up all legacy function signatures to prevent 42725 ambiguity
+DROP FUNCTION IF EXISTS public.record_officer_attendance(UUID, TEXT, UUID);
+DROP FUNCTION IF EXISTS public.record_officer_attendance(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.submit_member_contribution(UUID, TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.submit_member_contribution(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT, UUID);
+DROP FUNCTION IF EXISTS public.update_member_official_id(UUID, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.update_member_official_id(TEXT, TEXT, TEXT, UUID);
+DROP FUNCTION IF EXISTS public.update_member_profile(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.update_member_profile(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, UUID);
+DROP FUNCTION IF EXISTS public.check_in_event(UUID, TEXT, UUID);
+DROP FUNCTION IF EXISTS public.check_in_event(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.check_in_self_event(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.submit_self_contribution(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.update_self_profile(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.update_self_official_id(TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.officer_submit_contribution_for_member(UUID, TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.officer_update_member_profile(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT);
+
 -- -----------------------------------------------------------------------------
 -- 3.1 Self-Service: submit_self_contribution (Bound exclusively to auth.uid())
 -- -----------------------------------------------------------------------------
@@ -505,9 +524,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.submit_self_contribution FROM anon;
-REVOKE EXECUTE ON FUNCTION public.submit_self_contribution FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.submit_self_contribution TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.submit_self_contribution(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.submit_self_contribution(TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) TO authenticated;
 
 -- -----------------------------------------------------------------------------
 -- 3.2 Officer Workflow: officer_submit_contribution_for_member
@@ -610,9 +628,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.officer_submit_contribution_for_member FROM anon;
-REVOKE EXECUTE ON FUNCTION public.officer_submit_contribution_for_member FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.officer_submit_contribution_for_member TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.officer_submit_contribution_for_member(UUID, TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.officer_submit_contribution_for_member(UUID, TEXT, TEXT, NUMERIC, TEXT, TEXT, TEXT) TO authenticated;
 
 -- Maintain submit_member_contribution for backward compatibility (strictly routes to self)
 CREATE OR REPLACE FUNCTION public.submit_member_contribution(
@@ -699,9 +716,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.update_self_profile FROM anon;
-REVOKE EXECUTE ON FUNCTION public.update_self_profile FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.update_self_profile TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_self_profile(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.update_self_profile(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 
 -- -----------------------------------------------------------------------------
 -- 3.4 Officer Workflow: officer_update_member_profile
@@ -773,9 +789,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.officer_update_member_profile FROM anon;
-REVOKE EXECUTE ON FUNCTION public.officer_update_member_profile FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.officer_update_member_profile TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.officer_update_member_profile(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.officer_update_member_profile(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 
 -- Maintain update_member_profile routing cleanly
 CREATE OR REPLACE FUNCTION public.update_member_profile(
@@ -858,9 +873,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.update_self_official_id FROM anon;
-REVOKE EXECUTE ON FUNCTION public.update_self_official_id FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.update_self_official_id TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.update_self_official_id(TEXT, TEXT, TEXT) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.update_self_official_id(TEXT, TEXT, TEXT) TO authenticated;
 
 -- Maintain update_member_official_id routing cleanly
 CREATE OR REPLACE FUNCTION public.update_member_official_id(
@@ -962,9 +976,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.check_in_self_event FROM anon;
-REVOKE EXECUTE ON FUNCTION public.check_in_self_event FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.check_in_self_event TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.check_in_self_event(UUID, TEXT) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.check_in_self_event(UUID, TEXT) TO authenticated;
 
 -- Maintain check_in_event routing cleanly
 CREATE OR REPLACE FUNCTION public.check_in_event(
@@ -1114,9 +1127,8 @@ BEGIN
 END;
 $$;
 
-REVOKE EXECUTE ON FUNCTION public.record_officer_attendance FROM anon;
-REVOKE EXECUTE ON FUNCTION public.record_officer_attendance FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.record_officer_attendance TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.record_officer_attendance(UUID, TEXT) FROM anon, PUBLIC;
+GRANT EXECUTE ON FUNCTION public.record_officer_attendance(UUID, TEXT) TO authenticated;
 
 -- =============================================================================
 -- 6. Comprehensive Elimination of Blanket SELECT Policies (F-03 & Security Advisor)
