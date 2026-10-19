@@ -25,6 +25,8 @@ export interface DirectoryMember {
   role: "admin" | "officer" | "member";
   membership_status: "pending" | "active" | "suspended" | "inactive";
   chapter_or_branch?: string | null;
+  official_id_url?: string | null;
+  id_card_back_url?: string | null;
 }
 
 interface MemberDirectoryModalProps {

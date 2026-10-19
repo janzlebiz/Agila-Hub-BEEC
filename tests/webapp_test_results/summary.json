@@ -1,0 +1,118 @@
+{
+  "elapsed_seconds": 22.93,
+  "passed": 22,
+  "failed": 0,
+  "tests": [
+    {
+      "test": "Header Branding & Title",
+      "status": "PASSED",
+      "details": "Brand logo and title verified"
+    },
+    {
+      "test": "Role Switcher",
+      "status": "PASSED",
+      "details": "Successfully switched to officer role"
+    },
+    {
+      "test": "Text Size Scaling",
+      "status": "PASSED",
+      "details": "Text size scaled successfully"
+    },
+    {
+      "test": "Theme Toggle (Dark Mode)",
+      "status": "PASSED",
+      "details": "Dark mode active: True"
+    },
+    {
+      "test": "Overview Screenshot",
+      "status": "PASSED",
+      "details": "Saved 01_header_and_overview.png"
+    },
+    {
+      "test": "Digital ID Card Visible",
+      "status": "PASSED",
+      "details": "Official Member Credential verified"
+    },
+    {
+      "test": "Official ID Scanner Modal",
+      "status": "PASSED",
+      "details": "Scanner button present"
+    },
+    {
+      "test": "Tactile Assembly Check-In",
+      "status": "PASSED",
+      "details": "Check-in triggered successfully"
+    },
+    {
+      "test": "QR Attendance Scanner Opened",
+      "status": "PASSED",
+      "details": "Camera viewfinder modal verified"
+    },
+    {
+      "test": "QR Scanner Dismissed",
+      "status": "PASSED",
+      "details": "Scanner modal closed"
+    },
+    {
+      "test": "Docket: Assemblies Tab",
+      "status": "PASSED",
+      "details": "Assemblies calendar rendered"
+    },
+    {
+      "test": "Docket: Financial Ledger Tab",
+      "status": "PASSED",
+      "details": "Verified contributions ledger"
+    },
+    {
+      "test": "Docket: Member Roster Tab",
+      "status": "PASSED",
+      "details": "Active fraternal members listed"
+    },
+    {
+      "test": "Magna Carta Hero Card in Vault",
+      "status": "PASSED",
+      "details": "Official card rendered with live e-constitution link"
+    },
+    {
+      "test": "Magna Carta RAG Query & Synthesis",
+      "status": "PASSED",
+      "details": "Synthesized legal counsel with Article/Page citations"
+    },
+    {
+      "test": "Magna Carta 21 Articles Directory",
+      "status": "PASSED",
+      "details": "Full 21 articles indexed and searchable"
+    },
+    {
+      "test": "Docket: Community Outreach Tab",
+      "status": "PASSED",
+      "details": "Charity and outreach drives rendered"
+    },
+    {
+      "test": "Profile Settings Modal Opened",
+      "status": "PASSED",
+      "details": "Profile dialog loaded"
+    },
+    {
+      "test": "Auth Route: /auth/login",
+      "status": "PASSED",
+      "details": "Login form inputs and layout verified"
+    },
+    {
+      "test": "Auth Route: /auth/register (Claim Tab)",
+      "status": "PASSED",
+      "details": "Member record claiming form verified"
+    },
+    {
+      "test": "Auth Route: /auth/register (Applicant Tab)",
+      "status": "PASSED",
+      "details": "New applicant registration form verified"
+    },
+    {
+      "test": "Console & Runtime Health",
+      "status": "PASSED",
+      "details": "0 critical runtime crashes (4 total log events)"
+    }
+  ],
+  "console_errors_count": 0
+}

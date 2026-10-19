@@ -12,6 +12,13 @@ interface HeaderProps {
   onToggleTheme?: () => void;
   textSize?: "normal" | "large" | "xl";
   onChangeTextSize?: (size: "normal" | "large" | "xl") => void;
+  authMember?: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    role: string;
+  } | null;
+  onOpenProfile?: () => void;
 }
 
 export function Header({
@@ -21,6 +28,8 @@ export function Header({
   onToggleTheme,
   textSize = "normal",
   onChangeTextSize,
+  authMember,
+  onOpenProfile,
 }: HeaderProps) {
   const nextTextSize = {
     normal: "large" as const,
@@ -123,14 +132,44 @@ export function Header({
             <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-bumblebee-yellow shadow-sm" />
           </button>
 
-          {/* Auth Action: Sign In or Profile/Sign Out */}
-          <Link
-            href="/auth/login"
-            className="h-9 px-3 rounded-xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white hover:brightness-110 flex items-center gap-1.5 text-xs font-bold shadow-md transition active:scale-95"
-          >
-            <User className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Sign In / Claim ID</span>
-          </Link>
+          {/* Profile & Credentials Settings Quick Trigger */}
+          {onOpenProfile && (
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              aria-label="Profile and Security Settings"
+              title="Open Member Profile & Security Settings"
+              className="h-9 px-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.06] hover:bg-slate-200 dark:hover:bg-white/[0.12] border border-slate-200 dark:border-white/10 flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 transition active:scale-95 shadow-sm"
+            >
+              <User className="h-4 w-4 text-eagle-blue" />
+              <span className="hidden lg:inline text-[11px]">Profile & ID</span>
+            </button>
+          )}
+
+          {/* Auth Action: Profile Settings when logged in or Sign In */}
+          {authMember ? (
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              className="h-9 px-3 rounded-xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white hover:brightness-110 flex items-center gap-2 text-xs font-bold shadow-md transition active:scale-95"
+              title="Open Member Profile & Security Settings"
+            >
+              <div className="h-5 w-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-black">
+                {authMember.first_name.charAt(0)}
+              </div>
+              <span className="hidden sm:inline">
+                {authMember.first_name} ({authMember.role})
+              </span>
+            </button>
+          ) : (
+            <Link
+              href="/auth/login"
+              className="h-9 px-3 rounded-xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white hover:brightness-110 flex items-center gap-1.5 text-xs font-bold shadow-md transition active:scale-95"
+            >
+              <User className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Sign In / Claim ID</span>
+            </Link>
+          )}
         </div>
       </div>
     </header>

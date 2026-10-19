@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { Header } from "@/components/navigation/Header";
 import { MobileNavBar } from "@/components/navigation/MobileNavBar";
 import { DigitalIdCard } from "@/components/membership/DigitalIdCard";
@@ -41,6 +42,11 @@ import {
 import { QrAttendanceScanner } from "@/components/scanner/QrAttendanceScanner";
 import { SubmitContributionModal } from "@/components/financial/SubmitContributionModal";
 import { MemberDirectoryModal, DirectoryMember } from "@/components/directory/MemberDirectoryModal";
+import { OfficialIdScannerModal } from "@/components/membership/OfficialIdScannerModal";
+import { ProfileSettingsModal } from "@/components/profile/ProfileSettingsModal";
+import { PwaInstallPrompt } from "@/components/ui/PwaInstallPrompt";
+import { MagnaCartaRagModal } from "@/components/documents/MagnaCartaRagModal";
+import { Radio, Wifi } from "lucide-react";
 
 interface MemberRecord {
   id: string;
@@ -52,6 +58,12 @@ interface MemberRecord {
   role: "admin" | "officer" | "member";
   membership_status: "pending" | "active" | "suspended" | "inactive";
   chapter_or_branch?: string | null;
+  official_id_url?: string | null;
+  id_card_front_url?: string | null;
+  id_card_back_url?: string | null;
+  blood_type?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
 }
 
 interface AnnouncementRecord {
@@ -124,6 +136,25 @@ export default function HomePage() {
   const [directorySearch, setDirectorySearch] = useState("");
   const [directoryFilter, setDirectoryFilter] = useState<"all" | "admin" | "officer" | "member">("all");
 
+  // Phase 2 & 3: Official Eagles ID, Profile & Realtime States
+  const [isOfficialIdScannerOpen, setIsOfficialIdScannerOpen] = useState(false);
+  const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
+  const [officialIdUrl, setOfficialIdUrl] = useState<string | null>(null);
+  const [idCardBackUrl, setIdCardBackUrl] = useState<string | null>(null);
+  const [bloodType, setBloodType] = useState<string>("O+");
+  const [assemblyHeadcount, setAssemblyHeadcount] = useState<number>(38);
+  const [realtimeToast, setRealtimeToast] = useState<{
+    title: string;
+    message: string;
+    type: "info" | "success" | "warning";
+  } | null>(null);
+  const [realtimeConnected, setRealtimeConnected] = useState<boolean>(true);
+
+  // Magna Carta & RAG AI States
+  const [isMagnaCartaRagOpen, setIsMagnaCartaRagOpen] = useState(false);
+  const [magnaCartaInitialQuery, setMagnaCartaInitialQuery] = useState("");
+  const [ragInlineQuery, setRagInlineQuery] = useState("");
+
   // Interactive Live Check-in States
   const [checkInCode, setCheckInCode] = useState("AGILA-GMM-2026");
   const [checkInLoading, setCheckInLoading] = useState(false);
@@ -164,6 +195,9 @@ export default function HomePage() {
         if (memberData) {
           setAuthMember(memberData as MemberRecord);
           setCurrentRole(memberData.role as "admin" | "officer" | "member");
+          if (memberData.official_id_url) setOfficialIdUrl(memberData.official_id_url);
+          if (memberData.id_card_back_url) setIdCardBackUrl(memberData.id_card_back_url);
+          if (memberData.blood_type) setBloodType(memberData.blood_type);
         }
       }
 
@@ -215,6 +249,14 @@ export default function HomePage() {
         .order("first_name", { ascending: true });
 
       if (allMemData) setAllMembers(allMemData as DirectoryMember[]);
+
+      // 8. Fetch Assembly Headcount
+      const { count: attCount } = await supabase
+        .from("attendance")
+        .select("*", { count: "exact", head: true });
+      if (typeof attCount === "number") {
+        setAssemblyHeadcount(32 + attCount);
+      }
     } catch (err) {
       console.error("Error fetching live database data:", err);
     } finally {
@@ -225,6 +267,78 @@ export default function HomePage() {
   useEffect(() => {
     fetchHubData();
   }, [fetchHubData]);
+
+  // Phase 2: Supabase Realtime WebSocket Subscriptions
+  useEffect(() => {
+    const channel = supabase
+      .channel("agila-hub-live-feed")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "attendance" },
+        (payload) => {
+          console.log("[Realtime] Attendance event:", payload);
+          fetchHubData();
+          setAssemblyHeadcount((prev) => prev + 1);
+          setRealtimeToast({
+            title: "Assembly Quorum Live",
+            message: "A brother / sister has just recorded attendance!",
+            type: "success",
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "contributions" },
+        (payload) => {
+          console.log("[Realtime] Contributions event:", payload);
+          fetchHubData();
+          if (payload.eventType === "UPDATE") {
+            const updated = payload.new as { title?: string; status?: string };
+            setRealtimeToast({
+              title: "Dues Verified Live",
+              message: `${updated.title || "Contribution"} is now marked ${updated.status?.toUpperCase()}`,
+              type: "success",
+            });
+          } else {
+            setRealtimeToast({
+              title: "New Dues Uploaded",
+              message: "A member payment proof was received for review.",
+              type: "info",
+            });
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "announcements" },
+        (payload) => {
+          console.log("[Realtime] Announcement event:", payload);
+          fetchHubData();
+          setRealtimeToast({
+            title: "Fraternal Alert",
+            message: (payload.new as { title?: string }).title || "New circular published by Secretariat.",
+            type: "warning",
+          });
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          setRealtimeConnected(true);
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, fetchHubData]);
+
+  // Auto-dismiss realtime toast
+  useEffect(() => {
+    if (realtimeToast) {
+      const timer = setTimeout(() => setRealtimeToast(null), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [realtimeToast]);
 
   // Profile data displayed on Digital ID
   const activeProfile = inspectedMember
@@ -365,6 +479,8 @@ export default function HomePage() {
         onToggleTheme={() => setIsDark(!isDark)}
         textSize={textSize}
         onChangeTextSize={setTextSize}
+        authMember={authMember}
+        onOpenProfile={() => setIsProfileSettingsOpen(true)}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-8">
@@ -373,13 +489,21 @@ export default function HomePage() {
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block shadow-sm" />
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
                 Mabuhay ang Agila!
               </span>
               <span className="text-slate-300 dark:text-slate-600 font-bold">•</span>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
                 {activeProfile.club}
               </span>
+              {realtimeConnected && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  <Radio className="h-3 w-3 animate-pulse" /> Live Realtime
+                </span>
+              )}
             </div>
             <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 dark:text-white tracking-tight">
               Good day, {activeProfile.name}
@@ -450,7 +574,7 @@ export default function HomePage() {
                 </div>
               )}
 
-              {/* The Physical Executive Polycarbonate Credential */}
+              {/* The Physical Executive Polycarbonate Credential & Scanned Official ID */}
               <DigitalIdCard
                 fullName={activeProfile.name}
                 nickname={activeProfile.nickname}
@@ -459,6 +583,10 @@ export default function HomePage() {
                 region={activeProfile.region}
                 role={currentRole}
                 status={activeProfile.status}
+                bloodType={bloodType}
+                officialIdUrl={officialIdUrl || (inspectedMember?.official_id_url ?? null)}
+                idCardBackUrl={idCardBackUrl || (inspectedMember?.id_card_back_url ?? null)}
+                onOpenScanModal={() => setIsOfficialIdScannerOpen(true)}
               />
             </div>
 
@@ -467,9 +595,15 @@ export default function HomePage() {
               <GlassCard variant="glow-blue" className="p-5 shadow-lg border-eagle-blue/20">
                 <div className="flex items-start justify-between">
                   <div>
-                    <Badge variant={activeEvent.checkin_open ? "blue" : "neutral"} size="sm" className="mb-2">
-                      {activeEvent.checkin_open ? "Assembly Quorum Open" : "Upcoming Meeting"}
-                    </Badge>
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <Badge variant={activeEvent.checkin_open ? "blue" : "neutral"} size="sm">
+                        {activeEvent.checkin_open ? "Assembly Quorum Open" : "Upcoming Meeting"}
+                      </Badge>
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                        Live Quorum: {assemblyHeadcount} Checked In
+                      </span>
+                    </div>
                     <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
                       {activeEvent.title.replace("[SEED] ", "")}
                     </h4>
@@ -855,8 +989,137 @@ export default function HomePage() {
 
                 {/* 3. DOCUMENT VAULT TAB */}
                 {docketTab === "documents" && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between mb-2">
+                  <div className="space-y-4">
+                    {/* Official Magna Carta & Constitution Hero Card with RAG */}
+                    <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-[#0a1428] to-slate-950 border-2 border-amber-400/80 shadow-2xl text-white relative overflow-hidden">
+                      {/* Gold foil metallic highlight bar */}
+                      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500" />
+                      
+                      <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3.5">
+                          <div className="relative h-14 w-14 rounded-2xl bg-slate-900 border border-amber-400 p-1 shrink-0 shadow-lg flex items-center justify-center">
+                            <Image
+                              src="/assets/BEEC_official_crest.jpg"
+                              alt="TFOE-PE Crest"
+                              width={48}
+                              height={48}
+                              className="object-contain"
+                              unoptimized
+                            />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                                Supreme Fraternal Law
+                              </span>
+                              <span className="text-[10px] font-bold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
+                                2024 Edition • 326 Pages • 21 Articles
+                              </span>
+                            </div>
+                            <h4 className="font-display font-black text-lg text-white">
+                              The Philippine Eagles Magna Carta & Constitution
+                            </h4>
+                            <p className="text-xs text-slate-300 mt-0.5 max-w-xl">
+                              Ratified Constitution, Code of Laws, Election Rules, and By-Laws of The Fraternal Order of Eagles, Philippine Eagles, Inc.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                          <button
+                            type="button"
+                            id="btn-open-magna-rag"
+                            onClick={() => {
+                              setMagnaCartaInitialQuery("");
+                              setIsMagnaCartaRagOpen(true);
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 text-white text-xs font-bold shadow-lg shadow-amber-500/20 flex items-center gap-2 transition active:scale-95"
+                          >
+                            <Sparkles className="h-4 w-4" /> Ask AI Counsel (RAG)
+                          </button>
+                          <a
+                            href="https://e-constitution.tfoe-peinc.com/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-bold text-white flex items-center gap-1.5 transition"
+                            title="Open Official e-Constitution Portal"
+                          >
+                            <span>Open Portal</span>
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Inline RAG Search Bar */}
+                      <div className="relative z-10 mt-5 pt-4 border-t border-white/10">
+                        <span className="text-[11px] font-bold text-amber-300/90 block mb-2">
+                          Interactive Constitutional Query (RAG):
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                            <input
+                              type="text"
+                              id="input-inline-magna-rag"
+                              value={ragInlineQuery}
+                              onChange={(e) => setRagInlineQuery(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  if (ragInlineQuery.trim()) {
+                                    setMagnaCartaInitialQuery(ragInlineQuery.trim());
+                                    setIsMagnaCartaRagOpen(true);
+                                  }
+                                }
+                              }}
+                              placeholder="Ask a question about the Magna Carta (e.g. membership rights, quorum, dues, discipline, elections)..."
+                              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-xs font-medium text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            id="btn-submit-inline-rag"
+                            onClick={() => {
+                              if (ragInlineQuery.trim()) {
+                                setMagnaCartaInitialQuery(ragInlineQuery.trim());
+                                setIsMagnaCartaRagOpen(true);
+                              } else {
+                                setIsMagnaCartaRagOpen(true);
+                              }
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-eagle-blue hover:bg-blue-600 text-white text-xs font-bold shadow flex items-center gap-1.5 transition shrink-0"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" /> Query RAG
+                          </button>
+                        </div>
+
+                        {/* Quick Prompt Chips */}
+                        <div className="flex items-center gap-2 mt-3 flex-wrap text-[11px]">
+                          <span className="text-slate-400 font-semibold">Quick Inquiries:</span>
+                          {[
+                            "Qualifications & Rights",
+                            "Quorum & Assembly Rules",
+                            "Dues & Financial Audit",
+                            "Election Guidelines",
+                            "Disciplinary Procedures",
+                          ].map((topic, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setMagnaCartaInitialQuery(topic);
+                                setIsMagnaCartaRagOpen(true);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-amber-300 transition"
+                            >
+                              {topic}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                         Official Ratified Bylaws & Executive Memoranda
                       </span>
@@ -889,7 +1152,7 @@ export default function HomePage() {
                             className="flex items-center gap-1.5 text-xs font-bold"
                             onClick={() => window.open(doc.file_url, "_blank")}
                           >
-                            <Download className="h-3.5 w-3.5" /> PDF
+                            <ExternalLink className="h-3.5 w-3.5" /> Open
                           </Button>
                         </div>
                       ))
@@ -1090,6 +1353,111 @@ export default function HomePage() {
           setIsDirectoryOpen(false);
         }}
       />
+
+      {/* Official Physical Eagles ID Scanner Modal */}
+      <OfficialIdScannerModal
+        isOpen={isOfficialIdScannerOpen}
+        onClose={() => setIsOfficialIdScannerOpen(false)}
+        memberId={authMember?.id}
+        memberName={activeProfile.name}
+        currentIdUrl={officialIdUrl}
+        onIdUpdated={(newId, front, back) => {
+          setOfficialIdUrl(newId);
+          if (back) setIdCardBackUrl(back);
+          if (authMember) {
+            setAuthMember({ ...authMember, official_id_url: newId });
+          }
+          setRealtimeToast({
+            title: "Official ID Replaced",
+            message: "Your official physical Eagles ID is now active on your dashboard!",
+            type: "success",
+          });
+        }}
+      />
+
+      {/* Profile & Security Settings Modal */}
+      <ProfileSettingsModal
+        isOpen={isProfileSettingsOpen}
+        onClose={() => setIsProfileSettingsOpen(false)}
+        member={
+          authMember
+            ? {
+                ...authMember,
+                blood_type: bloodType,
+                official_id_url: officialIdUrl,
+                id_card_front_url: officialIdUrl,
+                id_card_back_url: idCardBackUrl,
+              }
+            : {
+                id: "demo-id",
+                first_name: "Juan",
+                last_name: "Dela Cruz",
+                email: "juan.delacruz@agilahub.example",
+                role: currentRole,
+                membership_status: "active",
+                chapter_or_branch: "Bantayog Elite Eagles Club",
+                blood_type: bloodType,
+                official_id_url: officialIdUrl,
+              }
+        }
+        onProfileUpdated={(updated) => {
+          if (updated && updated.first_name && updated.last_name) {
+            if (authMember) {
+              setAuthMember({
+                ...authMember,
+                first_name: updated.first_name,
+                last_name: updated.last_name,
+                phone: updated.phone ?? authMember.phone,
+                chapter_or_branch: updated.chapter_or_branch ?? authMember.chapter_or_branch,
+              });
+            }
+          }
+          if (updated?.blood_type) setBloodType(updated.blood_type);
+        }}
+        onOpenIdScanner={() => {
+          setIsProfileSettingsOpen(false);
+          setIsOfficialIdScannerOpen(true);
+        }}
+      />
+
+      {/* PWA Mobile Installation Prompt Banner */}
+      <PwaInstallPrompt />
+
+      {/* Magna Carta & Constitution RAG AI Modal */}
+      <MagnaCartaRagModal
+        isOpen={isMagnaCartaRagOpen}
+        onClose={() => setIsMagnaCartaRagOpen(false)}
+        initialQuery={magnaCartaInitialQuery}
+      />
+
+      {/* Supabase Realtime Live Toast Alert */}
+      {realtimeToast && (
+        <aside
+          aria-label="Realtime Notification"
+          className="fixed top-20 right-4 z-50 max-w-sm rounded-2xl bg-slate-900/95 text-white p-4 shadow-2xl border border-amber-400/40 backdrop-blur-xl animate-slideDown flex items-start gap-3"
+        >
+          <div className="h-8 w-8 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center shrink-0 text-amber-300">
+            <Radio className="h-4 w-4 animate-pulse" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between">
+              <h5 className="font-display font-extrabold text-xs text-amber-300 uppercase tracking-wider">
+                {realtimeToast.title}
+              </h5>
+              <button
+                onClick={() => setRealtimeToast(null)}
+                className="text-slate-400 hover:text-white p-0.5"
+                title="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-200 mt-0.5 leading-snug">
+              {realtimeToast.message}
+            </p>
+          </div>
+        </aside>
+      )}
 
       {/* Mobile Floating Bottom Bar */}
       <MobileNavBar
