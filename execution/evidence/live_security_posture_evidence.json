@@ -1,0 +1,289 @@
+{
+  "metadata": {
+    "project_ref": "jgpigkeekfuawbyilycq",
+    "supabase_url": "https://jgpigkeekfuawbyilycq.supabase.co",
+    "git_commit_sha": "2cfa907f1e88b3f10b7f588d3660a5d03658d43e",
+    "git_branch": "master",
+    "execution_timestamp_utc": "2026-10-19T18:52:45.245289+00:00",
+    "platform": "win32",
+    "python_version": "3.14.8 (tags/v3.14.8:8e6e75d, Sep 30 2026, 18:19:33) [MSC v.1944 64 bit (AMD64)]"
+  },
+  "identities": {
+    "MEMBER_A": {
+      "email": "member.a@eagles.internal",
+      "uid": "00000000-0000-0000-0001-000000000001",
+      "profile_id": "a8fca0ac-047b-43f5-8f5f-281476ddd5df",
+      "member_number": "TEST-MEMBER-A",
+      "role": "member",
+      "membership_status": "active",
+      "chapter_or_branch": "Main Chapter",
+      "verified": true
+    },
+    "MEMBER_B": {
+      "email": "member.b@eagles.internal",
+      "uid": "00000000-0000-0000-0001-000000000002",
+      "profile_id": "2dca896c-f1c8-4e57-8975-c2570fca74eb",
+      "member_number": "TEST-MEMBER-B",
+      "role": "member",
+      "membership_status": "active",
+      "chapter_or_branch": "Main Chapter",
+      "verified": true
+    },
+    "OFFICER": {
+      "email": "officer@eagles.internal",
+      "uid": "00000000-0000-0000-0001-000000000003",
+      "profile_id": "09e42ecc-0b60-4d74-85af-d63a9b715ecc",
+      "member_number": "TEST-OFFICER-01",
+      "role": "officer",
+      "membership_status": "active",
+      "chapter_or_branch": "Main Chapter",
+      "verified": true
+    },
+    "ADMIN": {
+      "email": "admin@eagles.internal",
+      "uid": "00000000-0000-0000-0001-000000000004",
+      "profile_id": "fbcdcfac-3dcd-493f-bcf7-717f2e517799",
+      "member_number": "TEST-ADMIN-01",
+      "role": "admin",
+      "membership_status": "active",
+      "chapter_or_branch": "Main Chapter",
+      "verified": true
+    },
+    "SUSPENDED": {
+      "email": "suspended@eagles.internal",
+      "uid": "00000000-0000-0000-0001-000000000005",
+      "profile_id": "0ca48d91-6eb6-49c8-844e-e335b8a63e8e",
+      "member_number": "TEST-SUSPENDED-01",
+      "role": "member",
+      "membership_status": "suspended",
+      "chapter_or_branch": "Main Chapter",
+      "verified": true
+    }
+  },
+  "fixtures": {
+    "pending_applicant": {
+      "id": "1fd1fc3a-bb3c-4222-b16c-b50c21a25bd4",
+      "status": "pending",
+      "verified": true
+    },
+    "pending_contribution": {
+      "id": "30000000-0000-0000-0000-000000000002",
+      "status": "pending",
+      "amount": 1500.0,
+      "verified": true
+    },
+    "active_event": {
+      "id": "20000000-0000-0000-0000-000000000001",
+      "status": "published",
+      "checkin_open": true,
+      "checkin_code": "AGILA-GMM-2026",
+      "verified": true
+    },
+    "probe_member": {
+      "member_number": "FIXTURE-SECURITY-PROBE",
+      "status": "active",
+      "verified": true
+    }
+  },
+  "security_definer_functions": {},
+  "effective_role_grants": {
+    "anon_approve_member_applicant": {
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function approve_member_applicant",
+      "verified": true
+    },
+    "anon_verify_contribution": {
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function verify_contribution",
+      "verified": true
+    },
+    "anon_submit_self_contribution": {
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function submit_self_contribution",
+      "verified": true
+    },
+    "anon_check_in_self_event": {
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function check_in_self_event",
+      "verified": true
+    },
+    "anon_generate_member_claim_token": {
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function generate_member_claim_token",
+      "verified": true
+    },
+    "anon_officer_submit_contribution_for_member": {
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function officer_submit_contribution_for_member",
+      "verified": true
+    },
+    "anon_officer_update_member_profile": {
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function officer_update_member_profile",
+      "verified": true
+    },
+    "anon_get_financial_ledger_summary": {
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function get_financial_ledger_summary",
+      "verified": true
+    },
+    "member_a_denial_approve_member_applicant": {
+      "status": 400,
+      "code": "P0001",
+      "message": "Forbidden: Only active officers or administrators can approve member applications.",
+      "verified": true
+    },
+    "member_a_denial_verify_contribution": {
+      "status": 400,
+      "code": "P0001",
+      "message": "Forbidden: Only active officers or administrators can verify financial contributions.",
+      "verified": true
+    },
+    "member_a_denial_officer_submit_contribution_for_member": {
+      "status": 400,
+      "code": "P0001",
+      "message": "Forbidden: Only active officers can record contributions on behalf of other members.",
+      "verified": true
+    },
+    "member_a_denial_officer_update_member_profile": {
+      "status": 400,
+      "code": "P0001",
+      "message": "Forbidden: Only active officers can modify another member profile.",
+      "verified": true
+    },
+    "member_a_denial_generate_member_claim_token": {
+      "status": 400,
+      "code": "P0001",
+      "message": "Forbidden: Only active officers or administrators can generate claim tokens.",
+      "verified": true
+    },
+    "suspended_submit_self_contribution": {
+      "status": 400,
+      "code": "P0001",
+      "message": "Unauthorized: No active member record linked to authenticated user.",
+      "verified": true
+    },
+    "officer_financial_ledger": {
+      "status": 200,
+      "total_collected": 5900.0,
+      "verified_count": 5,
+      "verified": true
+    }
+  },
+  "storage_boundaries": {
+    "receipts": {
+      "owner_pre_read": {
+        "status": 200,
+        "bytes": 58
+      },
+      "public_endpoint_denial": {
+        "status": 400,
+        "body": {
+          "statusCode": "404",
+          "error": "Bucket not found",
+          "message": "Bucket not found",
+          "code": "NoSuchBucket"
+        }
+      },
+      "anon_endpoint_denial": {
+        "status": 400,
+        "body": {
+          "statusCode": "404",
+          "error": "not_found",
+          "message": "Object not found",
+          "code": "NoSuchKey"
+        }
+      },
+      "cross_member_b_denial": {
+        "status": 400,
+        "body": {
+          "statusCode": "404",
+          "error": "not_found",
+          "message": "Object not found",
+          "code": "NoSuchKey"
+        }
+      },
+      "officer_access": {
+        "status": 200,
+        "bytes": 58
+      },
+      "owner_post_read": {
+        "status": 200,
+        "bytes": 58
+      },
+      "verified": true
+    },
+    "member-ids": {
+      "owner_pre_read": {
+        "status": 200,
+        "bytes": 58
+      },
+      "public_endpoint_denial": {
+        "status": 400,
+        "body": {
+          "statusCode": "404",
+          "error": "Bucket not found",
+          "message": "Bucket not found",
+          "code": "NoSuchBucket"
+        }
+      },
+      "anon_endpoint_denial": {
+        "status": 400,
+        "body": {
+          "statusCode": "404",
+          "error": "not_found",
+          "message": "Object not found",
+          "code": "NoSuchKey"
+        }
+      },
+      "cross_member_b_denial": {
+        "status": 400,
+        "body": {
+          "statusCode": "404",
+          "error": "not_found",
+          "message": "Object not found",
+          "code": "NoSuchKey"
+        }
+      },
+      "officer_access": {
+        "status": 200,
+        "bytes": 58
+      },
+      "owner_post_read": {
+        "status": 200,
+        "bytes": 58
+      },
+      "verified": true
+    }
+  },
+  "rls_table_protections": {},
+  "platform_limitations": {
+    "supabase_auth_leaked_passwords": {
+      "classification": "DOCUMENTED_PLATFORM_TIER_LIMITATION",
+      "status": "EXPECTED_ON_SUPABASE_FREE_TIER",
+      "details": "HaveIBeenPwned breach checking is unavailable on Supabase Free plan projects and requires an upgraded Pro or Team plan add-on.",
+      "remediation_status": "Documented in security remediation audit report; does not represent an application security vulnerability or code defect."
+    }
+  },
+  "verdict": "PASSED",
+  "migrations": [
+    "20261019000000_initial_schema.sql",
+    "20261019000001_real_database_wiring.sql",
+    "20261019000002_grant_rpc_permissions.sql",
+    "20261019000003_fix_checkin_method.sql",
+    "20261019000004_phases_a_b_d.sql",
+    "20261019000005_phase2_phase3_official_id.sql",
+    "20261019000006_security_audit_remediation.sql",
+    "20261019000007_residual_security_remediation.sql",
+    "20261019000008_security_gate_final_hardening.sql",
+    "20261019000009_role_authorization_hardening.sql"
+  ]
+}

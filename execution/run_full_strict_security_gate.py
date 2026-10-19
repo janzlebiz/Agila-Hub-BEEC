@@ -148,6 +148,17 @@ def main():
         print("[-] FATAL: Remediation runner verification failed.")
         return 1
 
+    # -------------------------------------------------------------------------
+    # 5. Capture Independent Live Security Posture & Database Evidence
+    # -------------------------------------------------------------------------
+    print("\n" + "=" * 80)
+    print("--- 5. Capturing Independent Live Security Posture & Database Evidence ---")
+    audit_cmd = [sys.executable, "execution/audit_database_security_posture.py"]
+    res_audit = subprocess.run(audit_cmd, env=env)
+    if res_audit.returncode != 0:
+        print("[-] FATAL: Database posture and evidence audit failed.")
+        return 1
+
     print("\n" + "=" * 80)
     print("[✓] ALL STRICT PRODUCTION SECURITY GATE CHECKS VERIFIED & PASSED (100%)")
     print("=" * 80)

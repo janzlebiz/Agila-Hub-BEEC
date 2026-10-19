@@ -13,6 +13,7 @@ Enforces Strict Production Security Gate:
 import os
 import sys
 import json
+import base64
 import argparse
 import urllib.request
 import urllib.error
@@ -20,6 +21,19 @@ from pathlib import Path
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+def extract_jwt_sub(token: str) -> str:
+    """Dynamically extracts the user identity (sub claim) from an authenticated JWT payload."""
+    try:
+        parts = token.split(".")
+        if len(parts) >= 2:
+            padding = 4 - (len(parts[1]) % 4)
+            b64_str = parts[1] + ("=" * (padding % 4))
+            payload = json.loads(base64.urlsafe_b64decode(b64_str.encode("utf-8")).decode("utf-8"))
+            return payload.get("sub") or ""
+    except Exception:
+        pass
+    return ""
 
 PROJECT_REF = os.getenv("SUPABASE_PROJECT_REF", "jgpigkeekfuawbyilycq")
 DEFAULT_SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
@@ -108,9 +122,11 @@ def is_explicit_permission_denied(status: int, body: any, function_name: str = "
 def is_explicit_storage_denial(status: int, body: any, is_public_endpoint: bool = False) -> tuple:
     """
     Strict storage access denial verification:
+    - Fails closed on 5xx server errors, network drops (status 0), or ambiguous responses.
     - Rejects HTTP 404 (absent object is NOT proof of access denial).
     - For public endpoint: Must return HTTP 400 with 'Bucket not found or not public' or 401/403.
-    - For private endpoint: Must return HTTP 401 or HTTP 403 with unauthorized/forbidden.
+    - For private endpoint: Must return HTTP 401 or HTTP 403 with unauthorized/forbidden,
+      or HTTP 400 with Storage RLS row-hiding JSON ('not_found' / 'Object not found').
     - HTTP 200 is a critical failure (leak).
     """
     body_str = json.dumps(body) if isinstance(body, (dict, list)) else str(body)
@@ -118,6 +134,8 @@ def is_explicit_storage_denial(status: int, body: any, is_public_endpoint: bool 
 
     if status == 200:
         return False, "CRITICAL LEAK: HTTP 200 received on private storage resource!"
+    if status in (0, 500, 502, 503, 504):
+        return False, f"AMBIGUOUS/SERVER ERROR: HTTP {status} (Server/network failure cannot prove access control): {body_str[:70]}"
     if status == 404:
         return False, "AMBIGUOUS: HTTP 404 (Object not found does not establish access control denial)"
 
@@ -128,11 +146,11 @@ def is_explicit_storage_denial(status: int, body: any, is_public_endpoint: bool 
             return True, f"HTTP {status} confirmed access denied: {body_str[:70]}"
         return False, f"FAIL: HTTP {status} unexpected storage response: {body_str[:70]}"
     else:
-        if status in (401, 403) and ("unauthorized" in body_lower or "forbidden" in body_lower or "permission denied" in body_lower):
+        if status in (401, 403) and ("unauthorized" in body_lower or "forbidden" in body_lower or "permission denied" in body_lower or "jwt" in body_lower):
             return True, f"HTTP {status} confirmed unauthorized: {body_str[:70]}"
-        if status == 400 and ("bucket not found" in body_lower or "not public" in body_lower or "nosuchbucket" in body_lower or "not_found" in body_lower):
-            return True, f"HTTP {status} confirmed private/blocked: {body_str[:70]}"
-        return False, f"FAIL: HTTP {status} expected 401/403 or 400 private rejection: {body_str[:70]}"
+        if status == 400 and ("not_found" in body_lower or "object not found" in body_lower or "bucket not found" in body_lower):
+            return True, f"HTTP {status} confirmed RLS hidden/denied: {body_str[:70]}"
+        return False, f"FAIL: HTTP {status} expected 401/403 or explicit RLS row-hiding rejection: {body_str[:70]}"
 
 def verify_database_state(auth_token: str = None) -> bool:
     print("\n--- Running Hardened Security Gate Verification Assertions ---")
@@ -238,11 +256,40 @@ def verify_database_state(auth_token: str = None) -> bool:
     # -------------------------------------------------------------------------
     # 4. Storage Bucket Private Access Control on Real Fixtures
     # -------------------------------------------------------------------------
-    # Target verified uploaded fixture under member_uid or probe.txt
-    member_uid = os.getenv("MEMBER_A_UID", "00000000-0000-0000-0001-000000000001").strip()
+    # Resolve dynamic member identity without placeholder fallbacks
+    member_jwt = os.getenv("MEMBER_A_JWT", "").strip() or auth_token
+    member_uid = os.getenv("MEMBER_A_UID", "").strip()
+    if not member_uid and member_jwt:
+        member_uid = extract_jwt_sub(member_jwt)
+
+    if not member_uid or member_uid == "00000000-0000-0000-0000-000000000000":
+        assert_check(
+            "Storage Fixture UID Resolution",
+            False,
+            "FAIL-CLOSED: Target fixture UID could not be dynamically resolved. Placeholder fallbacks prohibited."
+        )
+        return False
+
     target_fixture_path = f"{member_uid}/probe.txt"
 
     for bucket in ("receipts", "member-ids"):
+        priv_url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{target_fixture_path}"
+
+        # 4.0 Pre-check owner read to confirm object exists and is accessible
+        owner_verified_pre = False
+        if member_jwt:
+            owner_headers = {**headers, "Authorization": f"Bearer {member_jwt}"}
+            s_pre, b_pre = make_http_request(priv_url, headers=owner_headers)
+            if s_pre == 200:
+                owner_verified_pre = True
+            else:
+                assert_check(
+                    f"Storage: {bucket} owner pre-read",
+                    False,
+                    f"Pre-test owner read failed with HTTP {s_pre} - object fixture must exist before denial test"
+                )
+                continue
+
         # 4.1 Public access endpoint: MUST reject because bucket is private
         pub_url = f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{target_fixture_path}"
         status_pub, body_pub = make_http_request(pub_url, headers=headers)
@@ -250,10 +297,21 @@ def verify_database_state(auth_token: str = None) -> bool:
         assert_check(f"Storage: {bucket} public endpoint denial", passed_pub, reason_pub)
 
         # 4.2 Authenticated object endpoint: MUST reject anonymous caller
-        priv_url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{target_fixture_path}"
         status_priv, body_priv = make_http_request(priv_url, headers=headers)
         passed_priv, reason_priv = is_explicit_storage_denial(status_priv, body_priv, is_public_endpoint=False)
-        assert_check(f"Storage: {bucket} anon direct read denial", passed_priv, reason_priv)
+
+        # 4.3 Post-check owner read to confirm object remains untouched and accessible
+        owner_verified_post = False
+        if member_jwt:
+            s_post, b_post = make_http_request(priv_url, headers=owner_headers)
+            owner_verified_post = (s_post == 200)
+
+        passed_total = passed_priv and (not member_jwt or (owner_verified_pre and owner_verified_post))
+        assert_check(
+            f"Storage: {bucket} anon direct read denial",
+            passed_total,
+            f"{reason_priv} (Pre/Post owner read verified: {owner_verified_post if member_jwt else 'N/A'})"
+        )
 
     # -------------------------------------------------------------------------
     # 5. State Immutability: Independent Pre-Fetch & Post-Fetch Verification

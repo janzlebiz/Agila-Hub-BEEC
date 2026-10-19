@@ -59,6 +59,38 @@ def parse_body(body_bytes: bytes) -> str:
     except Exception:
         return str(body_bytes)
 
+
+def is_exact_storage_denial(status: int, body_bytes: bytes, is_public: bool = False) -> tuple:
+    """
+    Strict validation of storage access control denials.
+    Fails closed on 5xx server errors, network drops (status 0), or ambiguous responses.
+    Requires explicit PostgreSQL/Supabase Storage access denial signals:
+    - On public endpoints: HTTP 400 with 'not public' / 'Bucket not found' OR HTTP 401/403.
+    - On private endpoints (anon or cross-member):
+      HTTP 400 with '{"statusCode":"404","error":"not_found","message":"Object not found"}'
+      (Storage Go server RLS row-hiding signal) OR HTTP 401/403.
+    """
+    body_str = parse_body(body_bytes)
+    body_lower = body_str.lower()
+
+    if status == 200:
+        return False, "CRITICAL LEAK: HTTP 200 received on unauthorized storage resource!"
+    if status in (0, 500, 502, 503, 504):
+        return False, f"AMBIGUOUS/SERVER ERROR: HTTP {status} (Server/network failure cannot prove access control): {body_str[:70]}"
+
+    if is_public:
+        if status == 400 and ("not public" in body_lower or "bucket not found" in body_lower):
+            return True, f"HTTP 400 confirmed private bucket: {body_str[:70]}"
+        if status in (401, 403) and ("unauthorized" in body_lower or "forbidden" in body_lower):
+            return True, f"HTTP {status} confirmed access denied: {body_str[:70]}"
+        return False, f"FAIL: HTTP {status} unexpected public endpoint response: {body_str[:70]}"
+    else:
+        if status in (401, 403) and ("unauthorized" in body_lower or "forbidden" in body_lower or "jwt" in body_lower):
+            return True, f"HTTP {status} confirmed unauthorized: {body_str[:70]}"
+        if status == 400 and ("not_found" in body_lower or "object not found" in body_lower or "bucket not found" in body_lower):
+            return True, f"HTTP 400 confirmed RLS hidden/denied: {body_str[:70]}"
+        return False, f"FAIL: HTTP {status} does not match explicit RLS denial: {body_str[:70]}"
+
 def upload_and_verify_storage(member_jwt: str, member_uid: str, member_b_jwt: str = None, officer_jwt: str = None) -> bool:
     print("=" * 75)
     print("AGILA HUB: REAL STORAGE OBJECT FIXTURE UPLOAD & ISOLATION VERIFICATION")
@@ -111,34 +143,52 @@ def upload_and_verify_storage(member_jwt: str, member_uid: str, member_b_jwt: st
 
         # 3. Public Anonymous Access Denial (Public Endpoint)
         status_pub, body_pub = make_request(pub_url, method="GET")
-        body_pub_str = parse_body(body_pub)
-        passed_pub = (status_pub == 400 and ("not public" in body_pub_str.lower() or "bucket not found" in body_pub_str.lower())) or (status_pub in (401, 403))
+        passed_pub, reason_pub = is_exact_storage_denial(status_pub, body_pub, is_public=True)
         record(
             f"3. Anonymous Public Read Denial ({bucket})",
             passed_pub,
-            f"HTTP {status_pub} - Confirmed private: {body_pub_str[:70]}"
+            reason_pub
         )
 
-        # 4. Anonymous Authenticated Endpoint Denial (Object verified in Step 2 MUST NOT be returned)
+        # 4. Anonymous Direct Endpoint Denial (Validated Pre & Post with Owner Read)
+        # Pre-confirmation: Verify object is readable by owner immediately before test
+        s_pre, b_pre = make_request(priv_url, method="GET", auth_token=member_jwt)
+        if s_pre != 200 or b_pre != PROBE_PAYLOAD:
+            record(f"4. Anonymous Authenticated Endpoint Denial ({bucket})", False, f"Pre-check failed: owner read returned HTTP {s_pre}")
+            continue
+
         status_anon_priv, body_anon_priv = make_request(priv_url, method="GET")
-        body_ap_str = parse_body(body_anon_priv)
-        passed_anon_priv = (status_anon_priv != 200) and (body_anon_priv != PROBE_PAYLOAD)
+        passed_anon_denial, reason_anon = is_exact_storage_denial(status_anon_priv, body_anon_priv, is_public=False)
+
+        # Post-confirmation: Verify object is STILL readable by owner immediately after test
+        s_post, b_post = make_request(priv_url, method="GET", auth_token=member_jwt)
+        passed_post = (s_post == 200 and b_post == PROBE_PAYLOAD)
+
+        passed_anon_total = passed_anon_denial and passed_post
         record(
             f"4. Anonymous Authenticated Endpoint Denial ({bucket})",
-            passed_anon_priv,
-            f"HTTP {status_anon_priv} - Object hidden by RLS: {body_ap_str[:70]}"
+            passed_anon_total,
+            f"{reason_anon} (Pre/Post owner read verified: {passed_post})"
         )
 
-        # 5. Cross-Member Isolation (Member B attempting to read Member A file)
+        # 5. Cross-Member Isolation (Member B attempting to read Member A file, Validated Pre & Post)
         if member_b_jwt:
+            s_pre_b, b_pre_b = make_request(priv_url, method="GET", auth_token=member_jwt)
+            if s_pre_b != 200 or b_pre_b != PROBE_PAYLOAD:
+                record(f"5. Cross-Member Read Isolation ({bucket})", False, f"Pre-check failed: owner read returned HTTP {s_pre_b}")
+                continue
+
             status_b, body_b = make_request(priv_url, method="GET", auth_token=member_b_jwt)
-            body_b_str = parse_body(body_b)
-            # RLS blocks Member B: Storage returns 400/404 or empty/error because Member B is not owner
-            passed_cross = (status_b != 200)
+            passed_b_denial, reason_b = is_exact_storage_denial(status_b, body_b, is_public=False)
+
+            s_post_b, b_post_b = make_request(priv_url, method="GET", auth_token=member_jwt)
+            passed_post_b = (s_post_b == 200 and b_post_b == PROBE_PAYLOAD)
+
+            passed_cross_total = passed_b_denial and passed_post_b
             record(
                 f"5. Cross-Member Read Isolation ({bucket})",
-                passed_cross,
-                f"HTTP {status_b} - Member B blocked from Member A object: {body_b_str[:70]}"
+                passed_cross_total,
+                f"{reason_b} (Pre/Post owner read verified: {passed_post_b})"
             )
 
         # 6. Officer Legitimate Document Access (Officer can read member documents)
@@ -148,7 +198,7 @@ def upload_and_verify_storage(member_jwt: str, member_uid: str, member_b_jwt: st
             record(
                 f"6. Officer Legitimate Read Access ({bucket})",
                 passed_officer,
-                f"HTTP {status_off} - Officer granted read access under RLS policy"
+                f"HTTP {status_off} - Officer granted read access under RLS policy (Bytes matched: {len(body_off)})"
             )
 
     print("\n" + "=" * 75)
