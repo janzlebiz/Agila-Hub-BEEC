@@ -39,6 +39,14 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpncGlna2Vla2Z1YXdieWlseWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMzk0NjQsImV4cCI6MjEwNzkxNTQ2NH0.o9Oa1pM9_Ax_cgi7ZvpWXMq2TOTddoAKWNgr8rqmJos' }}
         run: npm run build
 
+      - name: Setup Dual-Route Compatibility Aliases
+        run: |
+          echo "Generating dual-route compatibility aliases for Android WebView..."
+          cp out/auth/login/index.html out/auth/login.html
+          cp out/auth/register/index.html out/auth/register.html
+          cp out/auth/callback/index.html out/auth/callback.html
+          echo "Dual-route files verified: out/auth/login.html, out/auth/register.html, out/auth/callback.html"
+
       - name: Validate Packaged Static Web Assets
         run: |
           echo "Validating static export output in out/..."
@@ -50,8 +58,12 @@ jobs:
             echo "ERROR: out/_next/static is missing!"
             exit 1
           fi
-          if [ ! -f "out/auth/login.html" ] && [ ! -f "out/auth/login/index.html" ]; then
-            echo "ERROR: auth login asset is missing!"
+          if [ ! -f "out/auth/login/index.html" ] || [ ! -f "out/auth/login.html" ]; then
+            echo "ERROR: auth login directory or fallback asset is missing!"
+            exit 1
+          fi
+          if [ ! -f "out/auth/callback/index.html" ] || [ ! -f "out/auth/callback.html" ]; then
+            echo "ERROR: auth callback directory or fallback asset is missing!"
             exit 1
           fi
           HTML_SIZE=$(wc -c < "out/index.html")

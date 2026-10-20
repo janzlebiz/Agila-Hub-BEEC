@@ -23,8 +23,26 @@ function AuthCallbackContent() {
           return;
         }
         setErrorMsg(error.message);
+      } else if (typeof window !== "undefined" && window.location.hash) {
+        // Handle Implicit OAuth flow or email links passing tokens in URL hash fragment
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get("access_token");
+        const refreshToken = hashParams.get("refresh_token");
+        if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (!error) {
+            router.replace(next);
+            return;
+          }
+          setErrorMsg(error.message);
+        } else {
+          router.replace("/auth/login?error=auth-code-error");
+        }
       } else {
-        // In case tokens were passed via hash fragment or already stored
+        // In case session was already established or stored in local storage
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
           router.replace(next);

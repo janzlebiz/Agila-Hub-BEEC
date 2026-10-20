@@ -6,6 +6,7 @@ const config: CapacitorConfig = {
   webDir: "out",
   server: {
     androidScheme: "https",
+    errorPath: "404.html",
   },
   plugins: {
     SplashScreen: {
