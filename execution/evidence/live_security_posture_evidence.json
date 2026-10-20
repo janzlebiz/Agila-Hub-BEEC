@@ -2,9 +2,9 @@
   "metadata": {
     "project_ref": "jgpigkeekfuawbyilycq",
     "supabase_url": "https://jgpigkeekfuawbyilycq.supabase.co",
-    "git_commit_sha": "2cfa907f1e88b3f10b7f588d3660a5d03658d43e",
+    "git_commit_sha": "3c314ba8d3899f3fa6a287c5d3d893426c42e3b2",
     "git_branch": "master",
-    "execution_timestamp_utc": "2026-10-19T18:52:45.245289+00:00",
+    "execution_timestamp_utc": "2026-10-20T01:51:35.043188+00:00",
     "platform": "win32",
     "python_version": "3.14.8 (tags/v3.14.8:8e6e75d, Sep 30 2026, 18:19:33) [MSC v.1944 64 bit (AMD64)]"
   },
@@ -85,7 +85,468 @@
       "verified": true
     }
   },
-  "security_definer_functions": {},
+  "security_definer_functions": {
+    "approve_member_applicant": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public, pg_temp"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "check_in_event": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "check_in_self_event": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "claim_member_account": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public, extensions"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "generate_member_claim_token": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public, extensions"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "get_financial_ledger_summary": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public, pg_temp"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "handle_new_user": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": false,
+      "hardened": true
+    },
+    "is_active_member": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "is_admin": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "is_officer": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "officer_submit_contribution_for_member": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public, pg_temp"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "officer_update_member_profile": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "record_officer_attendance": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "submit_member_contribution": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "submit_self_contribution": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "update_member_official_id": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "update_member_profile": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "update_self_official_id": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "update_self_profile": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    },
+    "verify_contribution": {
+      "owner": "postgres",
+      "search_path_config": [
+        "search_path=public, pg_temp"
+      ],
+      "anon_can_execute": false,
+      "public_can_execute": false,
+      "authenticated_can_execute": true,
+      "hardened": true
+    }
+  },
+  "all_public_functions": [
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "approve_member_applicant",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public, pg_temp"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "check_in_event",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "check_in_self_event",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "claim_member_account",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public, extensions"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "generate_member_claim_token",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public, extensions"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "get_financial_ledger_summary",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public, pg_temp"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": false,
+      "is_security_definer": true,
+      "name": "handle_new_user",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "is_active_member",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "is_admin",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "is_officer",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "officer_submit_contribution_for_member",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public, pg_temp"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "officer_update_member_profile",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "record_officer_attendance",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "submit_member_contribution",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "submit_self_contribution",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "update_member_official_id",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "update_member_profile",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "update_self_official_id",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "update_self_profile",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": false,
+      "is_security_definer": false,
+      "name": "update_timestamp",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "anon_can_execute": false,
+      "authenticated_can_execute": true,
+      "is_security_definer": true,
+      "name": "verify_contribution",
+      "owner": "postgres",
+      "public_can_execute": false,
+      "schema": "public",
+      "search_path_config": [
+        "search_path=public, pg_temp"
+      ]
+    }
+  ],
+  "public_schema_privileges": {
+    "anon_can_create": false,
+    "authenticated_can_create": false,
+    "public_can_create": false,
+    "hardened": true
+  },
   "effective_role_grants": {
     "anon_approve_member_applicant": {
       "status": 401,
@@ -173,8 +634,8 @@
     },
     "officer_financial_ledger": {
       "status": 200,
-      "total_collected": 5900.0,
-      "verified_count": 5,
+      "total_collected": 2400.0,
+      "verified_count": 1,
       "verified": true
     }
   },
@@ -264,7 +725,256 @@
       "verified": true
     }
   },
-  "rls_table_protections": {},
+  "rls_table_protections": {
+    "announcements": [
+      {
+        "policyname": "Manage announcements",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "(is_officer() OR (author_id = ( SELECT members.id\n   FROM members\n  WHERE (members.user_id = auth.uid()))))",
+        "with_check": null
+      },
+      {
+        "policyname": "Officers create announcements",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "is_officer()"
+      },
+      {
+        "policyname": "Officers delete announcements",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "is_officer()",
+        "with_check": null
+      },
+      {
+        "policyname": "View announcements",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "((category = 'General'::text) OR (is_pinned = true) OR (target_role = 'member'::user_role) OR ((target_role = 'officer'::user_role) AND is_officer()) OR ((target_role = 'admin'::user_role) AND is_admin()))",
+        "with_check": null
+      }
+    ],
+    "attendance": [
+      {
+        "policyname": "Admins delete attendance",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "is_admin()",
+        "with_check": null
+      },
+      {
+        "policyname": "Members view their own attendance, officers view all",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "((member_id = ( SELECT members.id\n   FROM members\n  WHERE (members.user_id = auth.uid()))) OR is_officer())",
+        "with_check": null
+      },
+      {
+        "policyname": "Officers update attendance",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "is_officer()",
+        "with_check": null
+      },
+      {
+        "policyname": "Self check-in or officer logging",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "(((member_id = ( SELECT members.id\n   FROM members\n  WHERE (members.user_id = auth.uid()))) AND (EXISTS ( SELECT 1\n   FROM events\n  WHERE ((events.id = attendance.event_id) AND (events.checkin_open = true) AND (events.status = 'ongoing'::event_status))))) OR is_officer())"
+      }
+    ],
+    "audit_logs": [
+      {
+        "policyname": "Officers view audit logs",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "is_officer()",
+        "with_check": null
+      },
+      {
+        "policyname": "System insert audit logs",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "true"
+      }
+    ],
+    "contributions": [
+      {
+        "policyname": "Admins delete contributions",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "is_admin()",
+        "with_check": null
+      },
+      {
+        "policyname": "Members submit own contributions or officers record",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "((member_id = ( SELECT members.id\n   FROM members\n  WHERE (members.user_id = auth.uid()))) OR is_officer())"
+      },
+      {
+        "policyname": "Officers verify or update contributions",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "is_officer()",
+        "with_check": null
+      },
+      {
+        "policyname": "Strict contributions visibility",
+        "permissive": "PERMISSIVE",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "((member_id IN ( SELECT members.id\n   FROM members\n  WHERE (members.user_id = auth.uid()))) OR is_officer())",
+        "with_check": null
+      }
+    ],
+    "documents": [
+      {
+        "policyname": "Admins delete documents",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "is_admin()",
+        "with_check": null
+      },
+      {
+        "policyname": "Officers update documents",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "is_officer()",
+        "with_check": null
+      },
+      {
+        "policyname": "Officers upload documents",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "is_officer()"
+      },
+      {
+        "policyname": "View documents based on access level",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "((access_level = 'public'::document_access_level) OR ((access_level = 'member'::document_access_level) AND (is_active_member() OR (auth.role() = 'authenticated'::text))) OR ((access_level = 'officer'::document_access_level) AND is_officer()) OR ((access_level = 'admin'::document_access_level) AND is_admin()))",
+        "with_check": null
+      }
+    ],
+    "events": [
+      {
+        "policyname": "Active members view published events",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "SELECT",
+        "qual": "((status = 'published'::event_status) OR (status = 'ongoing'::event_status) OR is_officer())",
+        "with_check": null
+      },
+      {
+        "policyname": "Admins delete events",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "is_admin()",
+        "with_check": null
+      },
+      {
+        "policyname": "Officers create events",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "is_officer()"
+      },
+      {
+        "policyname": "Officers update events",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "is_officer()",
+        "with_check": null
+      }
+    ],
+    "member_claim_tokens": [
+      {
+        "policyname": "Officers manage claim tokens",
+        "permissive": "PERMISSIVE",
+        "roles": "{authenticated}",
+        "cmd": "ALL",
+        "qual": "is_officer()",
+        "with_check": null
+      }
+    ],
+    "members": [
+      {
+        "policyname": "Admins delete members",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "DELETE",
+        "qual": "is_admin()",
+        "with_check": null
+      },
+      {
+        "policyname": "Members update own contact profile",
+        "permissive": "PERMISSIVE",
+        "roles": "{public}",
+        "cmd": "UPDATE",
+        "qual": "((user_id = auth.uid()) OR is_officer())",
+        "with_check": "(((user_id = auth.uid()) AND (NOT is_officer()) AND (role = ( SELECT members_1.role\n   FROM members members_1\n  WHERE (members_1.user_id = auth.uid()))) AND (membership_status = ( SELECT members_1.membership_status\n   FROM members members_1\n  WHERE (members_1.user_id = auth.uid())))) OR is_officer())"
+      },
+      {
+        "policyname": "Strict members visibility",
+        "permissive": "PERMISSIVE",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "((is_active_member() AND (membership_status = 'active'::membership_status)) OR (user_id = auth.uid()) OR is_officer())",
+        "with_check": null
+      }
+    ]
+  },
+  "catalog_migrations": [
+    "20261019000000",
+    "20261019000001",
+    "20261019000002",
+    "20261019000003",
+    "20261019000004",
+    "20261019000005",
+    "20261019000006",
+    "20261019000007",
+    "20261019000008",
+    "20261019000009"
+  ],
+  "catalog_verification": {
+    "verified": true,
+    "security_definer_ok": true,
+    "schema_privilege_ok": true,
+    "policies_ok": true,
+    "migrations_ok": true,
+    "details": {
+      "secdef_count": 20,
+      "policy_table_count": 8,
+      "migration_count": 10
+    }
+  },
   "platform_limitations": {
     "supabase_auth_leaked_passwords": {
       "classification": "DOCUMENTED_PLATFORM_TIER_LIMITATION",
@@ -273,17 +983,5 @@
       "remediation_status": "Documented in security remediation audit report; does not represent an application security vulnerability or code defect."
     }
   },
-  "verdict": "PASSED",
-  "migrations": [
-    "20261019000000_initial_schema.sql",
-    "20261019000001_real_database_wiring.sql",
-    "20261019000002_grant_rpc_permissions.sql",
-    "20261019000003_fix_checkin_method.sql",
-    "20261019000004_phases_a_b_d.sql",
-    "20261019000005_phase2_phase3_official_id.sql",
-    "20261019000006_security_audit_remediation.sql",
-    "20261019000007_residual_security_remediation.sql",
-    "20261019000008_security_gate_final_hardening.sql",
-    "20261019000009_role_authorization_hardening.sql"
-  ]
+  "verdict": "PASSED"
 }

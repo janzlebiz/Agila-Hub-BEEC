@@ -2,14 +2,17 @@
 """
 AGILA Hub - Independent Live Security Posture & Database Evidence Auditor
 Captures deterministic, read-only database evidence supporting:
-1. Exact Git commit SHA, branch, and UTC ISO-8601 execution timestamp.
+1. Exact Git commit SHA, branch, and UTC ISO-8601 execution timestamp (strictly rejects UNKNOWN or mismatches).
 2. Live identity verification of all 5 authenticated personas in auth.users and public.members.
 3. Live state verification of test fixtures (pending applicant, pending contribution, active event, probe member).
-4. Independent verification of all SECURITY DEFINER functions, role grants, and search-path hardening.
-5. Static code and catalog inspection of extensions and non-public references.
-6. RLS policy enforcement and state immutability evidence across domain tables.
-7. Unambiguous storage bucket privacy, owner pre/post verification, and cross-member isolation.
-8. Explicit classification of the Supabase Auth leaked-password warning as a Free-plan platform limitation.
+4. Independent verification of all SECURITY DEFINER functions, role grants, and search-path hardening via database catalog inspection.
+5. Real PostgreSQL catalog checks:
+   - All SECURITY DEFINER functions in pg_proc, ownership (postgres), configured search paths, and execution grants.
+   - Public schema CREATE privileges (strictly revoked from PUBLIC, anon, and authenticated).
+   - Core domain table Row-Level Security (RLS) policies from pg_policies.
+   - Database schema migration versions directly from supabase_migrations.schema_migrations.
+6. Storage bucket privacy, owner pre/post verification, and cross-member isolation.
+7. Explicit classification of the Supabase Auth leaked-password warning as a Free-plan platform limitation.
 """
 
 import os
@@ -51,6 +54,11 @@ FIXTURES = {
     "ACTIVE_EVENT": "20000000-0000-0000-0000-000000000001",
     "PROBE_MEMBER": "FIXTURE-SECURITY-PROBE"
 }
+
+CORE_DOMAIN_TABLES = [
+    "members", "announcements", "events", "attendance",
+    "contributions", "documents", "audit_logs", "member_claim_tokens"
+]
 
 def extract_jwt_sub(token: str) -> str:
     try:
@@ -97,13 +105,37 @@ def http_request(url: str, method: str = "GET", data: dict = None, auth_token: s
     except Exception as e:
         return 0, str(e), b""
 
+def run_catalog_sql_query(sql: str) -> tuple:
+    """
+    Executes a read-only catalog query against the linked database using the Supabase CLI / Management API.
+    Returns (success: bool, rows: list, error: str)
+    """
+    flat_sql = " ".join(sql.split())
+    cmd = ["npx", "supabase", "db", "query", "--linked", flat_sql]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, shell=True, timeout=30)
+        if res.returncode != 0:
+            err = res.stderr or res.stdout
+            return False, [], f"Command failed (code {res.returncode}): {err}"
+        out = res.stdout
+        idx = out.find("{")
+        if idx == -1:
+            return False, [], "No JSON payload found in CLI response"
+        data = json.loads(out[idx:])
+        rows = data.get("rows", [])
+        return True, rows, ""
+    except subprocess.TimeoutExpired:
+        return False, [], "Database query timed out after 30 seconds"
+    except Exception as e:
+        return False, [], str(e)
+
 def main():
     print("=" * 80)
     print("AGILA HUB: INDEPENDENT LIVE SECURITY POSTURE AUDITOR & EVIDENCE RECORDER")
     print(f"Target Supabase API: {SUPABASE_URL}")
     print("=" * 80)
 
-    # 1. Capture Git and Execution Metadata
+    # 1. Capture Git and Execution Metadata (Strict validation, reject UNKNOWN)
     try:
         commit_sha = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
     except Exception:
@@ -118,6 +150,10 @@ def main():
     print(f"[i] Git Branch:     {commit_branch}")
     print(f"[i] Timestamp UTC:  {timestamp_utc}")
 
+    if commit_sha == "UNKNOWN" or len(commit_sha) != 40 or not all(c in "0123456789abcdefABCDEF" for c in commit_sha):
+        print(f"[-] FATAL: Invalid Git commit SHA detected: '{commit_sha}'. Rejecting 'UNKNOWN' or non-hex commit hashes.")
+        return 1
+
     evidence = {
         "metadata": {
             "project_ref": PROJECT_REF,
@@ -131,9 +167,16 @@ def main():
         "identities": {},
         "fixtures": {},
         "security_definer_functions": {},
+        "all_public_functions": [],
+        "public_schema_privileges": {},
         "effective_role_grants": {},
         "storage_boundaries": {},
         "rls_table_protections": {},
+        "catalog_migrations": [],
+        "catalog_verification": {
+            "verified": False,
+            "summary": {}
+        },
         "platform_limitations": {
             "supabase_auth_leaked_passwords": {
                 "classification": "DOCUMENTED_PLATFORM_TIER_LIMITATION",
@@ -196,9 +239,8 @@ def main():
             print(f"[FAIL] Member record lookup failed for {pinfo['label']}")
             evidence["verdict"] = "FAILED"
 
-    # 3. Verify Live Test Fixtures
+    # 3. Verify Live Test Fixtures State
     print("\n--- 2. Verifying Live Test Fixtures State ---")
-    # 3.1 Pending Applicant
     s_app, b_app, _ = http_request(f"{SUPABASE_URL}/rest/v1/members?id=eq.{FIXTURES['PENDING_APPLICANT']}", auth_token=admin_token)
     app_valid = (s_app == 200 and isinstance(b_app, list) and len(b_app) == 1 and b_app[0].get("membership_status") == "pending")
     print(f"[{'PASS' if app_valid else 'FAIL'}] Pending Applicant Fixture ({FIXTURES['PENDING_APPLICANT']}): Status={b_app[0].get('membership_status') if b_app else 'N/A'}")
@@ -208,7 +250,6 @@ def main():
         "verified": app_valid
     }
 
-    # 3.2 Pending Contribution
     s_ct, b_ct, _ = http_request(f"{SUPABASE_URL}/rest/v1/contributions?id=eq.{FIXTURES['PENDING_CONTRIBUTION']}", auth_token=admin_token)
     ct_valid = (s_ct == 200 and isinstance(b_ct, list) and len(b_ct) == 1 and b_ct[0].get("status") == "pending")
     print(f"[{'PASS' if ct_valid else 'FAIL'}] Pending Contribution Fixture ({FIXTURES['PENDING_CONTRIBUTION']}): Status={b_ct[0].get('status') if b_ct else 'N/A'}, Amount={b_ct[0].get('amount') if b_ct else 'N/A'}")
@@ -219,7 +260,6 @@ def main():
         "verified": ct_valid
     }
 
-    # 3.3 Active Event
     s_ev, b_ev, _ = http_request(f"{SUPABASE_URL}/rest/v1/events?id=eq.{FIXTURES['ACTIVE_EVENT']}", auth_token=admin_token)
     ev_valid = (s_ev == 200 and isinstance(b_ev, list) and len(b_ev) == 1 and b_ev[0].get("status") == "published" and b_ev[0].get("checkin_open") is True)
     print(f"[{'PASS' if ev_valid else 'FAIL'}] Active Event Fixture ({FIXTURES['ACTIVE_EVENT']}): Status={b_ev[0].get('status') if b_ev else 'N/A'}, CheckinOpen={b_ev[0].get('checkin_open') if b_ev else 'N/A'}, Code={b_ev[0].get('checkin_code') if b_ev else 'N/A'}")
@@ -231,7 +271,6 @@ def main():
         "verified": ev_valid
     }
 
-    # 3.4 Probe Member
     s_pm, b_pm, _ = http_request(f"{SUPABASE_URL}/rest/v1/members?member_number=eq.{FIXTURES['PROBE_MEMBER']}", auth_token=admin_token)
     pm_valid = (s_pm == 200 and isinstance(b_pm, list) and len(b_pm) == 1 and b_pm[0].get("membership_status") == "active")
     print(f"[{'PASS' if pm_valid else 'FAIL'}] Probe Member Fixture ({FIXTURES['PROBE_MEMBER']}): Status={b_pm[0].get('membership_status') if b_pm else 'N/A'}")
@@ -241,7 +280,7 @@ def main():
         "verified": pm_valid
     }
 
-    # 4. SECURITY DEFINER Functions & Role Grants Live Audit
+    # 4. Live RPC Authorization & Role Grants Audit
     print("\n--- 3. SECURITY DEFINER Functions & Role Grants Live Audit ---")
     sensitive_rpcs = [
         ("approve_member_applicant", {"p_member_id": FIXTURES["PENDING_APPLICANT"]}),
@@ -255,7 +294,6 @@ def main():
     ]
 
     for rpc_name, payload in sensitive_rpcs:
-        # 4.1 Anonymous Caller: MUST return 401 with code 42501 (permission denied)
         s_anon, b_anon, _ = http_request(f"{SUPABASE_URL}/rest/v1/rpc/{rpc_name}", method="POST", data=payload)
         is_42501 = (s_anon in (401, 403)) and isinstance(b_anon, dict) and b_anon.get("code") == "42501"
         print(f"[{'PASS' if is_42501 else 'FAIL'}] Anon RPC Denial: {rpc_name} -> HTTP {s_anon}, Code={b_anon.get('code') if isinstance(b_anon, dict) else 'N/A'}")
@@ -266,7 +304,6 @@ def main():
             "verified": is_42501
         }
 
-    # 4.2 Non-Officer Member A Caller on Officer-Only RPCs: MUST return HTTP 400 with P0001
     officer_rpcs_for_member = [
         ("approve_member_applicant", {"p_member_id": FIXTURES["PENDING_APPLICANT"]}, "Only active officers or administrators can approve member applications"),
         ("verify_contribution", {"p_contribution_id": FIXTURES["PENDING_CONTRIBUTION"], "p_status": "verified"}, "Only active officers or administrators can verify financial contributions"),
@@ -287,7 +324,6 @@ def main():
             "verified": is_p0001
         }
 
-    # 4.3 Suspended Member Restrictions
     suspended_token = tokens["SUSPENDED"]
     s_susp_sub, b_susp_sub, _ = http_request(
         f"{SUPABASE_URL}/rest/v1/rpc/submit_self_contribution",
@@ -304,7 +340,6 @@ def main():
         "verified": susp_sub_valid
     }
 
-    # 4.4 Officer Legitimate Invocations (Positive Proof)
     officer_token = tokens["OFFICER"]
     s_ledger, b_ledger, _ = http_request(f"{SUPABASE_URL}/rest/v1/rpc/get_financial_ledger_summary", method="POST", data={}, auth_token=officer_token)
     ledger_valid = (s_ledger in (200, 201)) and isinstance(b_ledger, dict) and b_ledger.get("verified_count") is not None
@@ -324,27 +359,21 @@ def main():
         pub_url = f"{SUPABASE_URL}/storage/v1/object/public/{bucket}/{member_a_uid}/probe.txt"
         priv_url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{member_a_uid}/probe.txt"
 
-        # Owner Pre-read
         s_own_pre, _, raw_own_pre = http_request(priv_url, auth_token=member_token)
         owner_readable_pre = (s_own_pre == 200 and len(raw_own_pre) == 58)
 
-        # Public denial (must be HTTP 400 with 'Bucket not found' proving private bucket)
         s_pub, b_pub, _ = http_request(pub_url)
         pub_private = (s_pub == 400) and ("bucket not found" in str(b_pub).lower() or "not public" in str(b_pub).lower())
 
-        # Anon authenticated endpoint denial (must return HTTP 400 with 'Object not found' RLS row hiding)
         s_anon_obj, b_anon_obj, _ = http_request(priv_url)
         anon_hidden = (s_anon_obj == 400) and ("not_found" in str(b_anon_obj).lower() or "object not found" in str(b_anon_obj).lower())
 
-        # Cross-member Member B denial (must return HTTP 400 with 'Object not found' RLS row hiding)
         s_b_obj, b_b_obj, _ = http_request(priv_url, auth_token=member_b_token)
         b_hidden = (s_b_obj == 400) and ("not_found" in str(b_b_obj).lower() or "object not found" in str(b_b_obj).lower())
 
-        # Officer legitimate access (must return HTTP 200 with 58 bytes)
         s_off_obj, _, raw_off_obj = http_request(priv_url, auth_token=officer_token)
         off_readable = (s_off_obj == 200 and len(raw_off_obj) == 58)
 
-        # Owner Post-read
         s_own_post, _, raw_own_post = http_request(priv_url, auth_token=member_token)
         owner_readable_post = (s_own_post == 200 and len(raw_own_post) == 58)
 
@@ -360,30 +389,180 @@ def main():
             "verified": storage_all_pass
         }
 
-    # 6. Static Analysis of Migrations & Search-Path Hardening
-    print("\n--- 5. Static Analysis of Function Hardening in Migrations ---")
-    migrations_dir = Path(__file__).parent.parent / "supabase" / "migrations"
-    migration_files = sorted(list(migrations_dir.glob("*.sql")))
-    evidence["migrations"] = [f.name for f in migration_files]
-    print(f"[PASS] Migrations Present: {len(migration_files)} files (000000 to 000009 verified)")
+    # 6. Real Database Catalog Checks (Requirement 2)
+    print("\n--- 5. Real PostgreSQL Database Catalog Auditing (Live pg_catalog & pg_policies) ---")
+
+    # 6.1 Query pg_proc: SECURITY DEFINER functions, ownership, search path, execute grants
+    proc_sql = """
+    SELECT 
+        p.proname AS name,
+        n.nspname AS schema,
+        pg_get_userbyid(p.proowner) AS owner,
+        p.prosecdef AS is_security_definer,
+        p.proconfig AS search_path_config,
+        has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_can_execute,
+        has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated_can_execute,
+        has_function_privilege('public', p.oid, 'EXECUTE') AS public_can_execute
+    FROM pg_proc p
+    JOIN pg_namespace n ON p.pronamespace = n.oid
+    WHERE n.nspname = 'public'
+    ORDER BY p.proname;
+    """
+    ok_proc, proc_rows, err_proc = run_catalog_sql_query(proc_sql)
+    secdef_ok = False
+    if ok_proc and proc_rows:
+        evidence["all_public_functions"] = proc_rows
+        secdef_count = 0
+        secdef_hardened_count = 0
+        for r in proc_rows:
+            fname = r.get("name")
+            is_secdef = bool(r.get("is_security_definer"))
+            owner = r.get("owner")
+            anon_can_exec = bool(r.get("anon_can_execute"))
+            pub_can_exec = bool(r.get("public_can_execute"))
+            search_path = r.get("search_path_config") or []
+
+            if is_secdef:
+                secdef_count += 1
+                # Hardening criteria: owned by postgres, anon/public EXECUTE revoked, search_path explicitly configured
+                has_search_path = len(search_path) > 0 and any("search_path=" in str(sp) for sp in search_path)
+                is_hardened = (owner == "postgres") and (not anon_can_exec) and (not pub_can_exec) and has_search_path
+                if is_hardened:
+                    secdef_hardened_count += 1
+
+                evidence["security_definer_functions"][fname] = {
+                    "owner": owner,
+                    "search_path_config": search_path,
+                    "anon_can_execute": anon_can_exec,
+                    "public_can_execute": pub_can_exec,
+                    "authenticated_can_execute": bool(r.get("authenticated_can_execute")),
+                    "hardened": is_hardened
+                }
+        secdef_ok = (secdef_count > 0) and (secdef_count == secdef_hardened_count)
+        print(f"[{'PASS' if secdef_ok else 'FAIL'}] Catalog pg_proc: {secdef_count} SECURITY DEFINER functions detected ({secdef_hardened_count}/{secdef_count} hardened with owner=postgres, anon/public revoked, explicit search_path)")
+    else:
+        print(f"[-] FATAL: Failed to query pg_proc catalog: {err_proc}")
+
+    # 6.2 Query public schema CREATE privileges
+    schema_sql = """
+    SELECT 
+        has_schema_privilege('anon', 'public', 'CREATE') AS anon_can_create,
+        has_schema_privilege('authenticated', 'public', 'CREATE') AS authenticated_can_create,
+        has_schema_privilege('public', 'public', 'CREATE') AS public_can_create;
+    """
+    ok_schema, schema_rows, err_schema = run_catalog_sql_query(schema_sql)
+    schema_priv_ok = False
+    if ok_schema and schema_rows:
+        s_row = schema_rows[0]
+        anon_create = bool(s_row.get("anon_can_create"))
+        auth_create = bool(s_row.get("authenticated_can_create"))
+        pub_create = bool(s_row.get("public_can_create"))
+        schema_priv_ok = (not anon_create) and (not auth_create) and (not pub_create)
+        evidence["public_schema_privileges"] = {
+            "anon_can_create": anon_create,
+            "authenticated_can_create": auth_create,
+            "public_can_create": pub_create,
+            "hardened": schema_priv_ok
+        }
+        print(f"[{'PASS' if schema_priv_ok else 'FAIL'}] Schema Isolation: public CREATE privileges (anon: {anon_create}, authenticated: {auth_create}, public: {pub_create})")
+    else:
+        print(f"[-] FATAL: Failed to query schema privileges: {err_schema}")
+
+    # 6.3 Query pg_policies: Core domain table Row-Level Security
+    policy_sql = """
+    SELECT 
+        schemaname,
+        tablename,
+        policyname,
+        permissive,
+        roles,
+        cmd,
+        qual,
+        with_check
+    FROM pg_policies
+    WHERE schemaname = 'public'
+    ORDER BY tablename, policyname;
+    """
+    ok_pol, pol_rows, err_pol = run_catalog_sql_query(policy_sql)
+    policies_ok = False
+    if ok_pol and pol_rows:
+        by_table = {}
+        blanket_leaks = 0
+        for p in pol_rows:
+            tname = p.get("tablename")
+            if tname not in by_table:
+                by_table[tname] = []
+            by_table[tname].append({
+                "policyname": p.get("policyname"),
+                "permissive": p.get("permissive"),
+                "roles": p.get("roles"),
+                "cmd": p.get("cmd"),
+                "qual": p.get("qual"),
+                "with_check": p.get("with_check")
+            })
+            # Check for permissive blanket USING (true) leaks on sensitive tables
+            if tname in ("contributions", "members") and p.get("cmd") == "SELECT" and str(p.get("qual")).strip() == "true":
+                blanket_leaks += 1
+
+        evidence["rls_table_protections"] = by_table
+        all_tables_protected = all(t in by_table for t in CORE_DOMAIN_TABLES)
+        policies_ok = all_tables_protected and (blanket_leaks == 0)
+        print(f"[{'PASS' if policies_ok else 'FAIL'}] Catalog pg_policies: {len(pol_rows)} active RLS policies covering {len(by_table)} tables (All 8 core tables covered: {all_tables_protected}, Blanket leaks: {blanket_leaks})")
+    else:
+        print(f"[-] FATAL: Failed to query pg_policies catalog: {err_pol}")
+
+    # 6.4 Query supabase_migrations.schema_migrations: Live migration version catalog
+    mig_sql = "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version;"
+    ok_mig, mig_rows, err_mig = run_catalog_sql_query(mig_sql)
+    mig_ok = False
+    if ok_mig and mig_rows:
+        mig_versions = [r.get("version") for r in mig_rows if r.get("version")]
+        evidence["catalog_migrations"] = mig_versions
+        required_migrations = [
+            "20261019000000", "20261019000001", "20261019000002", "20261019000003",
+            "20261019000004", "20261019000005", "20261019000006", "20261019000007",
+            "20261019000008", "20261019000009"
+        ]
+        all_migs_present = all(m in mig_versions for m in required_migrations)
+        mig_ok = all_migs_present and (len(mig_versions) >= 10)
+        print(f"[{'PASS' if mig_ok else 'FAIL'}] Catalog schema_migrations: {len(mig_versions)} migrations verified in remote catalog (000000 to 000009 all applied: {all_migs_present})")
+    else:
+        print(f"[-] FATAL: Failed to query supabase_migrations catalog: {err_mig}")
+
+    catalog_all_ok = secdef_ok and schema_priv_ok and policies_ok and mig_ok
+    evidence["catalog_verification"] = {
+        "verified": catalog_all_ok,
+        "security_definer_ok": secdef_ok,
+        "schema_privilege_ok": schema_priv_ok,
+        "policies_ok": policies_ok,
+        "migrations_ok": mig_ok,
+        "details": {
+            "secdef_count": len(evidence["security_definer_functions"]),
+            "policy_table_count": len(evidence["rls_table_protections"]),
+            "migration_count": len(evidence["catalog_migrations"])
+        }
+    }
 
     # 7. Write Evidence to Artifacts
-    output_path = Path(__file__).parent / "evidence" / "live_security_posture_evidence.json"
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(evidence, f, indent=2)
-    print(f"\n[✓] Deterministic evidence recorded to: {output_path}")
+    output_dir = Path(__file__).parent / "evidence"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / "live_security_posture_evidence.json"
 
-    # Check overall verdict
+    # Overall Verdict
     all_identities_ok = all(v.get("verified") for v in evidence["identities"].values())
     all_fixtures_ok = all(v.get("verified") for v in evidence["fixtures"].values())
     all_grants_ok = all(v.get("verified") for v in evidence["effective_role_grants"].values())
     all_storage_ok = all(v.get("verified") for v in evidence["storage_boundaries"].values())
 
-    overall_pass = all_identities_ok and all_fixtures_ok and all_grants_ok and all_storage_ok
+    overall_pass = all_identities_ok and all_fixtures_ok and all_grants_ok and all_storage_ok and catalog_all_ok
     evidence["verdict"] = "PASSED" if overall_pass else "FAILED"
 
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(evidence, f, indent=2)
+    print(f"\n[✓] Deterministic evidence recorded to: {output_path}")
+
     print("=" * 80)
-    print(f"AUDIT SUMMARY: Ident={all_identities_ok}, Fixt={all_fixtures_ok}, Grants={all_grants_ok}, Storage={all_storage_ok}")
+    print(f"AUDIT SUMMARY: Ident={all_identities_ok}, Fixt={all_fixtures_ok}, Grants={all_grants_ok}, Storage={all_storage_ok}, Catalog={catalog_all_ok}")
     print(f"OVERALL SECURITY VERDICT: {'ALL CRITERIA VERIFIED (100% PASS)' if overall_pass else 'DEFICIENCIES DETECTED'}")
     print("=" * 80)
 
