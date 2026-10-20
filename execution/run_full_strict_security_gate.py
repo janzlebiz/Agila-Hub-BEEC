@@ -51,22 +51,28 @@ PERSONAS = {
 }
 
 def login_user(email: str, password: str) -> tuple:
+    import time
     url = f"{SUPABASE_URL}/auth/v1/token?grant_type=password"
     headers = {
         "apikey": ANON_KEY,
         "Content-Type": "application/json"
     }
     payload = json.dumps({"email": email, "password": password}).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return True, data.get("access_token"), data.get("user", {}).get("id")
-    except urllib.error.HTTPError as e:
-        err = e.read().decode("utf-8", errors="ignore")
-        return False, None, f"HTTP {e.code}: {err}"
-    except Exception as e:
-        return False, None, str(e)
+    for attempt in range(3):
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return True, data.get("access_token"), data.get("user", {}).get("id")
+        except urllib.error.HTTPError as e:
+            err = e.read().decode("utf-8", errors="ignore")
+            return False, None, f"HTTP {e.code}: {err}"
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(1)
+                continue
+            return False, None, str(e)
+    return False, None, "Login attempts exhausted"
 
 def main():
     run_start_utc = datetime.now(timezone.utc)

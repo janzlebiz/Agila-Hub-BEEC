@@ -1,0 +1,219 @@
+=== AGILA HUB STRICT SECURITY GATE RUN: 2026-10-20T04:01:41.373751+00:00 ===
+[2026-10-20T04:01:41.375254+00:00] ================================================================================
+[2026-10-20T04:01:41.376134+00:00] AGILA HUB: AUTONOMOUS STRICT SECURITY GATE ORCHESTRATOR
+[2026-10-20T04:01:41.377115+00:00] Target Supabase API: https://jgpigkeekfuawbyilycq.supabase.co
+[2026-10-20T04:01:41.378303+00:00] Run Started UTC:    2026-10-20T04:01:41.373751+00:00
+[2026-10-20T04:01:41.379176+00:00] ================================================================================
+[2026-10-20T04:01:41.450821+00:00] [i] Checked-Out Git Commit SHA: 03d4400ca61f0f9a3bf14056f8db31a424930107
+[2026-10-20T04:01:41.453146+00:00] 
+--- 1. Authenticating All 5 Strict Role Personas ---
+[2026-10-20T04:01:42.351172+00:00] [PASS] Member A (Active) (member.a@eagles.internal) -> Authenticated (UID: 00000000...)
+[2026-10-20T04:01:43.155322+00:00] [PASS] Member B (Cross-Chapter) (member.b@eagles.internal) -> Authenticated (UID: 00000000...)
+[2026-10-20T04:01:43.677363+00:00] [PASS] Officer (officer@eagles.internal) -> Authenticated (UID: 00000000...)
+[2026-10-20T04:01:44.099904+00:00] [PASS] Administrator (admin@eagles.internal) -> Authenticated (UID: 00000000...)
+[2026-10-20T04:01:44.497933+00:00] [PASS] Suspended Member (suspended@eagles.internal) -> Authenticated (UID: 00000000...)
+[2026-10-20T04:01:44.499404+00:00] 
+================================================================================
+[2026-10-20T04:01:44.500251+00:00] --- 2. Setting Up & Verifying Real Storage Binary Fixtures ---
+[2026-10-20T04:01:44.500993+00:00] [+] Command: C:\Python314\python.exe execution/setup_storage_fixtures.py --member-jwt eyJhbGciOiJFUzI1NiIsImtpZCI6IjRhYmYwYzI0LTkzZjYtNDliMS04NWJiLTY1NGQzOTgwZmUwOSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2pncGlna2Vla2Z1YXdieWlseWNxLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMS0wMDAwMDAwMDAwMDEiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzkyNDcyNTA0LCJpYXQiOjE3OTI0Njg5MDQsImVtYWlsIjoibWVtYmVyLmFAZWFnbGVzLmludGVybmFsIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJmaXJzdF9uYW1lIjoiSnVhbiIsImxhc3RfbmFtZSI6IkFscGhhIn0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3OTI0Njg5MDR9XSwic2Vzc2lvbl9pZCI6ImQxODlkNTE1LWQxODktNDdiMy04ZWU1LThmNjM5ZDUzMmFkYyIsImlzX2Fub255bW91cyI6ZmFsc2V9.jZVJ0NpQ7DSAMzEB22YGVlHuvgRbHKVdPAnIfQpI6ec5wjsWQOZGnSk9NQo7-hD6Bjc5aOM-gI8YRHqd-kwBjQ --member-uid 00000000-0000-0000-0001-000000000001 --member-b-jwt eyJhbGciOiJFUzI1NiIsImtpZCI6IjRhYmYwYzI0LTkzZjYtNDliMS04NWJiLTY1NGQzOTgwZmUwOSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2pncGlna2Vla2Z1YXdieWlseWNxLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMS0wMDAwMDAwMDAwMDIiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzkyNDcyNTA1LCJpYXQiOjE3OTI0Njg5MDUsImVtYWlsIjoibWVtYmVyLmJAZWFnbGVzLmludGVybmFsIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJmaXJzdF9uYW1lIjoiUGVkcm8iLCJsYXN0X25hbWUiOiJCZXRhIn0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3OTI0Njg5MDV9XSwic2Vzc2lvbl9pZCI6IjlhYzIwNTkzLWQ5NTItNDZjZS04N2NlLWRlYjFjMmQ3M2UxNiIsImlzX2Fub255bW91cyI6ZmFsc2V9.4Gio77ppKkQZamLR9RZ1Z4STtcBLAIf3sbF_aUBDY-bECrsGKlr5Muco34gMIWzL8BLYz1o7VtF1fSTMgPlJlw --officer-jwt eyJhbGciOiJFUzI1NiIsImtpZCI6IjRhYmYwYzI0LTkzZjYtNDliMS04NWJiLTY1NGQzOTgwZmUwOSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2pncGlna2Vla2Z1YXdieWlseWNxLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMS0wMDAwMDAwMDAwMDMiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzkyNDcyNTA1LCJpYXQiOjE3OTI0Njg5MDUsImVtYWlsIjoib2ZmaWNlckBlYWdsZXMuaW50ZXJuYWwiLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImZpcnN0X25hbWUiOiJLdXlhIiwibGFzdF9uYW1lIjoiT2ZmaWNlciJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzkyNDY4OTA1fV0sInNlc3Npb25faWQiOiI1MTc4N2FlNS02ZmMzLTQyNGUtYTZhZC0zNWE2ODFkOTA3MzciLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.cIQJxMu13IogYtYbc-VWh3xQV4pYUKg0GBckysxMK8LDzej0GUNR3npIur6SsVV2ATz2hNn3oQG5eQYFdwi7qg
+[2026-10-20T04:01:44.502137+00:00] ================================================================================
+[2026-10-20T04:02:01.594063+00:00] ===========================================================================
+[2026-10-20T04:02:01.596026+00:00] AGILA HUB: REAL STORAGE OBJECT FIXTURE UPLOAD & ISOLATION VERIFICATION
+[2026-10-20T04:02:01.597769+00:00] Target Supabase Storage: https://jgpigkeekfuawbyilycq.supabase.co/storage/v1
+[2026-10-20T04:02:01.599576+00:00] Target Fixture Owner UID: 00000000-0000-0000-0001-000000000001
+[2026-10-20T04:02:01.601970+00:00] ===========================================================================
+
+[2026-10-20T04:02:01.606341+00:00] --- Testing Bucket: receipts (00000000-0000-0000-0001-000000000001/probe.txt) ---
+[2026-10-20T04:02:01.608106+00:00] [PASS] 1. Owner Upload (receipts): HTTP 200 - {"Key":"receipts/00000000-0000-0000-0001-000000000001/probe.txt","Id":
+[2026-10-20T04:02:01.609715+00:00] [PASS] 2. Owner Real Object Read (receipts): HTTP 200 - Bytes matched: 58 bytes (Exact payload confirmed)
+[2026-10-20T04:02:01.610958+00:00] [PASS] 3. Anonymous Public Read Denial (receipts): HTTP 400 confirmed private bucket: {"statusCode":"404","error":"Bucket not found","message":"Bucket not f
+[2026-10-20T04:02:01.612337+00:00] [PASS] 4. Anonymous Authenticated Endpoint Denial (receipts): HTTP 400 confirmed RLS hidden/denied: {"statusCode":"404","error":"not_found","message":"Object not found"," (Pre/Post owner read verified: True)
+[2026-10-20T04:02:01.613786+00:00] [PASS] 5. Cross-Member Read Isolation (receipts): HTTP 400 confirmed RLS hidden/denied: {"statusCode":"404","error":"not_found","message":"Object not found"," (Pre/Post owner read verified: True)
+[2026-10-20T04:02:01.615020+00:00] [PASS] 6. Officer Legitimate Read Access (receipts): HTTP 200 - Officer granted read access under RLS policy (Bytes matched: 58)
+
+[2026-10-20T04:02:01.617297+00:00] --- Testing Bucket: member-ids (00000000-0000-0000-0001-000000000001/probe.txt) ---
+[2026-10-20T04:02:01.618505+00:00] [PASS] 1. Owner Upload (member-ids): HTTP 200 - {"Key":"member-ids/00000000-0000-0000-0001-000000000001/probe.txt","Id
+[2026-10-20T04:02:01.620373+00:00] [PASS] 2. Owner Real Object Read (member-ids): HTTP 200 - Bytes matched: 58 bytes (Exact payload confirmed)
+[2026-10-20T04:02:01.621493+00:00] [PASS] 3. Anonymous Public Read Denial (member-ids): HTTP 400 confirmed private bucket: {"statusCode":"404","error":"Bucket not found","message":"Bucket not f
+[2026-10-20T04:02:01.622607+00:00] [PASS] 4. Anonymous Authenticated Endpoint Denial (member-ids): HTTP 400 confirmed RLS hidden/denied: {"statusCode":"404","error":"not_found","message":"Object not found"," (Pre/Post owner read verified: True)
+[2026-10-20T04:02:01.623664+00:00] [PASS] 5. Cross-Member Read Isolation (member-ids): HTTP 400 confirmed RLS hidden/denied: {"statusCode":"404","error":"not_found","message":"Object not found"," (Pre/Post owner read verified: True)
+[2026-10-20T04:02:01.624645+00:00] [PASS] 6. Officer Legitimate Read Access (member-ids): HTTP 200 - Officer granted read access under RLS policy (Bytes matched: 58)
+
+[2026-10-20T04:02:01.626541+00:00] ===========================================================================
+[2026-10-20T04:02:01.627474+00:00] [PASS] ALL REAL STORAGE OBJECT FIXTURES AND BOUNDARIES VERIFIED SUCCESSFULLY
+[2026-10-20T04:02:01.628417+00:00] ===========================================================================
+[2026-10-20T04:02:01.642107+00:00] [✓] Step 2 (Setting Up & Verifying Real Storage Binary Fixtures) passed successfully.
+[2026-10-20T04:02:01.643431+00:00] 
+================================================================================
+[2026-10-20T04:02:01.644508+00:00] --- 3. Executing Strict Multi-Role Authorization Matrix Suite ---
+[2026-10-20T04:02:01.645468+00:00] [+] Command: C:\Python314\python.exe tests/test_api_role_authorization.py
+[2026-10-20T04:02:01.646600+00:00] ================================================================================
+[2026-10-20T04:02:01.847897+00:00] ===========================================================================
+[2026-10-20T04:02:01.848689+00:00] AGILA HUB: HARDENED API ROLE AUTHORIZATION INTEGRATION TEST SUITE
+[2026-10-20T04:02:01.849567+00:00] Target Supabase API: https://jgpigkeekfuawbyilycq.supabase.co
+[2026-10-20T04:02:01.850589+00:00] ===========================================================================
+
+[2026-10-20T04:02:01.852732+00:00] --- 1. Anonymous Mutating RPC Rejection Tests (Strict 42501 Verification) ---
+[2026-10-20T04:02:04.194398+00:00] [PASS] Anon: approve_member_applicant - Status: 401, Code: 42501, Msg: permission denied for function approve_member_applicant
+[2026-10-20T04:02:05.273288+00:00] [PASS] Anon: verify_contribution - Status: 401, Code: 42501, Msg: permission denied for function verify_contribution
+[2026-10-20T04:02:06.052060+00:00] [PASS] Anon: submit_self_contribution - Status: 401, Code: 42501, Msg: permission denied for function submit_self_contribution
+[2026-10-20T04:02:06.681933+00:00] [PASS] Anon: check_in_self_event - Status: 401, Code: 42501, Msg: permission denied for function check_in_self_event
+[2026-10-20T04:02:07.242803+00:00] [PASS] Anon: generate_member_claim_token - Status: 401, Code: 42501, Msg: permission denied for function generate_member_claim_token
+[2026-10-20T04:02:07.847973+00:00] [PASS] Anon: officer_submit_contribution_for_member - Status: 401, Code: 42501, Msg: permission denied for function officer_submit_contribution_for_member
+[2026-10-20T04:02:08.889883+00:00] [PASS] Anon: officer_update_member_profile - Status: 401, Code: 42501, Msg: permission denied for function officer_update_member_profile
+
+[2026-10-20T04:02:08.895831+00:00] --- 2. Legacy Privileged Functions Access Rejection ---
+[2026-10-20T04:02:09.765622+00:00] [PASS] Anon: handle_new_user (trigger protected) - Status: 404 (Blocked from direct RPC)
+[2026-10-20T04:02:11.038702+00:00] [PASS] Anon: auto_confirm_user_email (obsolete) - Status: 404 (Not executable)
+[2026-10-20T04:02:11.435149+00:00] [PASS] Anon: current_member - Status: 404 (Not executable by anon)
+[2026-10-20T04:02:11.700229+00:00] [PASS] Anon: rls_auto_enable - Status: 404 (Not executable by anon)
+
+[2026-10-20T04:02:11.705268+00:00] --- 3. Direct Table Mutation & State Integrity (Dedicated Probe Fixture) ---
+[2026-10-20T04:02:13.213265+00:00] [PASS] Anon: Direct INSERT into contributions (Pre/Post Verified) - Status: 401, Count preserved: 2 -> 2
+[2026-10-20T04:02:14.087818+00:00] [PASS] Anon: Direct PATCH on member fixture (Pre/Post Verified) - Patch Status: 401, Rows altered: 0, State preserved: True
+
+[2026-10-20T04:02:14.092438+00:00] --- 4. Storage Bucket Access Control Tests (Strict Non-Ambiguous Rejection) ---
+[2026-10-20T04:02:15.010485+00:00] [PASS] Storage: receipts public endpoint denial - HTTP 400 confirmed private bucket: {"statusCode": "404", "error": "Bucket not found", "message": "Bucket
+[2026-10-20T04:02:15.460337+00:00] [PASS] Storage: receipts anon direct read denial - HTTP 400 confirmed RLS hidden/denied: {"statusCode": "404", "error": "not_found", "message": "Object not fou
+[2026-10-20T04:02:15.726116+00:00] [PASS] Storage: member-ids public endpoint denial - HTTP 400 confirmed private bucket: {"statusCode": "404", "error": "Bucket not found", "message": "Bucket
+[2026-10-20T04:02:16.012097+00:00] [PASS] Storage: member-ids anon direct read denial - HTTP 400 confirmed RLS hidden/denied: {"statusCode": "404", "error": "not_found", "message": "Object not fou
+
+[2026-10-20T04:02:16.017851+00:00] --- 5. Multi-Role Authenticated Authorization Matrix (Strict Mode) ---
+[2026-10-20T04:02:18.151182+00:00] [PASS] Member A: Submit Self Contribution (Dedicated Fixture, Verified & Cleaned) - Status: 200, Created: True, Cleaned: True
+[2026-10-20T04:02:19.288466+00:00] [PASS] Member A: Update Own Profile (Positive, Verified & Restored) - Status: 200
+[2026-10-20T04:02:20.906300+00:00] [PASS] Member A: Rejection from Officer Action (approve_applicant) - HTTP 400 Code P0001 (Explicit authorization exception): Forbidden: Only active officers or administrators can approve member applications. (Pre-Pending: True, Post-Pending: True)
+[2026-10-20T04:02:21.935405+00:00] [PASS] Member A: Rejection from Contribution Verification - HTTP 400 Code P0001 (Explicit authorization exception): Forbidden: Only active officers or administrators can verify financial contributions. (Pre-Pending: True, Post-Pending: True)
+[2026-10-20T04:02:23.639128+00:00] [PASS] Member A: Rejection from Officer Attendance (Pre/Post Verified) - HTTP 400 Code P0001 (Explicit authorization exception): Forbidden: Only active officers or administrators can record attendance. (Zero attendance rows inserted: True)
+[2026-10-20T04:02:25.380176+00:00] [PASS] Member A: Rejection from Officer Contribution Submission (Pre/Post Verified) - HTTP 400 Code P0001 (Explicit authorization exception): Forbidden: Only active officers can record contributions on behalf of other members. (Zero contributions created: True)
+[2026-10-20T04:02:29.200584+00:00] [PASS] Member A: Rejection from Generate Claim Token (Pre/Post Verified) - HTTP 400 Code P0001 (Explicit authorization exception): Forbidden: Only active officers or administrators can generate claim tokens. (Zero claim tokens created: True)
+[2026-10-20T04:02:29.835543+00:00] [PASS] Member B: Cross-Member Profile Tampering Rejected (Pre/Post Verified) - HTTP 400 Code P0001 (Explicit authorization exception): Forbidden: Only active officers can modify another member profile. (Member A profile preserved: True)
+[2026-10-20T04:02:30.339188+00:00] [PASS] Member B: Cross-Member Contribution Isolation (RLS Hidden) - Status: 200, Rows visible: 0
+[2026-10-20T04:02:31.240323+00:00] [PASS] Suspended Member: Submission Rejected (Pre/Post Verified) - HTTP 400 Code P0001 (Explicit authorization exception): Unauthorized: No active member record linked to authenticated user. (Zero records created: True)
+[2026-10-20T04:02:32.219039+00:00] [PASS] Suspended Member: Event Check-in Rejected (Pre/Post Verified) - HTTP 400 Code P0001 (Explicit authorization exception): Unauthorized: Active member account required for event check-in. (Zero attendance rows created: True)
+[2026-10-20T04:02:33.805375+00:00] [PASS] Officer: Authorized Attendance Invocation (Dedicated Fixture, Verified & Cleaned) - Status: 200, DB Verified: True, Cleaned: True
+[2026-10-20T04:02:36.039677+00:00] [PASS] Officer: Generate Claim Token (Dedicated Fixture, Verified & Cleaned) - Status: 200, Token Created: True, Cleaned: True
+[2026-10-20T04:02:36.342510+00:00] [PASS] Officer: Financial Ledger Summary Accessible (Positive) - Status: 200, Verified: 1, Total: 2400.0
+[2026-10-20T04:02:38.071752+00:00] [PASS] Officer: Submit Contribution for Member (Dedicated Fixture, Verified & Cleaned) - Status: 200, DB Verified: True, Cleaned: True
+[2026-10-20T04:02:38.450289+00:00] [PASS] Administrator: Directory Administration Access (Positive) - Status: 200, Directory records visible: 5
+
+[2026-10-20T04:02:38.456241+00:00] ===========================================================================
+[2026-10-20T04:02:38.459329+00:00] HARDENED AUTHORIZATION TEST SUMMARY: 33 Passed, 0 Failed (Total: 33)
+[2026-10-20T04:02:38.462221+00:00] SECURITY GATE ASSESSMENT: ALL VERIFIED CHECKS PASSED
+[2026-10-20T04:02:38.464440+00:00] ===========================================================================
+[2026-10-20T04:02:38.490437+00:00] [✓] Step 3 (Executing Strict Multi-Role Authorization Matrix Suite) passed successfully.
+[2026-10-20T04:02:38.491841+00:00] 
+================================================================================
+[2026-10-20T04:02:38.492665+00:00] --- 4. Executing Hardened Security Remediation Verification Runner ---
+[2026-10-20T04:02:38.493502+00:00] [+] Command: C:\Python314\python.exe execution/apply_security_remediation.py --verify-only --auth-token eyJhbGciOiJFUzI1NiIsImtpZCI6IjRhYmYwYzI0LTkzZjYtNDliMS04NWJiLTY1NGQzOTgwZmUwOSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2pncGlna2Vla2Z1YXdieWlseWNxLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMS0wMDAwMDAwMDAwMDQiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzkyNDcyNTA2LCJpYXQiOjE3OTI0Njg5MDYsImVtYWlsIjoiYWRtaW5AZWFnbGVzLmludGVybmFsIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJmaXJzdF9uYW1lIjoiQ2hpZWYiLCJsYXN0X25hbWUiOiJBZG1pbiJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzkyNDY4OTA2fV0sInNlc3Npb25faWQiOiJjZmM3ZjY0NS02ZDQxLTQ1NGMtYjMxZi1hNGMwMjU3YzY5N2YiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.sSLDRMkZdA9YRjLOpp5gUIkQv9vekQMjJdA7Hv5kwwTmB5XMBU3ILxnYZPrSY1ojYgh5sD3el8hfaE9k7Bq-XA
+[2026-10-20T04:02:38.494508+00:00] ================================================================================
+[2026-10-20T04:02:45.137352+00:00] ======================================================================
+[2026-10-20T04:02:45.153169+00:00] AGILA HUB: HARDENED PRODUCTION SECURITY GATE RUNNER
+[2026-10-20T04:02:45.154876+00:00] Target Supabase Project: jgpigkeekfuawbyilycq
+[2026-10-20T04:02:45.156543+00:00] ======================================================================
+[2026-10-20T04:02:45.158195+00:00] [i] Running in --verify-only mode.
+
+[2026-10-20T04:02:45.161721+00:00] --- Running Hardened Security Gate Verification Assertions ---
+[2026-10-20T04:02:45.163133+00:00] [PASS] Anon RPC: approve_member_applicant: HTTP 401 - permission denied for function approve_member_applicant
+[2026-10-20T04:02:45.164504+00:00] [PASS] Anon RPC: verify_contribution: HTTP 401 - permission denied for function verify_contribution
+[2026-10-20T04:02:45.165772+00:00] [PASS] Anon RPC: submit_self_contribution: HTTP 401 - permission denied for function submit_self_contribution
+[2026-10-20T04:02:45.166963+00:00] [PASS] Anon RPC: generate_member_claim_token: HTTP 401 - permission denied for function generate_member_claim_token
+[2026-10-20T04:02:45.168033+00:00] [PASS] Anon RPC: check_in_self_event: HTTP 401 - permission denied for function check_in_self_event
+[2026-10-20T04:02:45.169288+00:00] [PASS] Anon RPC: officer_submit_contribution_for_member: HTTP 401 - permission denied for function officer_submit_contribution_for_member
+[2026-10-20T04:02:45.170376+00:00] [PASS] Anon RPC: handle_new_user (trigger protected): HTTP 404 (Not callable by anon)
+[2026-10-20T04:02:45.171387+00:00] [PASS] Anon RPC: auto_confirm_user_email (obsolete): HTTP 404 (Not executable by anon)
+[2026-10-20T04:02:45.172764+00:00] [PASS] Anon RPC: current_member: HTTP 404 (Not executable by anon)
+[2026-10-20T04:02:45.174178+00:00] [PASS] Anon RPC: rls_auto_enable: HTTP 404 (Not executable by anon)
+[2026-10-20T04:02:45.175430+00:00] [PASS] Anon Direct INSERT: contributions: HTTP 401 (Direct table write blocked by RLS)
+[2026-10-20T04:02:45.176425+00:00] [PASS] Storage: receipts public endpoint denial: HTTP 400 confirmed private bucket: {"statusCode": "404", "error": "Bucket not found", "message": "Bucket
+[2026-10-20T04:02:45.177646+00:00] [PASS] Storage: receipts anon direct read denial: HTTP 400 confirmed RLS hidden/denied: {"statusCode": "404", "error": "not_found", "message": "Object not fou (Pre/Post owner read verified: True)
+[2026-10-20T04:02:45.179221+00:00] [PASS] Storage: member-ids public endpoint denial: HTTP 400 confirmed private bucket: {"statusCode": "404", "error": "Bucket not found", "message": "Bucket
+[2026-10-20T04:02:45.180217+00:00] [PASS] Storage: member-ids anon direct read denial: HTTP 400 confirmed RLS hidden/denied: {"statusCode": "404", "error": "not_found", "message": "Object not fou (Pre/Post owner read verified: True)
+[2026-10-20T04:02:45.181142+00:00] [PASS] State Immutability: Anon PATCH on member fixture (Verified Pre/Post): Patch: HTTP 401 (Rows: 0), Pre-Role: member, Post-Role: member
+
+[2026-10-20T04:02:45.183115+00:00] ======================================================================
+[2026-10-20T04:02:45.184148+00:00] VERIFICATION RESULT: PASSED (All Hardened Gate Criteria Satisfied)
+[2026-10-20T04:02:45.185142+00:00] ======================================================================
+[2026-10-20T04:02:45.195714+00:00] [✓] Step 4 (Executing Hardened Security Remediation Verification Runner) passed successfully.
+[2026-10-20T04:02:45.197116+00:00] 
+================================================================================
+[2026-10-20T04:02:45.198150+00:00] --- 5. Capturing Independent Live Security Posture & Database Catalog Evidence ---
+[2026-10-20T04:02:45.199080+00:00] [+] Command: C:\Python314\python.exe execution/audit_database_security_posture.py
+[2026-10-20T04:02:45.199929+00:00] ================================================================================
+[2026-10-20T04:03:37.241087+00:00] ================================================================================
+[2026-10-20T04:03:37.241969+00:00] AGILA HUB: INDEPENDENT LIVE SECURITY POSTURE AUDITOR & EVIDENCE RECORDER
+[2026-10-20T04:03:37.242557+00:00] Target Supabase API: https://jgpigkeekfuawbyilycq.supabase.co
+[2026-10-20T04:03:37.243135+00:00] ================================================================================
+[2026-10-20T04:03:37.243708+00:00] [i] Git Commit SHA: 03d4400ca61f0f9a3bf14056f8db31a424930107
+[2026-10-20T04:03:37.244230+00:00] [i] Git Branch:     master
+[2026-10-20T04:03:37.244819+00:00] [i] Timestamp UTC:  2026-10-20T04:02:45.558559+00:00
+
+[2026-10-20T04:03:37.245864+00:00] --- 1. Authenticating Personas & Verifying Live User Records ---
+[2026-10-20T04:03:37.246366+00:00] [PASS] Member A (Active) authenticated -> UID: 00000000-0000-0000-0001-000000000001
+[2026-10-20T04:03:37.246894+00:00] [PASS] Member B (Cross-Chapter) authenticated -> UID: 00000000-0000-0000-0001-000000000002
+[2026-10-20T04:03:37.247427+00:00] [PASS] Officer authenticated -> UID: 00000000-0000-0000-0001-000000000003
+[2026-10-20T04:03:37.247986+00:00] [PASS] Administrator authenticated -> UID: 00000000-0000-0000-0001-000000000004
+[2026-10-20T04:03:37.248568+00:00] [PASS] Suspended Member authenticated -> UID: 00000000-0000-0000-0001-000000000005
+[2026-10-20T04:03:37.249405+00:00] [PASS] Member Record Verified (Member A (Active)): Role=member, Status=active, Chapter=Main Chapter
+[2026-10-20T04:03:37.250347+00:00] [PASS] Member Record Verified (Member B (Cross-Chapter)): Role=member, Status=active, Chapter=Main Chapter
+[2026-10-20T04:03:37.251247+00:00] [PASS] Member Record Verified (Officer): Role=officer, Status=active, Chapter=Main Chapter
+[2026-10-20T04:03:37.252091+00:00] [PASS] Member Record Verified (Administrator): Role=admin, Status=active, Chapter=Main Chapter
+[2026-10-20T04:03:37.252902+00:00] [PASS] Member Record Verified (Suspended Member): Role=member, Status=suspended, Chapter=Main Chapter
+
+[2026-10-20T04:03:37.254688+00:00] --- 2. Verifying Live Test Fixtures State ---
+[2026-10-20T04:03:37.255870+00:00] [PASS] Pending Applicant Fixture (1fd1fc3a-bb3c-4222-b16c-b50c21a25bd4): Status=pending
+[2026-10-20T04:03:37.257109+00:00] [PASS] Pending Contribution Fixture (30000000-0000-0000-0000-000000000002): Status=pending, Amount=1500.0
+[2026-10-20T04:03:37.258030+00:00] [PASS] Active Event Fixture (20000000-0000-0000-0000-000000000001): Status=published, CheckinOpen=True, Code=AGILA-GMM-2026
+[2026-10-20T04:03:37.258934+00:00] [PASS] Probe Member Fixture (FIXTURE-SECURITY-PROBE): Status=active
+
+[2026-10-20T04:03:37.260767+00:00] --- 3. SECURITY DEFINER Functions & Role Grants Live Audit ---
+[2026-10-20T04:03:37.261664+00:00] [PASS] Anon RPC Denial: approve_member_applicant -> HTTP 401, Code=42501
+[2026-10-20T04:03:37.262668+00:00] [PASS] Anon RPC Denial: verify_contribution -> HTTP 401, Code=42501
+[2026-10-20T04:03:37.263747+00:00] [PASS] Anon RPC Denial: submit_self_contribution -> HTTP 401, Code=42501
+[2026-10-20T04:03:37.264708+00:00] [PASS] Anon RPC Denial: check_in_self_event -> HTTP 401, Code=42501
+[2026-10-20T04:03:37.265570+00:00] [PASS] Anon RPC Denial: generate_member_claim_token -> HTTP 401, Code=42501
+[2026-10-20T04:03:37.266697+00:00] [PASS] Anon RPC Denial: officer_submit_contribution_for_member -> HTTP 401, Code=42501
+[2026-10-20T04:03:37.267659+00:00] [PASS] Anon RPC Denial: officer_update_member_profile -> HTTP 401, Code=42501
+[2026-10-20T04:03:37.268551+00:00] [PASS] Anon RPC Denial: get_financial_ledger_summary -> HTTP 401, Code=42501
+[2026-10-20T04:03:37.269356+00:00] [PASS] Member A Officer RPC Denial: approve_member_applicant -> HTTP 400, Code=P0001, Msg=Forbidden: Only active officers or administrators can approv
+[2026-10-20T04:03:37.270209+00:00] [PASS] Member A Officer RPC Denial: verify_contribution -> HTTP 400, Code=P0001, Msg=Forbidden: Only active officers or administrators can verify
+[2026-10-20T04:03:37.271066+00:00] [PASS] Member A Officer RPC Denial: officer_submit_contribution_for_member -> HTTP 400, Code=P0001, Msg=Forbidden: Only active officers can record contributions on
+[2026-10-20T04:03:37.271963+00:00] [PASS] Member A Officer RPC Denial: officer_update_member_profile -> HTTP 400, Code=P0001, Msg=Forbidden: Only active officers can modify another member pr
+[2026-10-20T04:03:37.272669+00:00] [PASS] Member A Officer RPC Denial: generate_member_claim_token -> HTTP 400, Code=P0001, Msg=Forbidden: Only active officers or administrators can genera
+[2026-10-20T04:03:37.273677+00:00] [PASS] Suspended Member Self-Contribution Denial -> HTTP 400, Code=P0001
+[2026-10-20T04:03:37.274644+00:00] [PASS] Officer Financial Ledger Summary -> HTTP 200, TotalCollected=2400.0
+
+[2026-10-20T04:03:37.276352+00:00] --- 4. Storage Bucket Privacy & Object Isolation Audit ---
+[2026-10-20T04:03:37.277139+00:00] [PASS] Bucket: receipts (OwnerPre: 200, PubPrivate: 400, AnonHidden: 400, CrossMemberHidden: 400, OfficerRead: 200, OwnerPost: 200)
+[2026-10-20T04:03:37.277908+00:00] [PASS] Bucket: member-ids (OwnerPre: 200, PubPrivate: 400, AnonHidden: 400, CrossMemberHidden: 400, OfficerRead: 200, OwnerPost: 200)
+
+[2026-10-20T04:03:37.279284+00:00] --- 5. Real PostgreSQL Database Catalog Auditing (Live pg_catalog & pg_policies) ---
+[2026-10-20T04:03:37.279895+00:00] [PASS] Catalog pg_proc: 20 SECURITY DEFINER functions detected (20/20 hardened with owner=postgres, anon/public revoked, explicit search_path)
+[2026-10-20T04:03:37.280692+00:00] [PASS] Schema Isolation: public CREATE privileges (anon: False, authenticated: False, public: False)
+[2026-10-20T04:03:37.281556+00:00] [PASS] Catalog pg_policies: 26 active RLS policies covering 8 tables (All 8 core tables covered: True, Blanket leaks: 0)
+[2026-10-20T04:03:37.282424+00:00] [PASS] Catalog schema_migrations: 10 migrations verified in remote catalog (000000 to 000009 all applied: True)
+
+[2026-10-20T04:03:37.283891+00:00] [âœ“] Deterministic evidence recorded to: D:\Antigravity\Agila Hub\execution\evidence\live_security_posture_evidence.json
+[2026-10-20T04:03:37.284602+00:00] ================================================================================
+[2026-10-20T04:03:37.285274+00:00] AUDIT SUMMARY: Ident=True, Fixt=True, Grants=True, Storage=True, Catalog=True
+[2026-10-20T04:03:37.285968+00:00] OVERALL SECURITY VERDICT: ALL CRITERIA VERIFIED (100% PASS)
+[2026-10-20T04:03:37.286843+00:00] ================================================================================
+[2026-10-20T04:03:37.287585+00:00] [✓] Step 5 (Capturing Independent Live Security Posture & Database Catalog Evidence) passed successfully.
+[2026-10-20T04:03:37.288596+00:00] 
+================================================================================
+[2026-10-20T04:03:37.289426+00:00] --- 6. Post-Run Strict Security Gate Evidence Verification ---
+[2026-10-20T04:03:37.290142+00:00] ================================================================================
+[2026-10-20T04:03:37.291696+00:00] [PASS] Evidence Timestamp Verified Fresh: 2026-10-20T04:03:37.239215+00:00 (Run started 2026-10-20T04:01:41.373751+00:00)
+[2026-10-20T04:03:37.296888+00:00] [i] Evidence Recorded Commit SHA: 03d4400ca61f0f9a3bf14056f8db31a424930107
+[2026-10-20T04:03:37.297822+00:00] [i] Checked-Out HEAD Commit SHA:  03d4400ca61f0f9a3bf14056f8db31a424930107
+[2026-10-20T04:03:37.298681+00:00] [PASS] Commit SHA Match Verified: 100% agreement between working tree and recorded evidence.
+[2026-10-20T04:03:37.299399+00:00] [PASS] Overall Evidence Verdict: PASSED
+[2026-10-20T04:03:37.300093+00:00] [PASS] Database Catalog Verification: VERIFIED (Live pg_proc, pg_policies, schema privileges, and schema_migrations)
+[2026-10-20T04:03:37.300886+00:00] [PASS] SECURITY DEFINER Catalog Audit: 20 functions cataloged and hardened.
+[2026-10-20T04:03:37.301639+00:00] [PASS] RLS Table Coverage: 8 core domain tables protected under pg_policies.
+[2026-10-20T04:03:37.302276+00:00] [PASS] Remote Catalog Migrations: 10 migrations confirmed applied in supabase_migrations.
+[2026-10-20T04:03:37.303010+00:00] 
+================================================================================
+[2026-10-20T04:03:37.303726+00:00] [✓] ALL STRICT PRODUCTION SECURITY GATE CHECKS VERIFIED & PASSED (100%)
+[2026-10-20T04:03:37.304508+00:00] [✓] Evidence JSON: D:\Antigravity\Agila Hub\execution\evidence\live_security_posture_evidence.json
+[2026-10-20T04:03:37.305238+00:00] [✓] Raw Run Log:   D:\Antigravity\Agila Hub\execution\evidence\security_gate_run_20261020_040141.log
+[2026-10-20T04:03:37.305879+00:00] ================================================================================

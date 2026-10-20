@@ -196,13 +196,20 @@ def main():
     tokens = {}
     uids = {}
 
+    import time
     for key, pinfo in PERSONAS.items():
         email = pinfo["email"]
-        s_auth, b_auth, _ = http_request(
-            f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
-            method="POST",
-            data={"email": email, "password": TEST_PASSWORD}
-        )
+        s_auth, b_auth = 0, None
+        for attempt in range(3):
+            s_auth, b_auth, _ = http_request(
+                f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+                method="POST",
+                data={"email": email, "password": TEST_PASSWORD}
+            )
+            if s_auth == 200 and isinstance(b_auth, dict) and b_auth.get("access_token"):
+                break
+            if attempt < 2:
+                time.sleep(1)
         if s_auth == 200 and isinstance(b_auth, dict) and b_auth.get("access_token"):
             token = b_auth["access_token"]
             uid = b_auth.get("user", {}).get("id") or extract_jwt_sub(token)

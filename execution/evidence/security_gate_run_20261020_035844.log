@@ -1,0 +1,22 @@
+=== AGILA HUB STRICT SECURITY GATE RUN: 2026-10-20T03:58:44.168786+00:00 ===
+[2026-10-20T03:58:44.170444+00:00] ================================================================================
+[2026-10-20T03:58:44.171675+00:00] AGILA HUB: AUTONOMOUS STRICT SECURITY GATE ORCHESTRATOR
+[2026-10-20T03:58:44.172601+00:00] Target Supabase API: https://jgpigkeekfuawbyilycq.supabase.co
+[2026-10-20T03:58:44.173485+00:00] Run Started UTC:    2026-10-20T03:58:44.168786+00:00
+[2026-10-20T03:58:44.174996+00:00] ================================================================================
+[2026-10-20T03:58:44.248725+00:00] [i] Checked-Out Git Commit SHA: 03d4400ca61f0f9a3bf14056f8db31a424930107
+[2026-10-20T03:58:44.250708+00:00] 
+--- 1. Authenticating All 5 Strict Role Personas ---
+[2026-10-20T03:58:46.971209+00:00] [PASS] Member A (Active) (member.a@eagles.internal) -> Authenticated (UID: 00000000...)
+[2026-10-20T03:58:48.522777+00:00] [PASS] Member B (Cross-Chapter) (member.b@eagles.internal) -> Authenticated (UID: 00000000...)
+[2026-10-20T03:58:49.903375+00:00] [PASS] Officer (officer@eagles.internal) -> Authenticated (UID: 00000000...)
+[2026-10-20T03:59:04.858418+00:00] [FAIL] Administrator (admin@eagles.internal) -> Login failed: [WinError 10054] An existing connection was forcibly closed by the remote host
+[2026-10-20T03:59:18.935617+00:00] [PASS] Suspended Member (suspended@eagles.internal) -> Authenticated (UID: 00000000...)
+[2026-10-20T03:59:18.938148+00:00] 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[2026-10-20T03:59:18.940828+00:00] ACTION REQUIRED: Test accounts not yet seeded or passwords mismatch in auth.users.
+[2026-10-20T03:59:18.943736+00:00] To provision these 5 accounts instantly:
+[2026-10-20T03:59:18.945864+00:00]   1. Open Supabase Dashboard -> SQL Editor
+[2026-10-20T03:59:18.947505+00:00]   2. Run the script: execution/seed_test_auth_personas.sql
+[2026-10-20T03:59:18.949102+00:00]   3. Rerun: python execution/run_full_strict_security_gate.py
+[2026-10-20T03:59:18.950548+00:00] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
