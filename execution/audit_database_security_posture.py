@@ -112,22 +112,25 @@ def run_catalog_sql_query(sql: str) -> tuple:
     """
     flat_sql = " ".join(sql.split())
     cmd = ["npx", "supabase", "db", "query", "--linked", flat_sql]
-    try:
-        res = subprocess.run(cmd, capture_output=True, text=True, shell=True, timeout=30)
-        if res.returncode != 0:
-            err = res.stderr or res.stdout
-            return False, [], f"Command failed (code {res.returncode}): {err}"
-        out = res.stdout
-        idx = out.find("{")
-        if idx == -1:
-            return False, [], "No JSON payload found in CLI response"
-        data = json.loads(out[idx:])
-        rows = data.get("rows", [])
-        return True, rows, ""
-    except subprocess.TimeoutExpired:
-        return False, [], "Database query timed out after 30 seconds"
-    except Exception as e:
-        return False, [], str(e)
+    for attempt in range(2):
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, shell=True, timeout=60)
+            if res.returncode != 0:
+                err = res.stderr or res.stdout
+                return False, [], f"Command failed (code {res.returncode}): {err}"
+            out = res.stdout
+            idx = out.find("{")
+            if idx == -1:
+                return False, [], "No JSON payload found in CLI response"
+            data = json.loads(out[idx:])
+            rows = data.get("rows", [])
+            return True, rows, ""
+        except subprocess.TimeoutExpired:
+            if attempt == 0:
+                continue
+            return False, [], "Database query timed out after 60 seconds"
+        except Exception as e:
+            return False, [], str(e)
 
 def main():
     print("=" * 80)

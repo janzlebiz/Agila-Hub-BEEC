@@ -5,8 +5,6 @@ const config: CapacitorConfig = {
   appName: "AGILA Hub",
   webDir: "out",
   server: {
-    url: process.env.CAPACITOR_SERVER_URL || "https://agila-hub-beec-a8cjywbv7-janzle.vercel.app",
-    cleartext: false,
     androidScheme: "https",
   },
   plugins: {

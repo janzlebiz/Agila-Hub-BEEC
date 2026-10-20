@@ -33,11 +33,60 @@ jobs:
       - name: Install Node Dependencies
         run: npm ci
 
-      - name: Sync Capacitor Android
+      - name: Build Next.js Static Web Application
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://jgpigkeekfuawbyilycq.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpncGlna2Vla2Z1YXdieWlseWNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMzk0NjQsImV4cCI6MjEwNzkxNTQ2NH0.o9Oa1pM9_Ax_cgi7ZvpWXMq2TOTddoAKWNgr8rqmJos' }}
+        run: npm run build
+
+      - name: Validate Packaged Static Web Assets
         run: |
-          mkdir -p out
-          echo "<!DOCTYPE html><html><body>Redirecting to AGILA Hub...</body></html>" > out/index.html
-          npx cap sync android
+          echo "Validating static export output in out/..."
+          if [ ! -f "out/index.html" ]; then
+            echo "ERROR: out/index.html is missing!"
+            exit 1
+          fi
+          if [ ! -d "out/_next/static" ]; then
+            echo "ERROR: out/_next/static is missing!"
+            exit 1
+          fi
+          if [ ! -f "out/auth/login.html" ] && [ ! -f "out/auth/login/index.html" ]; then
+            echo "ERROR: auth login asset is missing!"
+            exit 1
+          fi
+          HTML_SIZE=$(wc -c < "out/index.html")
+          echo "Verified out/index.html size: $HTML_SIZE bytes"
+          if [ "$HTML_SIZE" -lt 5000 ]; then
+            echo "ERROR: out/index.html is unexpectedly small ($HTML_SIZE bytes). Suspected placeholder!"
+            exit 1
+          fi
+          if grep -q "Redirecting to AGILA Hub" out/index.html; then
+            echo "ERROR: out/index.html contains placeholder redirect markup!"
+            exit 1
+          fi
+          echo "Asset validation passed: Real AGILA Hub web assets are present."
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Verify Android Packaged Assets & Configuration
+        run: |
+          echo "Verifying Android packaged assets in android/app/src/main/assets/..."
+          if [ ! -f "android/app/src/main/assets/public/index.html" ]; then
+            echo "ERROR: Packaged index.html is missing from Android assets!"
+            exit 1
+          fi
+          ASSET_SIZE=$(wc -c < "android/app/src/main/assets/public/index.html")
+          echo "Verified Android assets/public/index.html size: $ASSET_SIZE bytes"
+          if [ "$ASSET_SIZE" -lt 5000 ]; then
+            echo "ERROR: Android packaged index.html is unexpectedly small ($ASSET_SIZE bytes)!"
+            exit 1
+          fi
+          if grep -i "server.url" android/app/src/main/assets/capacitor.config.json || grep -i '"url"' android/app/src/main/assets/capacitor.config.json; then
+            echo "ERROR: Remote server.url found in packaged capacitor.config.json!"
+            exit 1
+          fi
+          echo "Android configuration verified: no remote URL redirect configured."
 
       - name: Grant Execute Permission to Gradlew
         run: chmod +x android/gradlew

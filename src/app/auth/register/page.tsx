@@ -31,6 +31,14 @@ export default function RegisterPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        router.replace("/");
+      }
+    });
+  }, [supabase, router]);
+
   // Claim mode fields (issued privately by chapter Secretariat)
   const [memberNumber, setMemberNumber] = useState("");
   const [claimToken, setClaimToken] = useState("");
