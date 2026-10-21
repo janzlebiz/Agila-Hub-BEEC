@@ -12,17 +12,13 @@ import { createClient } from "@/lib/supabase/client";
 import {
   Calendar,
   CreditCard,
-  Bell,
   FileText,
   HeartHandshake,
   QrCode,
-  ShieldAlert,
   Clock,
   MapPin,
   CheckCircle2,
-  FileCheck,
   Shield,
-  Download,
   Users,
   Check,
   Sparkles,
@@ -30,23 +26,24 @@ import {
   AlertCircle,
   ExternalLink,
   ChevronRight,
-  Landmark,
   Camera,
   Plus,
   Search,
-  Receipt,
   IdCard,
-  Eye,
   X,
+  Radio,
+  ArrowLeft,
+  Home,
+  UserPlus
 } from "lucide-react";
 import { QrAttendanceScanner } from "@/components/scanner/QrAttendanceScanner";
 import { SubmitContributionModal } from "@/components/financial/SubmitContributionModal";
 import { MemberDirectoryModal, DirectoryMember } from "@/components/directory/MemberDirectoryModal";
 import { OfficialIdScannerModal } from "@/components/membership/OfficialIdScannerModal";
 import { ProfileSettingsModal } from "@/components/profile/ProfileSettingsModal";
+import { AddMemberModal } from "@/components/directory/AddMemberModal";
 import { PwaInstallPrompt } from "@/components/ui/PwaInstallPrompt";
 import { MagnaCartaRagModal } from "@/components/documents/MagnaCartaRagModal";
-import { Radio, Wifi } from "lucide-react";
 
 interface MemberRecord {
   id: string;
@@ -61,6 +58,7 @@ interface MemberRecord {
   official_id_url?: string | null;
   id_card_front_url?: string | null;
   id_card_back_url?: string | null;
+  avatar_url?: string | null;
   blood_type?: string | null;
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
@@ -112,9 +110,11 @@ export default function HomePage() {
   const supabase = createClient();
 
   const [currentRole, setCurrentRole] = useState<"admin" | "officer" | "member">("member");
-  const [docketTab, setDocketTab] = useState<"assemblies" | "ledger" | "directory" | "documents" | "community">("assemblies");
+  // Navigation: Default tab is "home", center on bottom nav
+  const [activeTab, setActiveTab] = useState<"home" | "assemblies" | "ledger" | "directory" | "documents">("home");
+  const [assemblySubTab, setAssemblySubTab] = useState<"meetings" | "outreach">("meetings");
   const [isDark, setIsDark] = useState(false);
-  const [textSize, setTextSize] = useState<"normal" | "large" | "xl">("normal");
+  const [textSize, setTextSize] = useState<"normal" | "large" | "xl" | "xxl">("normal");
   const [hydrated, setHydrated] = useState(false);
 
   // Live Database States
@@ -127,21 +127,22 @@ export default function HomePage() {
   const [pendingApplicants, setPendingApplicants] = useState<MemberRecord[]>([]);
   const [allMembers, setAllMembers] = useState<DirectoryMember[]>([]);
 
-  // Phase A, B, and D Modal & Action States
+  // Modals & Action States
   const [isSubmitContribOpen, setIsSubmitContribOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isDirectoryOpen, setIsDirectoryOpen] = useState(false);
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [inspectedMember, setInspectedMember] = useState<DirectoryMember | null>(null);
   const [verifyingContribId, setVerifyingContribId] = useState<string | null>(null);
-  const [previewReceiptUrl, setPreviewReceiptUrl] = useState<string | null>(null);
   const [directorySearch, setDirectorySearch] = useState("");
   const [directoryFilter, setDirectoryFilter] = useState<"all" | "admin" | "officer" | "member">("all");
 
-  // Phase 2 & 3: Official Eagles ID, Profile & Realtime States
+  // Profile & Official ID States
   const [isOfficialIdScannerOpen, setIsOfficialIdScannerOpen] = useState(false);
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [officialIdUrl, setOfficialIdUrl] = useState<string | null>(null);
   const [idCardBackUrl, setIdCardBackUrl] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [bloodType, setBloodType] = useState<string>("O+");
   const [assemblyHeadcount, setAssemblyHeadcount] = useState<number>(38);
   const [realtimeToast, setRealtimeToast] = useState<{
@@ -149,7 +150,6 @@ export default function HomePage() {
     message: string;
     type: "info" | "success" | "warning";
   } | null>(null);
-  const [realtimeConnected, setRealtimeConnected] = useState<boolean>(true);
 
   // Magna Carta & RAG AI States
   const [isMagnaCartaRagOpen, setIsMagnaCartaRagOpen] = useState(false);
@@ -162,7 +162,7 @@ export default function HomePage() {
   const [checkInFeedback, setCheckInFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
-  // Sync theme and text size to root html element
+  // Theme & text size synchronization
   useEffect(() => {
     setHydrated(true);
   }, []);
@@ -196,7 +196,7 @@ export default function HomePage() {
         const { data: memberData } = await supabase
           .from("members")
           .select(
-            "id, first_name, last_name, email, phone, member_number, role, membership_status, chapter_or_branch, official_id_url, id_card_front_url, id_card_back_url, blood_type, emergency_contact_name, emergency_contact_phone"
+            "id, first_name, last_name, email, phone, member_number, role, membership_status, chapter_or_branch, official_id_url, id_card_front_url, id_card_back_url, avatar_url, blood_type, emergency_contact_name, emergency_contact_phone"
           )
           .eq("user_id", user.id)
           .maybeSingle();
@@ -207,11 +207,12 @@ export default function HomePage() {
           setCurrentRole(activeRole);
           if (memberData.official_id_url) setOfficialIdUrl(memberData.official_id_url);
           if (memberData.id_card_back_url) setIdCardBackUrl(memberData.id_card_back_url);
+          if (memberData.avatar_url) setAvatarUrl(memberData.avatar_url);
           if (memberData.blood_type) setBloodType(memberData.blood_type);
         }
       }
 
-      // 2. Fetch Announcements (Explicit safe columns)
+      // 2. Fetch Announcements
       const { data: annData } = await supabase
         .from("announcements")
         .select("id, title, content, category, priority, target_role, is_pinned, published_at")
@@ -220,7 +221,7 @@ export default function HomePage() {
 
       if (annData) setAnnouncements(annData as AnnouncementRecord[]);
 
-      // 3. Fetch Events (Explicit safe columns)
+      // 3. Fetch Events
       const { data: evtData } = await supabase
         .from("events")
         .select("id, title, description, event_date, location, checkin_code, checkin_open, status")
@@ -228,7 +229,7 @@ export default function HomePage() {
 
       if (evtData) setEvents(evtData as EventRecord[]);
 
-      // 4. Fetch Contributions (Explicit ledger columns; private payment references/receipts only via authorized roles)
+      // 4. Fetch Contributions
       const { data: contData } = await supabase
         .from("contributions")
         .select("id, member_id, title, category, amount, payment_method, status, contribution_date, reference_number")
@@ -236,7 +237,7 @@ export default function HomePage() {
 
       if (contData) setContributions(contData as ContributionRecord[]);
 
-      // 5. Fetch Documents (Explicit safe columns)
+      // 5. Fetch Documents
       const { data: docData } = await supabase
         .from("documents")
         .select("id, title, description, category, file_url, file_type, access_level")
@@ -244,7 +245,7 @@ export default function HomePage() {
 
       if (docData) setDocuments(docData as DocumentRecord[]);
 
-      // 6. Fetch Pending Applicants (Strictly role-gated: only query if session is officer or admin)
+      // 6. Fetch Pending Applicants (Role-gated)
       if (activeRole === "admin" || activeRole === "officer") {
         const { data: pendData } = await supabase
           .from("members")
@@ -256,14 +257,60 @@ export default function HomePage() {
         setPendingApplicants([]);
       }
 
-      // 7. Fetch Active Members for Roster / Directory (Excludes blood type, emergency contacts, receipts, and credential photos)
+      // 7. Fetch Active Members for Roster
       const { data: allMemData } = await supabase
         .from("members")
         .select("id, first_name, last_name, email, member_number, role, membership_status, chapter_or_branch")
         .eq("membership_status", "active")
         .order("first_name", { ascending: true });
 
-      if (allMemData) setAllMembers(allMemData as DirectoryMember[]);
+      if (allMemData && allMemData.length > 0) {
+        setAllMembers(allMemData as DirectoryMember[]);
+      } else {
+        // Pre-seed demo directory if empty
+        setAllMembers([
+          {
+            id: "m-01",
+            first_name: "Juan",
+            last_name: "Dela Cruz",
+            email: "president@agilahub.ph",
+            member_number: "BEEC-2024-001",
+            role: "admin",
+            membership_status: "active",
+            chapter_or_branch: "Bantayog Elite Eagles Club",
+          },
+          {
+            id: "m-02",
+            first_name: "Maria",
+            last_name: "Santos",
+            email: "treasurer@agilahub.ph",
+            member_number: "BEEC-2024-002",
+            role: "officer",
+            membership_status: "active",
+            chapter_or_branch: "Bantayog Elite Eagles Club",
+          },
+          {
+            id: "m-03",
+            first_name: "Ricardo",
+            last_name: "Reyes",
+            email: "secretary@agilahub.ph",
+            member_number: "BEEC-2024-003",
+            role: "officer",
+            membership_status: "active",
+            chapter_or_branch: "Bantayog Elite Eagles Club",
+          },
+          {
+            id: "m-04",
+            first_name: "Antonio",
+            last_name: "Luna",
+            email: "member@agilahub.ph",
+            member_number: "BEEC-2025-101",
+            role: "member",
+            membership_status: "active",
+            chapter_or_branch: "Bantayog Elite Eagles Club",
+          },
+        ]);
+      }
 
       // 8. Fetch Assembly Headcount
       const { count: attCount } = await supabase
@@ -275,7 +322,10 @@ export default function HomePage() {
     } catch (err) {
       console.error("Error fetching live database data:", err);
     } finally {
-      setLoading(false);
+      // Smooth minimum splash presentation
+      setTimeout(() => {
+        setLoading(false);
+      }, 450);
     }
   }, [supabase]);
 
@@ -283,20 +333,19 @@ export default function HomePage() {
     fetchHubData();
   }, [fetchHubData]);
 
-  // Phase 2: Supabase Realtime WebSocket Subscriptions
+  // Supabase Realtime WebSocket Subscriptions
   useEffect(() => {
     const channel = supabase
       .channel("agila-hub-live-feed")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "attendance" },
-        (payload) => {
-          console.log("[Realtime] Attendance event:", payload);
+        () => {
           fetchHubData();
           setAssemblyHeadcount((prev) => prev + 1);
           setRealtimeToast({
             title: "Assembly Quorum Live",
-            message: "A brother / sister has just recorded attendance!",
+            message: "A brother / sister has recorded attendance!",
             type: "success",
           });
         }
@@ -305,20 +354,13 @@ export default function HomePage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "contributions" },
         (payload) => {
-          console.log("[Realtime] Contributions event:", payload);
           fetchHubData();
           if (payload.eventType === "UPDATE") {
             const updated = payload.new as { title?: string; status?: string };
             setRealtimeToast({
-              title: "Dues Verified Live",
-              message: `${updated.title || "Contribution"} is now marked ${updated.status?.toUpperCase()}`,
+              title: "Dues Verified",
+              message: `${updated.title || "Contribution"} is marked ${updated.status?.toUpperCase()}`,
               type: "success",
-            });
-          } else {
-            setRealtimeToast({
-              title: "New Dues Uploaded",
-              message: "A member payment proof was received for review.",
-              type: "info",
             });
           }
         }
@@ -327,33 +369,36 @@ export default function HomePage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "announcements" },
         (payload) => {
-          console.log("[Realtime] Announcement event:", payload);
           fetchHubData();
           setRealtimeToast({
             title: "Fraternal Alert",
-            message: (payload.new as { title?: string }).title || "New circular published by Secretariat.",
+            message: (payload.new as { title?: string }).title || "New circular published.",
             type: "warning",
           });
         }
       )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          setRealtimeConnected(true);
-        }
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [supabase, fetchHubData]);
 
-  // Auto-dismiss realtime toast
+  // Auto-dismiss toast
   useEffect(() => {
     if (realtimeToast) {
-      const timer = setTimeout(() => setRealtimeToast(null), 4500);
+      const timer = setTimeout(() => setRealtimeToast(null), 4000);
       return () => clearTimeout(timer);
     }
   }, [realtimeToast]);
+
+  // Time-based greeting helper
+  const getTimeGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
 
   // Profile data displayed on Digital ID
   const activeProfile = inspectedMember
@@ -369,7 +414,7 @@ export default function HomePage() {
     ? {
         name: `${authMember.first_name} ${authMember.last_name}`,
         nickname: authMember.first_name,
-        idNumber: authMember.member_number || "AGILA-PENDING",
+        idNumber: authMember.member_number || "BEEC-2024-001",
         club: authMember.chapter_or_branch || "Bantayog Elite Eagles Club",
         region: "National Executive / Region V",
         status: authMember.membership_status,
@@ -378,15 +423,15 @@ export default function HomePage() {
         admin: {
           name: "Kuya Juan Dela Cruz",
           nickname: "Juan",
-          idNumber: "AGILA-2024-001",
+          idNumber: "BEEC-2024-001",
           club: "Bantayog Elite Eagles Club",
-          region: "National Executive / Bicol Region",
+          region: "National Executive / Region V",
           status: "active" as const,
         },
         officer: {
           name: "Ate Maria Santos",
           nickname: "Maria",
-          idNumber: "AGILA-2024-002",
+          idNumber: "BEEC-2024-002",
           club: "Bantayog Elite Eagles Club",
           region: "Finance & Treasury / Region V",
           status: "active" as const,
@@ -394,9 +439,9 @@ export default function HomePage() {
         member: {
           name: "Kuya Antonio Luna",
           nickname: "Antonio",
-          idNumber: "AGILA-2025-101",
+          idNumber: "BEEC-2025-101",
           club: "Bantayog Elite Eagles Club",
-          region: "Metro Manila Chapter",
+          region: "Bantayog Elite Eagles Club",
           status: "active" as const,
         },
       }[currentRole];
@@ -408,6 +453,24 @@ export default function HomePage() {
   const totalVerifiedDues = contributions
     .filter((c) => c.status === "verified")
     .reduce((acc, c) => acc + Number(c.amount), 0);
+
+  // Handle Logout
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setAuthMember(null);
+      setCurrentRole("member");
+      setRealtimeToast({
+        title: "Signed Out",
+        message: "You have signed out of AGILA Hub.",
+        type: "info",
+      });
+      window.location.href = "/auth/login";
+    } catch (err) {
+      console.error("Logout error:", err);
+      window.location.href = "/auth/login";
+    }
+  };
 
   // Handle Officer Verification for Contributions
   const handleVerifyContribution = async (contribId: string, status: "verified" | "rejected") => {
@@ -430,7 +493,7 @@ export default function HomePage() {
     }
   };
 
-  // Filtered members for inline Roster tab
+  // Filtered members for Roster
   const filteredDirectoryMembers = allMembers.filter((m) => {
     const term = directorySearch.toLowerCase();
     const fullName = `${m.first_name} ${m.last_name}`.toLowerCase();
@@ -447,23 +510,21 @@ export default function HomePage() {
     setCheckInLoading(true);
     setCheckInFeedback(null);
     try {
-      // Self-service check-in bound strictly to authenticated session auth.uid()
       const { data, error } = await supabase.rpc("check_in_self_event", {
         p_event_id: eventId,
         p_checkin_code: checkInCode.trim().toUpperCase(),
       });
 
-      // R-03: Fail closed. Do NOT fall back to legacy RPC if secure self check-in errors
       if (error) {
         setCheckInFeedback({
           success: false,
-          message: error.message || "Self check-in failed. Please verify that the meeting check-in window is open.",
+          message: error.message || "Self check-in failed. Verify assembly quorum window is open.",
         });
         return;
       }
 
       if (data) {
-        const res = data as { success: boolean; message: string; already_checked_in?: boolean };
+        const res = data as { success: boolean; message: string };
         setCheckInFeedback({ success: res.success, message: res.message });
       }
     } catch (err: unknown) {
@@ -492,865 +553,963 @@ export default function HomePage() {
     }
   };
 
-  return (
-    <div data-hydrated={hydrated} className="min-h-screen flex flex-col pb-24 sm:pb-12 text-slate-900 dark:text-white transition-colors duration-300">
-      {/* Top Glass Header */}
-      <Header
-        currentRole={currentRole}
-        onRoleChange={setCurrentRole}
-        isDark={isDark}
-        onToggleTheme={() => setIsDark((prev) => !prev)}
-        textSize={textSize}
-        onChangeTextSize={setTextSize}
-        authMember={authMember}
-        onOpenProfile={() => setIsProfileSettingsOpen(true)}
-      />
+  // ===========================================================================
+  // 1. DEDICATED LOADING SPLASH SCREEN WITH AGILA HUB LOGO
+  // ===========================================================================
+  if (loading) {
+    return (
+      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-950 text-white selection:bg-eagle-blue animate-fadeIn">
+        {/* Background ambient orbs */}
+        <div className="absolute w-96 h-96 bg-eagle-blue/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
+        <div className="absolute w-80 h-80 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-8">
-        {/* Fraternal Greeting Section (Natural Voice, No Single-word Accent Splits) */}
-        <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                </span>
-                Mabuhay ang Agila!
-              </span>
-              <span className="text-slate-300 dark:text-slate-600 font-bold">•</span>
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                {activeProfile.club}
-              </span>
-              {realtimeConnected && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                  <Radio className="h-3 w-3 animate-pulse" /> Live Realtime
-                </span>
-              )}
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 dark:text-white tracking-tight">
-              Good day, {activeProfile.name}
+        <div className="relative z-10 flex flex-col items-center text-center p-6 space-y-5">
+          {/* Official AGILA Hub Logo */}
+          <div className="relative h-28 w-28 sm:h-32 sm:w-32 rounded-3xl bg-white p-3 shadow-2xl border-2 border-amber-400/80 flex items-center justify-center">
+            <Image
+              src="/assets/AGILA Hub.png"
+              alt="AGILA Hub"
+              width={100}
+              height={100}
+              className="object-contain"
+              priority
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <h1 className="font-display font-black text-2xl sm:text-3xl tracking-tight text-white flex items-center justify-center gap-2">
+              AGILA HUB
+              <span className="h-2 w-2 rounded-full bg-bumblebee-yellow inline-block animate-ping" />
             </h1>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
-              Authorized portal session active with {currentRole === "admin" ? "National Executive" : currentRole === "officer" ? "Club Officer" : "Charter Member"} credentials.
+            <p className="text-xs font-bold text-amber-400 tracking-widest uppercase">
+              TFOE-PE, INC.
+            </p>
+            <p className="text-[11px] text-slate-400 font-medium">
+              Authorized Fraternal Portal
             </p>
           </div>
 
-          {/* Quiet Standing Indicators */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="py-2.5 px-4 rounded-2xl bg-white/80 dark:bg-canvas-slate/80 border border-slate-200/90 dark:border-white/10 shadow-sm flex items-center gap-3">
-              <div className="h-8 w-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold">
-                <CheckCircle2 className="h-4 w-4" />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block uppercase tracking-wider">
-                  Fraternal Standing
-                </span>
-                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                  Good Standing • Dues Current
-                </span>
-              </div>
+          <div className="pt-4 flex flex-col items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-eagle-blue animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="h-2 w-2 rounded-full bg-bumblebee-yellow animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "300ms" }} />
             </div>
-
-            <div className="py-2.5 px-4 rounded-2xl bg-white/80 dark:bg-canvas-slate/80 border border-slate-200/90 dark:border-white/10 shadow-sm flex items-center gap-3">
-              <div className="h-8 w-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-eagle-blue flex items-center justify-center font-bold">
-                <Landmark className="h-4 w-4" />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold block uppercase tracking-wider">
-                  Regional Chapter
-                </span>
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                  Region V • Bicol Peninsula
-                </span>
-              </div>
-            </div>
+            <span className="text-[10px] text-slate-400 font-mono tracking-wider">
+              Initializing secure session...
+            </span>
           </div>
-        </section>
+        </div>
+      </div>
+    );
+  }
 
-        {/* Layout Grid: Left = Hero Official Credential & Tactile Passcode / Right = Fraternal Action Docket */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          {/* Col 1: Hero Credential & Tactile Assembly Check-In */}
-          <div className="lg:col-span-5 space-y-6">
-            <div>
-              <div className="flex items-center justify-between mb-3 px-1">
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-wider">
-                  Official Member Credential
-                </span>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                  Verified RFID & QR
-                </span>
+  return (
+    <div data-hydrated={hydrated} className="min-h-screen flex flex-col pb-28 text-slate-900 dark:text-white transition-colors duration-300">
+      
+      {/* ===================================================================== */}
+      {/* A. HOME VIEW (Contains Header, Greetings, Digital ID, Announcements)   */}
+      {/* ===================================================================== */}
+      {activeTab === "home" && (
+        <>
+          {/* Top Glass Header with pt-safe, single T text size, single Profile button, and logout */}
+          <Header
+            currentRole={currentRole}
+            onRoleChange={setCurrentRole}
+            isDark={isDark}
+            onToggleTheme={() => setIsDark((prev) => !prev)}
+            textSize={textSize}
+            onChangeTextSize={setTextSize}
+            authMember={authMember}
+            onOpenProfile={() => setIsProfileSettingsOpen(true)}
+            onLogout={handleLogout}
+          />
+
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-5 space-y-6">
+            {/* Fraternal Greeting Section: Time-based + Nickname only! */}
+            <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    Mabuhay ang Agila!
+                  </span>
+                  <span className="text-slate-300 dark:text-slate-600 font-bold">•</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                    {activeProfile.club}
+                  </span>
+                </div>
+
+                <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 dark:text-white tracking-tight">
+                  {getTimeGreeting()}, {activeProfile.nickname}
+                </h1>
               </div>
 
               {/* Inspected member from directory banner */}
               {inspectedMember && (
-                <div className="mb-2.5 p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-400/30 flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200 animate-fadeIn">
-                  <span>Inspecting: {activeProfile.name}</span>
+                <div className="p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-400/30 flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200 animate-fadeIn">
+                  <span>Inspecting ID: {activeProfile.name}</span>
                   <button
                     type="button"
                     onClick={() => setInspectedMember(null)}
-                    className="text-[11px] text-eagle-blue dark:text-amber-300 underline font-bold"
+                    className="ml-3 text-[11px] text-eagle-blue dark:text-amber-300 underline font-bold"
                   >
                     Reset to My ID
                   </button>
                 </div>
               )}
+            </section>
 
-              {/* The Physical Executive Polycarbonate Credential & Scanned Official ID */}
-              <DigitalIdCard
-                fullName={activeProfile.name}
-                nickname={activeProfile.nickname}
-                memberNumber={activeProfile.idNumber}
-                clubName={activeProfile.club}
-                region={activeProfile.region}
-                role={currentRole}
-                status={activeProfile.status}
-                bloodType={bloodType}
-                officialIdUrl={officialIdUrl || (inspectedMember?.official_id_url ?? null)}
-                idCardBackUrl={idCardBackUrl || (inspectedMember?.id_card_back_url ?? null)}
-                onOpenScanModal={() => setIsOfficialIdScannerOpen(true)}
-              />
-            </div>
-
-            {/* Tactile Assembly Check-In Card */}
-            {activeEvent && (
-              <GlassCard variant="glow-blue" className="p-5 shadow-lg border-eagle-blue/20">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <Badge variant={activeEvent.checkin_open ? "blue" : "neutral"} size="sm">
-                        {activeEvent.checkin_open ? "Assembly Quorum Open" : "Upcoming Meeting"}
-                      </Badge>
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                        Live Quorum: {assemblyHeadcount} Checked In
-                      </span>
-                    </div>
-                    <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                      {activeEvent.title.replace("[SEED] ", "")}
-                    </h4>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
-                      <MapPin className="h-3.5 w-3.5 text-eagle-blue shrink-0" />
-                      {activeEvent.location || "Agila Clubhouse & Conference Hall, QC"}
-                    </p>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
-                      <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      Assembly Date: {new Date(activeEvent.event_date).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="h-12 w-12 rounded-2xl bg-white dark:bg-canvas-slate shadow-sm border border-slate-200 dark:border-white/10 flex items-center justify-center shrink-0">
-                    <QrCode className="h-6 w-6 text-slate-800 dark:text-white" />
-                  </div>
-                </div>
-
-                {/* Tactile PIN / Check-in Feedback */}
-                {checkInFeedback && (
-                  <div
-                    className={`mt-4 p-3 rounded-xl border flex items-center gap-2 text-xs font-semibold animate-fadeIn ${
-                      checkInFeedback.success
-                        ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-800 dark:text-emerald-300"
-                        : "bg-rose-50 dark:bg-rose-950/30 border-rose-300 text-rose-800 dark:text-rose-300"
-                    }`}
-                  >
-                    {checkInFeedback.success ? <Check className="h-4 w-4 shrink-0 text-emerald-600" /> : <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />}
-                    <span>{checkInFeedback.message}</span>
-                  </div>
-                )}
-
-                {/* Tactile Passcode Input Block */}
-                <div className="mt-5 pt-4 border-t border-slate-200/80 dark:border-white/10">
-                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-2">
-                    Enter Official Assembly Passcode:
-                  </span>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={checkInCode}
-                        onChange={(e) => setCheckInCode(e.target.value.toUpperCase())}
-                        placeholder="ENTER CODE"
-                        className="w-full h-11 px-3.5 rounded-xl bg-slate-100/90 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 font-mono text-sm font-black tracking-widest text-slate-900 dark:text-white text-center uppercase focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
-                      />
-                    </div>
-                    <Button
-                      size="sm"
-                      variant={checkInFeedback?.success ? "secondary" : "primary"}
-                      disabled={checkInLoading}
-                      onClick={() => handleCheckIn(activeEvent.id)}
-                      className="h-11 px-5 text-xs font-bold shadow-md"
-                    >
-                      {checkInLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : checkInFeedback?.success ? (
-                        "✓ Attendance Confirmed"
-                      ) : (
-                        "Confirm Attendance"
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Secretariat Camera QR Scanner Trigger */}
-                {(currentRole === "admin" || currentRole === "officer") && (
-                  <div className="mt-4 pt-3 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between">
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
-                        Secretariat Officer Console:
-                      </span>
-                      <span className="text-[10px] text-slate-500">
-                        Scan incoming members at registration door
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsScannerOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white text-xs font-bold shadow-md hover:brightness-110 active:scale-95 transition"
-                    >
-                      <Camera className="h-3.5 w-3.5" />
-                      <span>Launch QR Scanner</span>
-                    </button>
-                  </div>
-                )}
-              </GlassCard>
-            )}
-          </div>
-
-          {/* Col 2: The Fraternal Action Docket & Circulars */}
-          <div className="lg:col-span-7 space-y-6">
-            
-            {/* The Unified Fraternal Action Docket (Replaced generic 4 square tiles) */}
-            <div className="rounded-3xl border border-slate-200/90 dark:border-white/10 bg-white/80 dark:bg-canvas-slate/80 backdrop-blur-deep p-2 shadow-sm">
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 p-1 bg-slate-100/80 dark:bg-white/[0.05] rounded-2xl text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setDocketTab("assemblies")}
-                  className={`py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition ${
-                    docketTab === "assemblies"
-                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  <Calendar className="h-3.5 w-3.5 text-eagle-blue" />
-                  <span className="truncate">Assemblies ({events.length})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDocketTab("ledger")}
-                  className={`py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition ${
-                    docketTab === "ledger"
-                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
-                  <span className="truncate">Ledger (₱{totalVerifiedDues.toLocaleString()})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDocketTab("directory")}
-                  className={`py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition ${
-                    docketTab === "directory"
-                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  <Users className="h-3.5 w-3.5 text-blue-500" />
-                  <span className="truncate">Roster ({allMembers.length})</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDocketTab("documents")}
-                  className={`py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition ${
-                    docketTab === "documents"
-                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  <FileText className="h-3.5 w-3.5 text-amber-500" />
-                  <span className="truncate">Vault</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDocketTab("community")}
-                  className={`py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition ${
-                    docketTab === "community"
-                      ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm font-bold"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  <HeartHandshake className="h-3.5 w-3.5 text-purple-500" />
-                  <span className="truncate">Outreach</span>
-                </button>
-              </div>
-
-              {/* DOCKET CONTENT CONTAINER */}
-              <div className="p-4 sm:p-5">
-                {/* 1. ASSEMBLIES TAB */}
-                {docketTab === "assemblies" && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                        Official Chapter Calendar & Assemblies
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        Live Secretariat Schedule
-                      </span>
-                    </div>
-
-                    {events.map((evt) => (
-                      <div
-                        key={evt.id}
-                        className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-eagle-blue/30 transition"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h5 className="font-display font-bold text-sm text-slate-900 dark:text-white">
-                              {evt.title.replace("[SEED] ", "")}
-                            </h5>
-                            {evt.checkin_open && (
-                              <Badge variant="green" size="sm">
-                                Quorum Active
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                            {evt.description}
-                          </p>
-                          <div className="flex items-center gap-4 text-[11px] text-slate-500 dark:text-slate-400 mt-2 font-medium">
-                            <span>📍 {evt.location || "QC Clubhouse"}</span>
-                            <span>📅 {new Date(evt.event_date).toLocaleDateString()}</span>
-                          </div>
-                        </div>
-
-                        {evt.checkin_code && (
-                          <div className="shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => setCheckInCode(evt.checkin_code || "")}
-                              className="px-3 py-1.5 rounded-xl bg-slate-200/80 dark:bg-white/10 text-xs font-mono font-bold text-slate-800 dark:text-white hover:bg-eagle-blue hover:text-white transition"
-                              title="Click to copy passcode to check-in box"
-                            >
-                              Code: {evt.checkin_code}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* 2. FINANCIAL LEDGER TAB */}
-                {docketTab === "ledger" && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                          Fraternal Dues & Contribution Records
-                        </span>
-                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
-                          Audited Secretariat Balance: ₱{totalVerifiedDues.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={() => setIsSubmitContribOpen(true)}
-                        className="text-xs font-bold flex items-center gap-1.5 h-8 px-3 shadow-sm"
-                      >
-                        <Plus className="h-3.5 w-3.5" /> Submit Dues / Donation
-                      </Button>
-                    </div>
-
-                    {contributions.map((c) => (
-                      <div
-                        key={c.id}
-                        className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-slate-900 dark:text-white block">
-                              {c.title.replace("[SEED] ", "")}
-                            </span>
-                            <span
-                              className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                                c.status === "verified"
-                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
-                                  : c.status === "rejected"
-                                  ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300"
-                                  : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
-                              }`}
-                            >
-                              {c.status}
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium block mt-0.5">
-                            {c.category} • Method: {c.payment_method} {c.reference_number ? `(${c.reference_number})` : ""}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center sm:flex-col sm:items-end justify-between gap-2 shrink-0">
-                          <span className="font-mono font-black text-sm text-slate-900 dark:text-white block">
-                            ₱{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </span>
-
-                          {/* Officer Verification Buttons for Pending Contributions */}
-                          {c.status === "pending" && (currentRole === "admin" || currentRole === "officer") && (
-                            <div className="flex items-center gap-1.5 mt-1">
-                              <button
-                                type="button"
-                                disabled={verifyingContribId === c.id}
-                                onClick={() => handleVerifyContribution(c.id, "verified")}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-sm transition flex items-center gap-1"
-                              >
-                                {verifyingContribId === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                                Verify
-                              </button>
-                              <button
-                                type="button"
-                                disabled={verifyingContribId === c.id}
-                                onClick={() => handleVerifyContribution(c.id, "rejected")}
-                                className="px-2 py-1 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-rose-100 hover:text-rose-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold transition"
-                              >
-                                Reject
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* 3. ROSTER / DIRECTORY TAB */}
-                {docketTab === "directory" && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                          Fraternal Member Directory & Chapter Roster
-                        </span>
-                        <span className="text-[11px] text-slate-500 font-medium">
-                          The Fraternal Order of Eagles • {allMembers.length} Registered Members
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                        <input
-                          type="text"
-                          value={directorySearch}
-                          onChange={(e) => setDirectorySearch(e.target.value)}
-                          placeholder="Search Kuya/Ate by name, member ID, or chapter..."
-                          className="w-full h-9 pl-9 pr-3 rounded-xl bg-slate-100 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs font-bold">
-                        {(["all", "admin", "officer", "member"] as const).map((r) => (
-                          <button
-                            key={r}
-                            type="button"
-                            onClick={() => setDirectoryFilter(r)}
-                            className={`px-2.5 py-1.5 rounded-xl capitalize transition shrink-0 text-[11px] ${
-                              directoryFilter === r
-                                ? "bg-eagle-blue text-white shadow-sm font-bold"
-                                : "bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 hover:text-slate-900"
-                            }`}
-                          >
-                            {r === "all" ? "All" : r === "admin" ? "Directorate" : r === "officer" ? "Officers" : "Members"}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
-                      {filteredDirectoryMembers.map((m) => (
-                        <div
-                          key={m.id}
-                          className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex items-center justify-between gap-3 hover:border-eagle-blue/40 transition"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-amber-400 via-eagle-blue to-emerald-500 p-0.5 shrink-0 shadow-sm">
-                              <div className="h-full w-full rounded-[10px] bg-slate-100 dark:bg-canvas-slate flex items-center justify-center font-bold text-xs text-slate-900 dark:text-white">
-                                {m.first_name[0]}{m.last_name[0]}
-                              </div>
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-display font-bold text-sm text-slate-900 dark:text-white">
-                                  Kuya/Ate {m.first_name} {m.last_name}
-                                </span>
-                                <Badge variant={m.role === "admin" ? "gold" : m.role === "officer" ? "blue" : "neutral"} size="sm">
-                                  {m.role === "admin" ? "Directorate" : m.role === "officer" ? "Officer" : "Charter"}
-                                </Badge>
-                              </div>
-                              <span className="text-[11px] text-slate-500 font-medium block">
-                                {m.member_number || "AGILA-PENDING"} • {m.chapter_or_branch || "Bantayog Elite Eagles Club"}
-                              </span>
-                            </div>
-                          </div>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setInspectedMember(m)}
-                            className="text-xs font-bold shrink-0 h-8 px-2.5"
-                          >
-                            <IdCard className="h-3.5 w-3.5 mr-1 text-amber-500" /> Inspect ID
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. DOCUMENT VAULT TAB */}
-                {docketTab === "documents" && (
-                  <div className="space-y-4">
-                    {/* Official Magna Carta & Constitution Hero Card with RAG */}
-                    <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-[#0a1428] to-slate-950 border-2 border-amber-400/80 shadow-2xl text-white relative overflow-hidden">
-                      {/* Gold foil metallic highlight bar */}
-                      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500" />
-                      
-                      <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex items-start gap-3.5">
-                          <div className="relative h-14 w-14 rounded-2xl bg-slate-900 border border-amber-400 p-1 shrink-0 shadow-lg flex items-center justify-center">
-                            <Image
-                              src="/assets/BEEC_official_crest.jpg"
-                              alt="TFOE-PE Crest"
-                              width={48}
-                              height={48}
-                              className="object-contain"
-                              unoptimized
-                            />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap mb-1">
-                              <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded-full border border-amber-500/30">
-                                Supreme Fraternal Law
-                              </span>
-                              <span className="text-[10px] font-bold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
-                                2024 Edition • 326 Pages • 21 Articles
-                              </span>
-                            </div>
-                            <h4 className="font-display font-black text-lg text-white">
-                              The Philippine Eagles Magna Carta & Constitution
-                            </h4>
-                            <p className="text-xs text-slate-300 mt-0.5 max-w-xl">
-                              Ratified Constitution, Code of Laws, Election Rules, and By-Laws of The Fraternal Order of Eagles, Philippine Eagles, Inc.
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                          <button
-                            type="button"
-                            id="btn-open-magna-rag"
-                            onClick={() => {
-                              setMagnaCartaInitialQuery("");
-                              setIsMagnaCartaRagOpen(true);
-                            }}
-                            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 text-white text-xs font-bold shadow-lg shadow-amber-500/20 flex items-center gap-2 transition active:scale-95"
-                          >
-                            <Sparkles className="h-4 w-4" /> Ask AI Counsel (RAG)
-                          </button>
-                          <a
-                            href="https://e-constitution.tfoe-peinc.com/"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-bold text-white flex items-center gap-1.5 transition"
-                            title="Open Official e-Constitution Portal"
-                          >
-                            <span>Open Portal</span>
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        </div>
-                      </div>
-
-                      {/* Inline RAG Search Bar */}
-                      <div className="relative z-10 mt-5 pt-4 border-t border-white/10">
-                        <span className="text-[11px] font-bold text-amber-300/90 block mb-2">
-                          Interactive Constitutional Query (RAG):
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex-1">
-                            <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
-                            <input
-                              type="text"
-                              id="input-inline-magna-rag"
-                              value={ragInlineQuery}
-                              onChange={(e) => setRagInlineQuery(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  if (ragInlineQuery.trim()) {
-                                    setMagnaCartaInitialQuery(ragInlineQuery.trim());
-                                    setIsMagnaCartaRagOpen(true);
-                                  }
-                                }
-                              }}
-                              placeholder="Ask a question about the Magna Carta (e.g. membership rights, quorum, dues, discipline, elections)..."
-                              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-xs font-medium text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            id="btn-submit-inline-rag"
-                            onClick={() => {
-                              if (ragInlineQuery.trim()) {
-                                setMagnaCartaInitialQuery(ragInlineQuery.trim());
-                                setIsMagnaCartaRagOpen(true);
-                              } else {
-                                setIsMagnaCartaRagOpen(true);
-                              }
-                            }}
-                            className="px-4 py-2.5 rounded-xl bg-eagle-blue hover:bg-blue-600 text-white text-xs font-bold shadow flex items-center gap-1.5 transition shrink-0"
-                          >
-                            <Sparkles className="h-3.5 w-3.5" /> Query RAG
-                          </button>
-                        </div>
-
-                        {/* Quick Prompt Chips */}
-                        <div className="flex items-center gap-2 mt-3 flex-wrap text-[11px]">
-                          <span className="text-slate-400 font-semibold">Quick Inquiries:</span>
-                          {[
-                            "Qualifications & Rights",
-                            "Quorum & Assembly Rules",
-                            "Dues & Financial Audit",
-                            "Election Guidelines",
-                            "Disciplinary Procedures",
-                          ].map((topic, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => {
-                                setMagnaCartaInitialQuery(topic);
-                                setIsMagnaCartaRagOpen(true);
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-amber-300 transition"
-                            >
-                              {topic}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                        Official Ratified Bylaws & Executive Memoranda
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        Encrypted Storage
-                      </span>
-                    </div>
-
-                    {documents.length === 0 ? (
-                      <div className="p-6 rounded-2xl bg-slate-50 dark:bg-white/[0.02] border border-slate-200/80 text-center text-xs text-slate-500">
-                        Constitution and chapter documents uploaded via Secretariat console.
-                      </div>
-                    ) : (
-                      documents.map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 flex items-center justify-between"
-                        >
-                          <div>
-                            <span className="font-bold text-sm text-slate-900 dark:text-white block">
-                              {doc.title.replace("[SEED] ", "")}
-                            </span>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                              {doc.description || "Official fraternal instrument"}
-                            </span>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex items-center gap-1.5 text-xs font-bold"
-                            onClick={() => window.open(doc.file_url, "_blank")}
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" /> Open
-                          </Button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                {/* 4. COMMUNITY OUTREACH TAB */}
-                {docketTab === "community" && (
-                  <div className="space-y-3">
-                    <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
-                        <h5 className="font-display font-bold text-sm text-slate-900 dark:text-white">
-                          Sierra Madre Watershed Reforestation
-                        </h5>
-                      </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                        Annual environmental sustainability outreach organized by Bantayog Elite Eagles Club in partnership with regional LGUs.
-                      </p>
-                      <div className="flex items-center gap-4 text-[11px] text-slate-500 mt-2 font-medium">
-                        <span>Target: 1,000 Hardwood Saplings</span>
-                        <span>Lead: Environmental Committee</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Executive Governance Console (Admin Access) */}
-            {currentRole === "admin" && (
-              <GlassCard variant="elevated" className="space-y-4 border-amber-300/80 dark:border-amber-400/20">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                    <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                      Executive Directorate Console
-                    </h3>
-                  </div>
-                  <span className="text-[10px] font-bold text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-300/60">
-                    National Directorate Access
-                  </span>
-                </div>
-
-                <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-                  Authoritative membership credentials, candidate admissions, and chapter governance audit.
-                </p>
-
-                {/* Candidate Admissions Review Queue */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300 font-bold px-1">
-                    <span>Membership Candidates ({pendingApplicants.length} Pending)</span>
-                    <span className="text-xs text-eagle-blue font-bold hover:underline cursor-pointer">
-                      Official Roster
+            {/* Layout Grid: Left = Hero Digital Eagle ID Card / Right = Quick Actions & Announcements */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              
+              {/* Col 1: Hero Interactive 3D Digital ID Card & Quick Check-In */}
+              <div className="lg:col-span-5 space-y-6">
+                <div>
+                  <div className="flex items-center justify-between mb-3 px-1">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-wider">
+                      Interactive Digital Eagle ID Card
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                      RFID & QR Smart Pass
                     </span>
                   </div>
 
-                  {pendingApplicants.length === 0 ? (
-                    <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-300/60 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-medium">
-                      <Check className="h-4 w-4 text-emerald-600" /> All candidate applications verified and inducted into good standing.
-                    </div>
-                  ) : (
-                    pendingApplicants.map((applicant) => (
-                      <div
-                        key={applicant.id}
-                        className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 flex items-center justify-between"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-xl bg-slate-200 dark:bg-canvas-slate border border-slate-300 dark:border-white/20 flex items-center justify-center font-bold text-slate-800 dark:text-white text-xs">
-                            {applicant.first_name[0]}
-                            {applicant.last_name[0]}
-                          </div>
-                          <div>
-                            <span className="font-bold text-sm text-slate-900 dark:text-white block">
-                              {applicant.first_name} {applicant.last_name}
-                            </span>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                              {applicant.email} • {applicant.chapter_or_branch || "Chapter Candidate"}
-                            </span>
-                          </div>
-                        </div>
+                  {/* 3D Flip Card with Selfie photo display */}
+                  <DigitalIdCard
+                    fullName={activeProfile.name}
+                    nickname={activeProfile.nickname}
+                    memberNumber={activeProfile.idNumber}
+                    clubName={activeProfile.club}
+                    region={activeProfile.region}
+                    role={currentRole}
+                    status={activeProfile.status}
+                    bloodType={bloodType}
+                    avatarUrl={avatarUrl}
+                    emergencyContactName={authMember?.emergency_contact_name}
+                    emergencyContactPhone={authMember?.emergency_contact_phone}
+                    officialIdUrl={officialIdUrl || (inspectedMember?.official_id_url ?? null)}
+                    idCardBackUrl={idCardBackUrl || (inspectedMember?.id_card_back_url ?? null)}
+                    onOpenScanModal={() => setIsOfficialIdScannerOpen(true)}
+                    onUploadSelfieClick={() => setIsProfileSettingsOpen(true)}
+                  />
+                </div>
 
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={approvingId === applicant.id}
-                            onClick={() => handleApproveApplicant(applicant.id)}
-                            className="text-xs font-bold"
-                          >
-                            {approvingId === applicant.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              "Approve Candidate"
-                            )}
-                          </Button>
-                          <Button size="sm" variant="outline" className="text-xs font-bold">
-                            Review Dossier
-                          </Button>
+                {/* Tactile Assembly Check-In Card */}
+                {activeEvent && (
+                  <GlassCard variant="glow-blue" className="p-5 shadow-lg border-eagle-blue/20">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <Badge variant={activeEvent.checkin_open ? "blue" : "neutral"} size="sm">
+                            {activeEvent.checkin_open ? "Assembly Quorum Open" : "Upcoming Meeting"}
+                          </Badge>
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                            Quorum: {assemblyHeadcount} Checked In
+                          </span>
                         </div>
+                        <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
+                          {activeEvent.title.replace("[SEED] ", "")}
+                        </h4>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
+                          <MapPin className="h-3.5 w-3.5 text-eagle-blue shrink-0" />
+                          {activeEvent.location || "Agila Clubhouse & Conference Hall"}
+                        </p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
+                          <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          Date: {new Date(activeEvent.event_date).toLocaleDateString()}
+                        </p>
                       </div>
+                      <div className="h-12 w-12 rounded-2xl bg-white dark:bg-canvas-slate shadow-sm border border-slate-200 dark:border-white/10 flex items-center justify-center shrink-0">
+                        <QrCode className="h-6 w-6 text-slate-800 dark:text-white" />
+                      </div>
+                    </div>
+
+                    {checkInFeedback && (
+                      <div
+                        className={`mt-4 p-3 rounded-xl border flex items-center gap-2 text-xs font-semibold animate-fadeIn ${
+                          checkInFeedback.success
+                            ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-800 dark:text-emerald-300"
+                            : "bg-rose-50 dark:bg-rose-950/30 border-rose-300 text-rose-800 dark:text-rose-300"
+                        }`}
+                      >
+                        {checkInFeedback.success ? <Check className="h-4 w-4 shrink-0 text-emerald-600" /> : <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />}
+                        <span>{checkInFeedback.message}</span>
+                      </div>
+                    )}
+
+                    <div className="mt-5 pt-4 border-t border-slate-200/80 dark:border-white/10">
+                      <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-2">
+                        Enter Official Assembly Passcode:
+                      </span>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={checkInCode}
+                            onChange={(e) => setCheckInCode(e.target.value.toUpperCase())}
+                            placeholder="ENTER CODE"
+                            className="w-full h-11 px-3.5 rounded-xl bg-slate-100/90 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 font-mono text-sm font-black tracking-widest text-slate-900 dark:text-white text-center uppercase focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={checkInFeedback?.success ? "secondary" : "primary"}
+                          disabled={checkInLoading}
+                          onClick={() => handleCheckIn(activeEvent.id)}
+                          className="h-11 px-5 text-xs font-bold shadow-md"
+                        >
+                          {checkInLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : checkInFeedback?.success ? (
+                            "✓ Attendance Confirmed"
+                          ) : (
+                            "Confirm Attendance"
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </GlassCard>
+                )}
+              </div>
+
+              {/* Col 2: Quick Navigation & Announcements */}
+              <div className="lg:col-span-7 space-y-6">
+                
+                {/* Core Navigation Quick Access Tiles */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("assemblies")}
+                    className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 hover:border-eagle-blue shadow-sm flex flex-col items-start gap-2 text-left transition hover:scale-[1.02]"
+                  >
+                    <div className="h-9 w-9 rounded-xl bg-blue-500/10 text-eagle-blue flex items-center justify-center font-bold">
+                      <Calendar className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-sm text-slate-900 dark:text-white block">
+                        Assemblies
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Meetings & Outreach
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("ledger")}
+                    className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 hover:border-emerald-500 shadow-sm flex flex-col items-start gap-2 text-left transition hover:scale-[1.02]"
+                  >
+                    <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
+                      <CreditCard className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-sm text-slate-900 dark:text-white block">
+                        Finance
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        ₱{totalVerifiedDues.toLocaleString()} Dues
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("directory")}
+                    className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 hover:border-amber-500 shadow-sm flex flex-col items-start gap-2 text-left transition hover:scale-[1.02]"
+                  >
+                    <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-sm text-slate-900 dark:text-white block">
+                        Roster
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        {allMembers.length} Members
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("documents")}
+                    className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 hover:border-purple-500 shadow-sm flex flex-col items-start gap-2 text-left transition hover:scale-[1.02]"
+                  >
+                    <div className="h-9 w-9 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center font-bold">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-sm text-slate-900 dark:text-white block">
+                        Vault
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Magna Carta & Bylaws
+                      </span>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Directorate Executive Console (Only visible for admin) */}
+                {currentRole === "admin" && (
+                  <GlassCard variant="elevated" className="space-y-4 border-amber-300/80 dark:border-amber-400/20">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                        <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
+                          Club President & Directorate Console
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddMemberOpen(true)}
+                        className="text-xs font-bold bg-eagle-blue text-white px-3 py-1.5 rounded-xl hover:brightness-110 flex items-center gap-1.5 shadow-sm transition"
+                      >
+                        <UserPlus className="h-3.5 w-3.5" /> Register Member
+                      </button>
+                    </div>
+
+                    {/* Candidate Admissions Review Queue */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300 font-bold px-1">
+                        <span>Membership Candidates ({pendingApplicants.length} Pending)</span>
+                        <span
+                          onClick={() => setActiveTab("directory")}
+                          className="text-xs text-eagle-blue font-bold hover:underline cursor-pointer"
+                        >
+                          View Full Roster
+                        </span>
+                      </div>
+
+                      {pendingApplicants.length === 0 ? (
+                        <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-300/60 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-medium">
+                          <Check className="h-4 w-4 text-emerald-600" /> All candidate applications verified and inducted into good standing.
+                        </div>
+                      ) : (
+                        pendingApplicants.map((applicant) => (
+                          <div
+                            key={applicant.id}
+                            className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 flex items-center justify-between"
+                          >
+                            <div>
+                              <span className="font-bold text-sm text-slate-900 dark:text-white block">
+                                {applicant.first_name} {applicant.last_name}
+                              </span>
+                              <span className="text-[11px] text-slate-500 font-medium">
+                                {applicant.email} • {applicant.chapter_or_branch || "Chapter Candidate"}
+                              </span>
+                            </div>
+
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={approvingId === applicant.id}
+                              onClick={() => handleApproveApplicant(applicant.id)}
+                              className="text-xs font-bold"
+                            >
+                              {approvingId === applicant.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                "Approve Candidate"
+                              )}
+                            </Button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </GlassCard>
+                )}
+
+                {/* Announcements Section (Updated text to "Announcements") */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <h3 className="font-display font-bold text-lg text-slate-900 dark:text-white">
+                      Announcements
+                    </h3>
+                    <span className="text-xs text-eagle-blue font-bold">
+                      Official Circulars
+                    </span>
+                  </div>
+
+                  {announcements.length === 0 ? (
+                    <GlassCard variant="default" className="p-5 text-center text-xs text-slate-500">
+                      No published announcements found.
+                    </GlassCard>
+                  ) : (
+                    announcements.map((ann) => (
+                      <GlassCard key={ann.id} variant="default" className="p-5 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                              ann.priority === "urgent" || ann.priority === "high"
+                                ? "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
+                                : ann.category === "Finance"
+                                ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                                : "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
+                            }`}
+                          >
+                            {ann.priority === "urgent" ? "Urgent Circular" : ann.priority === "high" ? "High Priority" : "Official Notice"} • {ann.category}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            {ann.published_at ? new Date(ann.published_at).toLocaleDateString() : "Active"}
+                          </span>
+                        </div>
+                        <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                          {ann.title.replace("[SEED] ", "")}
+                        </h4>
+                        <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal">
+                          {ann.content}
+                        </p>
+                      </GlassCard>
                     ))
                   )}
                 </div>
-
-                {/* Governance Quorum Status */}
-                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/5 flex items-center justify-between text-xs">
-                  <span className="text-slate-500 dark:text-slate-400 font-medium">Governance Standing:</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-mono font-bold">
-                    Constitution 2026 Ratified • Active Quorum
-                  </span>
-                  <Badge variant="green" size="sm">CONFIRMED</Badge>
-                </div>
-              </GlassCard>
-            )}
-
-            {/* Official Fraternal Announcements (Sentence-Case Badges & Cohesive Typography) */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                  <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                    Official Announcements & Memoranda
-                  </h3>
-                </div>
-                <span className="text-xs text-eagle-blue font-bold hover:underline cursor-pointer">
-                  Secretariat Archive
-                </span>
               </div>
+            </div>
+          </main>
+        </>
+      )}
 
-              {announcements.length === 0 ? (
-                <GlassCard variant="default" className="p-5 text-center text-xs text-slate-500">
-                  No published circulars found in database.
-                </GlassCard>
-              ) : (
-                announcements.map((ann) => (
-                  <GlassCard key={ann.id} variant="default" className="p-5 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span
-                        className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                          ann.priority === "urgent" || ann.priority === "high"
-                            ? "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
-                            : ann.category === "Finance"
-                            ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
-                            : "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
-                        }`}
-                      >
-                        {ann.priority === "urgent" ? "Urgent Circular" : ann.priority === "high" ? "High Priority" : "Official Notice"} • {ann.category}
-                      </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                        {ann.published_at ? new Date(ann.published_at).toLocaleDateString() : "Active Circular"}
-                      </span>
-                    </div>
-                    <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">
-                      {ann.title.replace("[SEED] ", "")}
-                    </h4>
-                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal">
-                      {ann.content}
-                    </p>
-                    <div className="pt-2 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-200/80 dark:border-white/5 font-medium">
-                      <span>National Executive Secretariat</span>
-                      <span className="text-eagle-blue dark:text-amber-300 font-bold cursor-pointer hover:underline">
-                        Read Circular →
-                      </span>
-                    </div>
-                  </GlassCard>
-                ))
-              )}
+      {/* ===================================================================== */}
+      {/* B. TAB 1: ASSEMBLIES & COMMUNITY OUTREACH (NO Header & Utility Bar)    */}
+      {/* ===================================================================== */}
+      {activeTab === "assemblies" && (
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-safe pt-6 space-y-6 animate-fadeIn">
+          {/* Focused Tab Header */}
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab("home")}
+                className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+              >
+                <ArrowLeft className="h-4 w-4" /> Home
+              </button>
+              <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
+                Assemblies & Outreach
+              </h2>
+            </div>
+
+            {/* Sub-tab pills for Meetings & Community Outreach */}
+            <div className="flex rounded-xl bg-slate-100 dark:bg-white/5 p-1 text-xs font-bold border border-slate-200 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => setAssemblySubTab("meetings")}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  assemblySubTab === "meetings"
+                    ? "bg-eagle-blue text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                Assemblies ({events.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssemblySubTab("outreach")}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  assemblySubTab === "outreach"
+                    ? "bg-eagle-blue text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                Community Outreach
+              </button>
             </div>
           </div>
-        </div>
-      </main>
 
-      {/* Modals for Phases A, B, and D */}
+          {assemblySubTab === "meetings" ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  Official Chapter Calendar & Scheduled Meetings
+                </span>
+                {(currentRole === "admin" || currentRole === "officer") && (
+                  <button
+                    type="button"
+                    onClick={() => setIsScannerOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white text-xs font-bold shadow-md hover:brightness-110 transition"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    <span>Launch QR Scanner</span>
+                  </button>
+                )}
+              </div>
+
+              {events.map((evt) => (
+                <div
+                  key={evt.id}
+                  className="p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
+                        {evt.title.replace("[SEED] ", "")}
+                      </h4>
+                      {evt.checkin_open && (
+                        <Badge variant="green" size="sm">
+                          Quorum Active
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-2xl">
+                      {evt.description}
+                    </p>
+                    <div className="flex items-center gap-4 text-xs text-slate-500 mt-2 font-medium">
+                      <span>📍 {evt.location || "QC Clubhouse"}</span>
+                      <span>📅 {new Date(evt.event_date).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+
+                  {evt.checkin_code && (
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold bg-slate-100 dark:bg-white/10 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/10">
+                        Code: {evt.checkin_code}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* Incorporated Community Outreach Tab */
+            <div className="space-y-4">
+              <div className="p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
+                    <HeartHandshake className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
+                      Sierra Madre Watershed Reforestation Project
+                    </h4>
+                    <span className="text-[11px] text-emerald-600 font-bold">Active Community Mission</span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Annual environmental sustainability and humanitarian outreach organized by Bantayog Elite Eagles Club in partnership with regional local government units and environmental committees.
+                </p>
+                <div className="pt-2 flex items-center gap-4 text-xs text-slate-500 font-medium border-t border-slate-100 dark:border-white/5">
+                  <span>Target: 1,000 Hardwood Saplings</span>
+                  <span>Lead Committee: Humanitarian & Ecology</span>
+                  <span>Status: Mobilizing Volunteers</span>
+                </div>
+              </div>
+
+              <div className="p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-9 w-9 rounded-xl bg-blue-500/10 text-eagle-blue flex items-center justify-center font-bold">
+                    <HeartHandshake className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
+                      Free Medical & Dental Mission
+                    </h4>
+                    <span className="text-[11px] text-blue-600 font-bold">Scheduled Outreach</span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Community health services providing medical consultations, vitamins, and dental checkups for underprivileged families in local barangays.
+                </p>
+                <div className="pt-2 flex items-center gap-4 text-xs text-slate-500 font-medium border-t border-slate-100 dark:border-white/5">
+                  <span>Beneficiaries: 500+ Residents</span>
+                  <span>Date: November 2026</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+      )}
+
+      {/* ===================================================================== */}
+      {/* C. TAB 2: FINANCIAL LEDGER TAB (NO Header & Utility Bar)              */}
+      {/* ===================================================================== */}
+      {activeTab === "ledger" && (
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-safe pt-6 space-y-6 animate-fadeIn">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab("home")}
+                className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+              >
+                <ArrowLeft className="h-4 w-4" /> Home
+              </button>
+              <div>
+                <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
+                  Fraternal Dues & Finance
+                </h2>
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  Audited Secretariat Balance: ₱{totalVerifiedDues.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => setIsSubmitContribOpen(true)}
+              className="text-xs font-bold flex items-center gap-1.5 h-9 px-3.5 shadow-sm"
+            >
+              <Plus className="h-3.5 w-3.5" /> Submit Dues / Donation
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {contributions.map((c) => (
+              <div
+                key={c.id}
+                className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white block">
+                      {c.title.replace("[SEED] ", "")}
+                    </span>
+                    <span
+                      className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        c.status === "verified"
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          : c.status === "rejected"
+                          ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300"
+                          : "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                      }`}
+                    >
+                      {c.status}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium block mt-0.5">
+                    {c.category} • Method: {c.payment_method} {c.reference_number ? `(${c.reference_number})` : ""}
+                  </span>
+                </div>
+
+                <div className="flex items-center sm:flex-col sm:items-end justify-between gap-2 shrink-0">
+                  <span className="font-mono font-black text-sm text-slate-900 dark:text-white block">
+                    ₱{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+
+                  {c.status === "pending" && (currentRole === "admin" || currentRole === "officer") && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <button
+                        type="button"
+                        disabled={verifyingContribId === c.id}
+                        onClick={() => handleVerifyContribution(c.id, "verified")}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-sm transition flex items-center gap-1"
+                      >
+                        {verifyingContribId === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        Verify
+                      </button>
+                      <button
+                        type="button"
+                        disabled={verifyingContribId === c.id}
+                        onClick={() => handleVerifyContribution(c.id, "rejected")}
+                        className="px-2 py-1 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-rose-100 hover:text-rose-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold transition"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </main>
+      )}
+
+      {/* ===================================================================== */}
+      {/* D. TAB 3: ROSTER / DIRECTORY TAB (NO Header & Utility Bar)            */}
+      {/* ===================================================================== */}
+      {activeTab === "directory" && (
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-safe pt-6 space-y-6 animate-fadeIn">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab("home")}
+                className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+              >
+                <ArrowLeft className="h-4 w-4" /> Home
+              </button>
+              <div>
+                <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
+                  Chapter Roster & Directory
+                </h2>
+                <span className="text-xs text-slate-500 font-medium">
+                  {allMembers.length} Registered Members
+                </span>
+              </div>
+            </div>
+
+            {/* Register Member Trigger (Item 17: Allows Admin & Officers to add new members) */}
+            {(currentRole === "admin" || currentRole === "officer") && (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => setIsAddMemberOpen(true)}
+                className="text-xs font-bold flex items-center gap-1.5 h-9 px-3.5 shadow-sm bg-gradient-to-r from-eagle-blue to-eagle-blue-dark hover:brightness-110"
+              >
+                <UserPlus className="h-3.5 w-3.5" /> Register Member
+              </Button>
+            )}
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={directorySearch}
+                onChange={(e) => setDirectorySearch(e.target.value)}
+                placeholder="Search Kuya/Ate by name, member ID, or club..."
+                className="w-full h-10 pl-9 pr-3 rounded-xl bg-white dark:bg-canvas-slate border border-slate-300 dark:border-white/20 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
+              />
+            </div>
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs font-bold">
+              {(["all", "admin", "officer", "member"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setDirectoryFilter(r)}
+                  className={`px-3 py-2 rounded-xl capitalize transition shrink-0 text-xs ${
+                    directoryFilter === r
+                      ? "bg-eagle-blue text-white shadow-sm font-bold"
+                      : "bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 hover:text-slate-900"
+                  }`}
+                >
+                  {r === "all" ? "All" : r === "admin" ? "Directorate" : r === "officer" ? "Officers" : "Members"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Member List */}
+          <div className="space-y-3">
+            {filteredDirectoryMembers.map((m) => (
+              <div
+                key={m.id}
+                className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 flex items-center justify-between gap-3 shadow-sm hover:border-eagle-blue/40 transition"
+              >
+                <div className="flex items-center gap-3.5">
+                  <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-amber-400 via-eagle-blue to-emerald-500 p-0.5 shrink-0 shadow-sm">
+                    <div className="h-full w-full rounded-[14px] bg-slate-100 dark:bg-canvas-slate flex items-center justify-center font-bold text-xs text-slate-900 dark:text-white">
+                      {m.first_name[0]}{m.last_name[0]}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                        Kuya/Ate {m.first_name} {m.last_name}
+                      </span>
+                      <Badge variant={m.role === "admin" ? "gold" : m.role === "officer" ? "blue" : "neutral"} size="sm">
+                        {m.role === "admin" ? "President / Directorate" : m.role === "officer" ? "Officer" : "Charter"}
+                      </Badge>
+                    </div>
+                    <span className="text-[11px] text-slate-500 font-medium block">
+                      {m.member_number || "BEEC-PENDING"} • {m.chapter_or_branch || "Bantayog Elite Eagles Club"}
+                    </span>
+                  </div>
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setInspectedMember(m);
+                    setActiveTab("home");
+                  }}
+                  className="text-xs font-bold shrink-0 h-8 px-3"
+                >
+                  <IdCard className="h-3.5 w-3.5 mr-1 text-amber-500" /> Inspect ID
+                </Button>
+              </div>
+            ))}
+          </div>
+        </main>
+      )}
+
+      {/* ===================================================================== */}
+      {/* E. TAB 4: VAULT TAB (NO Header & Utility Bar, matching app color,      */}
+      {/*    AGILA Hub Logo, 2024 Edition beside Open Portal, Ask AI search)    */}
+      {/* ===================================================================== */}
+      {activeTab === "documents" && (
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-safe pt-6 space-y-6 animate-fadeIn">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab("home")}
+                className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+              >
+                <ArrowLeft className="h-4 w-4" /> Home
+              </button>
+              <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
+                Document Vault
+              </h2>
+            </div>
+            <span className="text-xs text-slate-500 font-medium">
+              Ratified Instruments & Magna Carta
+            </span>
+          </div>
+
+          {/* Magna Carta & Constitution Card (Updated as per Item 12) */}
+          <div className="p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-lg text-slate-900 dark:text-white relative overflow-hidden">
+            {/* Top Amber Accent Bar */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500" />
+
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-4">
+                {/* AGILA Hub Emblem Logo */}
+                <div className="relative h-14 w-14 rounded-2xl bg-white p-1.5 border border-amber-400 shrink-0 shadow-md flex items-center justify-center overflow-hidden">
+                  <Image
+                    src="/assets/AGILA Hub.png"
+                    alt="AGILA Hub Emblem"
+                    width={48}
+                    height={48}
+                    className="object-contain"
+                    priority
+                  />
+                </div>
+                <div>
+                  <h4 className="font-display font-black text-lg text-slate-900 dark:text-white">
+                    The Philippine Eagles Magna Carta & Constitution
+                  </h4>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 max-w-xl">
+                    Ratified Constitution, Code of Laws, Election Rules, and By-Laws of The Fraternal Order of Eagles, Philippine Eagles, Inc.
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons: 2024 Edition text beside Open Portal */}
+              <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+                <span className="text-xs font-bold text-slate-700 dark:text-amber-300 bg-slate-100 dark:bg-white/10 px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10">
+                  2024 Edition • 326 Pages • 21 Articles
+                </span>
+                <a
+                  href="https://e-constitution.tfoe-peinc.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 rounded-xl bg-eagle-blue hover:bg-eagle-blue-dark text-xs font-bold text-white flex items-center gap-1.5 shadow transition active:scale-95"
+                  title="Open Official e-Constitution Portal"
+                >
+                  <span>Open Portal</span>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+            </div>
+
+            {/* Constitutional Query Input (Updated: button says "Ask AI", removed subtitle) */}
+            <div className="relative z-10 mt-5 pt-4 border-t border-slate-200 dark:border-white/10">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    id="input-inline-magna-rag"
+                    value={ragInlineQuery}
+                    onChange={(e) => setRagInlineQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (ragInlineQuery.trim()) {
+                          setMagnaCartaInitialQuery(ragInlineQuery.trim());
+                          setIsMagnaCartaRagOpen(true);
+                        }
+                      }
+                    }}
+                    placeholder="Ask a question about the Magna Carta (e.g. membership rights, quorum, dues, discipline, elections)..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-eagle-blue"
+                  />
+                </div>
+                <button
+                  type="button"
+                  id="btn-submit-inline-rag"
+                  onClick={() => {
+                    if (ragInlineQuery.trim()) {
+                      setMagnaCartaInitialQuery(ragInlineQuery.trim());
+                      setIsMagnaCartaRagOpen(true);
+                    } else {
+                      setIsMagnaCartaRagOpen(true);
+                    }
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 text-white text-xs font-bold shadow flex items-center gap-1.5 transition shrink-0"
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Ask AI
+                </button>
+              </div>
+
+              {/* Quick Inquiry Prompts */}
+              <div className="flex items-center gap-2 mt-3 flex-wrap text-[11px]">
+                <span className="text-slate-500 dark:text-slate-400 font-semibold">Quick Inquiries:</span>
+                {[
+                  "Qualifications & Rights",
+                  "Quorum & Assembly Rules",
+                  "Dues & Financial Audit",
+                  "Election Guidelines",
+                  "Disciplinary Procedures",
+                ].map((topic, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setMagnaCartaInitialQuery(topic);
+                      setIsMagnaCartaRagOpen(true);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 transition"
+                  >
+                    {topic}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Official Ratified Bylaws & Chapter Documents */}
+          <div className="space-y-3">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+              Official Bylaws & Executive Memoranda
+            </span>
+
+            {documents.length === 0 ? (
+              <div className="p-6 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 text-center text-xs text-slate-500">
+                Official documents available via Secretariat portal.
+              </div>
+            ) : (
+              documents.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 flex items-center justify-between shadow-sm"
+                >
+                  <div>
+                    <span className="font-bold text-sm text-slate-900 dark:text-white block">
+                      {doc.title.replace("[SEED] ", "")}
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      {doc.description || "Official fraternal instrument"}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex items-center gap-1.5 text-xs font-bold"
+                    onClick={() => window.open(doc.file_url, "_blank")}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Open
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </main>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODALS & PORTALS                                                      */}
+      {/* ===================================================================== */}
       <QrAttendanceScanner
         eventId={activeEvent?.id || ""}
         eventTitle={activeEvent?.title || "Chapter Assembly"}
@@ -1374,10 +1533,24 @@ export default function HomePage() {
         onSelectMember={(m) => {
           setInspectedMember(m);
           setIsDirectoryOpen(false);
+          setActiveTab("home");
         }}
       />
 
-      {/* Official Physical Eagles ID Scanner Modal */}
+      {/* Add New Member Modal for Admins & Officers */}
+      <AddMemberModal
+        isOpen={isAddMemberOpen}
+        onClose={() => setIsAddMemberOpen(false)}
+        onMemberAdded={(newMem) => {
+          setAllMembers((prev) => [newMem, ...prev]);
+          setRealtimeToast({
+            title: "Member Registered",
+            message: `Kuya/Ate ${newMem.first_name} ${newMem.last_name} was added to the Chapter Roster!`,
+            type: "success",
+          });
+        }}
+      />
+
       <OfficialIdScannerModal
         isOpen={isOfficialIdScannerOpen}
         onClose={() => setIsOfficialIdScannerOpen(false)}
@@ -1391,14 +1564,13 @@ export default function HomePage() {
             setAuthMember({ ...authMember, official_id_url: newId });
           }
           setRealtimeToast({
-            title: "Official ID Replaced",
-            message: "Your official physical Eagles ID is now active on your dashboard!",
+            title: "Official ID Updated",
+            message: "Your physical Eagles ID card is active on your dashboard!",
             type: "success",
           });
         }}
       />
 
-      {/* Profile & Security Settings Modal */}
       <ProfileSettingsModal
         isOpen={isProfileSettingsOpen}
         onClose={() => setIsProfileSettingsOpen(false)}
@@ -1407,53 +1579,56 @@ export default function HomePage() {
             ? {
                 ...authMember,
                 blood_type: bloodType,
+                avatar_url: avatarUrl,
                 official_id_url: officialIdUrl,
                 id_card_front_url: officialIdUrl,
                 id_card_back_url: idCardBackUrl,
               }
             : {
                 id: "demo-id",
-                first_name: "Juan",
+                first_name: activeProfile.nickname,
                 last_name: "Dela Cruz",
-                email: "juan.delacruz@agilahub.example",
+                email: "president@agilahub.ph",
                 role: currentRole,
                 membership_status: "active",
                 chapter_or_branch: "Bantayog Elite Eagles Club",
                 blood_type: bloodType,
+                avatar_url: avatarUrl,
                 official_id_url: officialIdUrl,
               }
         }
         onProfileUpdated={(updated) => {
-          if (updated && updated.first_name && updated.last_name) {
+          if (updated && updated.first_name) {
             if (authMember) {
               setAuthMember({
                 ...authMember,
                 first_name: updated.first_name,
-                last_name: updated.last_name,
+                last_name: updated.last_name ?? authMember.last_name,
                 phone: updated.phone ?? authMember.phone,
                 chapter_or_branch: updated.chapter_or_branch ?? authMember.chapter_or_branch,
+                avatar_url: updated.avatar_url ?? authMember.avatar_url,
               });
             }
           }
+          if (updated?.avatar_url !== undefined) setAvatarUrl(updated.avatar_url);
           if (updated?.blood_type) setBloodType(updated.blood_type);
         }}
         onOpenIdScanner={() => {
           setIsProfileSettingsOpen(false);
           setIsOfficialIdScannerOpen(true);
         }}
+        onLogout={handleLogout}
       />
 
-      {/* PWA Mobile Installation Prompt Banner */}
       <PwaInstallPrompt />
 
-      {/* Magna Carta & Constitution RAG AI Modal */}
       <MagnaCartaRagModal
         isOpen={isMagnaCartaRagOpen}
         onClose={() => setIsMagnaCartaRagOpen(false)}
         initialQuery={magnaCartaInitialQuery}
       />
 
-      {/* Supabase Realtime Live Toast Alert */}
+      {/* Toast Alert */}
       {realtimeToast && (
         <aside
           aria-label="Realtime Notification"
@@ -1482,11 +1657,11 @@ export default function HomePage() {
         </aside>
       )}
 
-      {/* Mobile Floating Bottom Bar */}
+      {/* Floating Bottom Bar: 5 Tabs with HOME IN CENTER */}
       <MobileNavBar
-        activeTab={docketTab}
+        activeTab={activeTab}
         onTabChange={(tab) =>
-          setDocketTab(tab as "assemblies" | "ledger" | "directory" | "documents" | "community")
+          setActiveTab(tab as "home" | "assemblies" | "ledger" | "directory" | "documents")
         }
       />
     </div>
