@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/Button";
 export interface ExpenseRecord {
   id: string;
   title: string;
-  category: "Membership Renewal" | "Community Service" | "Alalayang Agila" | "Chapter Operations" | "Assembly Logistics";
+  category: "Membership Renewal" | "Community Service" | "Alalayang Agila" | "Club Operations" | "Chapter Operations" | "Assembly Logistics";
   amount: number;
   disbursedTo: string;
   disbursementDate: string;
@@ -171,7 +171,7 @@ export function RecordExpenseModal({
                 <option value="Community Service">Community Service</option>
                 <option value="Alalayang Agila">Alalayang Agila</option>
                 <option value="Assembly Logistics">Assembly Logistics</option>
-                <option value="Chapter Operations">Chapter Operations</option>
+                <option value="Club Operations">Club Operations</option>
               </select>
             </div>
 

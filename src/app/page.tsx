@@ -70,6 +70,43 @@ import {
   RecordAlalayangGrantModal, 
   AlalayangGrantRecord 
 } from "@/components/assemblies/RecordAlalayangGrantModal";
+import { AnnouncementDetailModal, AnnouncementItem } from "@/components/announcements/AnnouncementDetailModal";
+import { MeetingDetailModal, MeetingItem } from "@/components/assemblies/MeetingDetailModal";
+import { CommunityServiceDetailModal, CommunityServiceItem } from "@/components/assemblies/CommunityServiceDetailModal";
+import { AlalayangDetailModal, AlalayangItem } from "@/components/assemblies/AlalayangDetailModal";
+import { MemberDetailModal, MemberDetailItem } from "@/components/directory/MemberDetailModal";
+import { AnnualContributionsTable } from "@/components/financial/AnnualContributionsTable";
+
+const OFFICERS_2026 = [
+  { position: "PRESIDENT", name: "JOY M. ARAGON", category: "Executive Officers" },
+  { position: "VICE PRESIDENT", name: "GENMIL M. RAIT", category: "Executive Officers" },
+  { position: "SECRETARY", name: "CHESTER JAN T. CAMACHO", category: "Executive Officers" },
+  { position: "TREASURER", name: "JOENATHAN L. TALENTO", category: "Executive Officers" },
+  { position: "AUDITOR", name: "JERIC R. MAGO", category: "Executive Officers" },
+  { position: "PROTOCOL OFFICER", name: "RANDY B. DELFINALDO", category: "Protocol & Information" },
+  { position: "PROTOCOL OFFICER", name: "STEWARD J. GARDOSE", category: "Protocol & Information" },
+  { position: "INFORMATION OFFICER", name: "CHESTER JAN T. CAMACHO", category: "Protocol & Information" },
+  { position: "PEACE OFFICER", name: "ROLDAN B. ROJAS", category: "Peace & Order" },
+  { position: "PEACE OFFICER", name: "JOENATHAN L. TALENTO", category: "Peace & Order" },
+  { position: "CARE CHAIRMAN", name: "DIVINO RAY A. PEREZ", category: "Committees" },
+  { position: "COMELEC CHAIRMAN", name: "MARC POL R. QUIOZON", category: "Committees" },
+  { position: "TRIBUNAL / GRIEVANCE CHAIRMAN", name: "JOY M. ARAGON", category: "Tribunal & Grievance" },
+  { position: "TRIBUNAL / GRIEVANCE MEMBER", name: "ELISEO D. EBDANI", category: "Tribunal & Grievance" },
+  { position: "REGIONAL ASSEMBLYMAN", name: "CHESTER JAN T. CAMACHO", category: "Regional Assembly" },
+  { position: "REGIONAL ASSEMBLYMAN", name: "EDWIN T. ALEGRE", category: "Regional Assembly" },
+  { position: "ALT. ASSEMBLYMAN", name: "ALLAN G. CALAYAN", category: "Regional Assembly" },
+  { position: "ALT. ASSEMBLYMAN", name: "MARC POL R. QUIOZON", category: "Regional Assembly" },
+  { position: "ALALAYAN AGILA CHAIRMAN", name: "JOENATHAN L. TALENTO", category: "Committees" },
+  { position: "SPORT COORDINATOR", name: "MARC POL R. QUIOZON", category: "Committees" },
+  { position: "COMMUNITY SERVICE CHAIRMAN", name: "GENMIL M. RAIT", category: "Committees" },
+  { position: "COMMUNITY SERVICE CHAIRMAN", name: "JOENATHAN L. TALENTO", category: "Committees" },
+  { position: "MEMBERSHIP CHAIRMAN", name: "GENMIL M. RAIT", category: "Committees" },
+  { position: "MEMBERSHIP CHAIRMAN", name: "ROLDAN B. ROJAS", category: "Committees" },
+  { position: "CHAIRMAN OF THE BOARD", name: "JOY M. ARAGON", category: "Board of Directors" },
+  { position: "BOARD MEMBER", name: "ELISEO D. EBDANI", category: "Board of Directors" },
+  { position: "BOARD MEMBER", name: "GENMIL M. RAIT", category: "Board of Directors" },
+  { position: "BOARD MEMBER", name: "CHESTER JAN T. CAMACHO", category: "Board of Directors" },
+];
 
 interface MemberRecord {
   id: string;
@@ -77,6 +114,8 @@ interface MemberRecord {
   last_name: string;
   email: string;
   phone?: string | null;
+  address?: string | null;
+  birthday?: string | null;
   member_number?: string | null;
   role: "admin" | "officer" | "member";
   membership_status: "pending" | "active" | "suspended" | "inactive";
@@ -169,7 +208,7 @@ export default function HomePage() {
       voucherNumber: "EXP-2026-081",
       approvedBy: "President Juan Dela Cruz",
       status: "released",
-      notes: "Annual membership renewal assessment for 30 active chapter members.",
+      notes: "Annual membership renewal assessment for 30 active club members.",
     },
     {
       id: "exp-002",
@@ -366,7 +405,7 @@ export default function HomePage() {
     {
       id: "cont-009",
       member_id: "m-01",
-      title: "Pooled Chapter Member Dues (Q1-Q3 2026 Remittance)",
+      title: "Pooled Club Member Dues (Q1-Q3 2026 Remittance)",
       category: "Monthly Dues",
       amount: 64000,
       payment_method: "Treasury Vault",
@@ -388,6 +427,43 @@ export default function HomePage() {
   const [verifyingContribId, setVerifyingContribId] = useState<string | null>(null);
   const [directorySearch, setDirectorySearch] = useState("");
   const [directoryFilter, setDirectoryFilter] = useState<"all" | "admin" | "officer" | "member">("all");
+
+  // Interactive Detail Modals & New States
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<AnnouncementItem | null>(null);
+  const [isNewAnnouncementOpen, setIsNewAnnouncementOpen] = useState(false);
+  const [selectedMeeting, setSelectedMeeting] = useState<MeetingItem | null>(null);
+  const [selectedService, setSelectedService] = useState<CommunityServiceItem | null>(null);
+  const [selectedAlalayang, setSelectedAlalayang] = useState<AlalayangItem | null>(null);
+  const [selectedRosterMember, setSelectedRosterMember] = useState<MemberDetailItem | null>(null);
+  const [rosterTab, setRosterTab] = useState<"officers" | "members">("officers");
+  const [treasuryCardSelection, setTreasuryCardSelection] = useState<"reserves" | "dues" | "donations" | "expenses">("reserves");
+  const [clubLogoUrl, setClubLogoUrl] = useState<string | null>(null);
+
+  // Community Services state
+  const [communityServices, setCommunityServices] = useState<CommunityServiceItem[]>([
+    {
+      id: "cs-001",
+      title: "Sierra Madre Watershed Reforestation Project",
+      mission: "Active Community Mission",
+      description: "Annual environmental sustainability and humanitarian outreach organized by Bantayog Elite Eagles Club in partnership with regional local government units and environmental committees.",
+      targetBeneficiaries: "1,000 Hardwood Saplings",
+      leadCommittee: "Humanitarian & Ecology",
+      status: "Mobilizing Volunteers",
+      projectDate: "2026-11-15",
+      location: "Sierra Madre Watershed Sector",
+    },
+    {
+      id: "cs-002",
+      title: "Free Medical & Dental Mission",
+      mission: "Scheduled Outreach",
+      description: "Community health services providing medical consultations, vitamins, and dental checkups for underprivileged families in local barangays.",
+      targetBeneficiaries: "500+ Barangay Residents",
+      leadCommittee: "Health & Community Welfare",
+      status: "Scheduled Outreach",
+      projectDate: "2026-11-28",
+      location: "Barangay Health Center Outreach Depot",
+    },
+  ]);
 
   // Profile & Official ID States
   const [isOfficialIdScannerOpen, setIsOfficialIdScannerOpen] = useState(false);
@@ -851,6 +927,34 @@ export default function HomePage() {
     ? myPersonalContributions
     : (officerDuesFilter === "mine" ? myPersonalContributions : contributions);
 
+  // Check if current user is Treasurer or Secretary (strictly gates Submit Dues button)
+  const isTreasurerOrSecretary = Boolean(
+    (authMember && (
+      authMember.email?.toLowerCase().includes("treasurer") || 
+      authMember.email?.toLowerCase().includes("secretary") ||
+      authMember.email === "treasurer@agilahub.ph" ||
+      authMember.email === "secretary@agilahub.ph" ||
+      (authMember.first_name?.toLowerCase().includes("maria") && authMember.role === "officer") ||
+      (authMember.first_name?.toLowerCase().includes("chester") || authMember.last_name?.toLowerCase().includes("camacho")) ||
+      (authMember.first_name?.toLowerCase().includes("joenathan") || authMember.last_name?.toLowerCase().includes("talento")) ||
+      authMember.role === "admin"
+    )) ||
+    (!authMember && (currentRole === "officer" || currentRole === "admin"))
+  );
+
+  // Handle Club Logo Upload & Persistence
+  const handleUpdateClubLogo = (newLogoUrl: string) => {
+    setClubLogoUrl(newLogoUrl);
+    try {
+      localStorage.setItem("agila_club_logo", newLogoUrl);
+    } catch (_) {}
+    setRealtimeToast({
+      title: "Club Logo Updated",
+      message: "The official club crest has been updated across the portal and digital ID.",
+      type: "success",
+    });
+  };
+
   // Handle Logout
   const handleLogout = async () => {
     try {
@@ -1246,85 +1350,31 @@ export default function HomePage() {
               )}
             </section>
 
-            {/* Directorate Executive Console (Only visible for admin) */}
-            {currentRole === "admin" && (
-              <GlassCard variant="elevated" className="space-y-4 border-amber-300/80 dark:border-amber-400/20">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                    <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                      Club President & Directorate Console
-                    </h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsAddMemberOpen(true)}
-                    className="text-xs font-bold bg-eagle-blue text-white px-3 py-1.5 rounded-xl hover:brightness-110 flex items-center gap-1.5 shadow-sm transition"
-                  >
-                    <UserPlus className="h-3.5 w-3.5" /> Register Member
-                  </button>
-                </div>
-
-                {/* Candidate Admissions Review Queue */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300 font-bold px-1">
-                    <span>Membership Candidates ({pendingApplicants.length} Pending)</span>
-                    <span
-                      onClick={() => setActiveTab("directory")}
-                      className="text-xs text-eagle-blue font-bold hover:underline cursor-pointer"
-                    >
-                      View Full Roster
-                    </span>
-                  </div>
-
-                  {pendingApplicants.length === 0 ? (
-                    <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-300/60 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 font-medium">
-                      <Check className="h-4 w-4 text-emerald-600" /> All candidate applications verified and inducted into good standing.
-                    </div>
-                  ) : (
-                    pendingApplicants.map((applicant) => (
-                      <div
-                        key={applicant.id}
-                        className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 flex items-center justify-between"
-                      >
-                        <div>
-                          <span className="font-bold text-sm text-slate-900 dark:text-white block">
-                            {applicant.first_name} {applicant.last_name}
-                          </span>
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            {applicant.email} • {applicant.chapter_or_branch || "Chapter Candidate"}
-                          </span>
-                        </div>
-
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={approvingId === applicant.id}
-                          onClick={() => handleApproveApplicant(applicant.id)}
-                          className="text-xs font-bold"
-                        >
-                          {approvingId === applicant.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            "Approve Candidate"
-                          )}
-                        </Button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </GlassCard>
-            )}
-
-            {/* Announcements Section */}
+            {/* Announcements Section (Item 4: Removed 'Official Circulars', clickable to view/edit details) */}
             <div className="space-y-3">
               <div className="flex items-center justify-between px-1">
                 <h3 className="font-display font-bold text-lg text-slate-900 dark:text-white">
                   Announcements
                 </h3>
-                <span className="text-xs text-eagle-blue dark:text-amber-300 font-bold">
-                  Official Circulars
-                </span>
+                {(currentRole === "admin" || currentRole === "officer") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAnnouncement({
+                        id: `ann-${Date.now()}`,
+                        title: "",
+                        content: "",
+                        category: "General",
+                        priority: "normal",
+                        published_at: new Date().toISOString(),
+                      });
+                      setIsNewAnnouncementOpen(true);
+                    }}
+                    className="text-xs font-bold text-eagle-blue dark:text-amber-300 hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Post Announcement
+                  </button>
+                )}
               </div>
 
               {announcements.length === 0 ? (
@@ -1333,7 +1383,14 @@ export default function HomePage() {
                 </GlassCard>
               ) : (
                 announcements.map((ann) => (
-                  <GlassCard key={ann.id} variant="default" className="p-5 space-y-2.5">
+                  <div
+                    key={ann.id}
+                    onClick={() => {
+                      setSelectedAnnouncement(ann);
+                      setIsNewAnnouncementOpen(false);
+                    }}
+                    className="p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-2.5 cursor-pointer hover:border-eagle-blue/50 dark:hover:border-amber-400/40 transition group"
+                  >
                     <div className="flex items-center justify-between">
                       <span
                         className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
@@ -1346,17 +1403,18 @@ export default function HomePage() {
                       >
                         {ann.priority === "urgent" ? "Urgent Circular" : ann.priority === "high" ? "High Priority" : "Official Notice"} • {ann.category}
                       </span>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        {ann.published_at ? new Date(ann.published_at).toLocaleDateString() : "Active"}
-                      </span>
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                        <span>{ann.published_at ? new Date(ann.published_at).toLocaleDateString() : "Active"}</span>
+                        <span className="text-eagle-blue dark:text-amber-300 font-bold group-hover:translate-x-1 transition-transform">→</span>
+                      </div>
                     </div>
-                    <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                    <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white group-hover:text-eagle-blue dark:group-hover:text-amber-300 transition-colors">
                       {ann.title.replace("[SEED] ", "")}
                     </h4>
-                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal">
+                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal line-clamp-2">
                       {ann.content}
                     </p>
-                  </GlassCard>
+                  </div>
                 ))
               )}
             </div>
@@ -1382,6 +1440,8 @@ export default function HomePage() {
                 status={activeProfile.status}
                 bloodType={bloodType}
                 avatarUrl={avatarUrl}
+                clubLogoUrl={clubLogoUrl}
+                onClubLogoUpload={handleUpdateClubLogo}
                 emergencyContactName={authMember?.emergency_contact_name}
                 emergencyContactPhone={authMember?.emergency_contact_phone}
                 officialIdUrl={officialIdUrl || (inspectedMember?.official_id_url ?? null)}
@@ -1405,7 +1465,20 @@ export default function HomePage() {
                         Quorum: {assemblyHeadcount} Checked In
                       </span>
                     </div>
-                    <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
+                    <h4 
+                      onClick={() => setSelectedMeeting({
+                        id: activeEvent.id,
+                        title: activeEvent.title,
+                        description: activeEvent.description,
+                        event_date: activeEvent.event_date,
+                        location: activeEvent.location,
+                        checkin_code: activeEvent.checkin_code,
+                        checkin_open: activeEvent.checkin_open,
+                        status: activeEvent.status,
+                      })}
+                      className="font-display font-bold text-base text-slate-900 dark:text-white cursor-pointer hover:underline"
+                      title="Click to view/edit assembly details"
+                    >
                       {activeEvent.title.replace("[SEED] ", "")}
                     </h4>
                     <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
@@ -1538,28 +1611,56 @@ export default function HomePage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                  Official Chapter Calendar & Scheduled Meetings
+                  Official Club Calendar & Scheduled Meetings
                 </span>
                 {(currentRole === "admin" || currentRole === "officer") && (
-                  <button
-                    type="button"
-                    onClick={() => setIsScannerOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white text-xs font-bold shadow-md hover:brightness-110 transition"
-                  >
-                    <Camera className="h-3.5 w-3.5" />
-                    <span>Launch QR Scanner</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMeeting({
+                        id: `evt-${Date.now()}`,
+                        title: "",
+                        description: "",
+                        event_date: new Date().toISOString().split("T")[0],
+                        location: "Daet Clubhouse",
+                        checkin_code: "AGILA-" + Math.floor(1000 + Math.random() * 9000),
+                        checkin_open: false,
+                        status: "upcoming"
+                      })}
+                      className="px-3 py-1.5 rounded-xl bg-eagle-blue text-white text-xs font-bold shadow-sm hover:brightness-110 flex items-center gap-1 transition"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Schedule Meeting
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsScannerOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 text-xs font-bold transition"
+                    >
+                      <Camera className="h-3.5 w-3.5" /> Scanner
+                    </button>
+                  </div>
                 )}
               </div>
 
               {events.map((evt) => (
                 <div
                   key={evt.id}
-                  className="p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  onClick={() => setSelectedMeeting({
+                    id: evt.id,
+                    title: evt.title,
+                    description: evt.description,
+                    event_date: evt.event_date,
+                    location: evt.location,
+                    checkin_code: evt.checkin_code,
+                    checkin_open: evt.checkin_open,
+                    status: evt.status
+                  })}
+                  className="p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:border-eagle-blue/50 dark:hover:border-amber-400/40 transition group"
+                  title="Click to view/edit assembly meeting details"
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
+                      <h4 className="font-display font-bold text-base text-slate-900 dark:text-white group-hover:text-eagle-blue dark:group-hover:text-amber-300 transition-colors">
                         {evt.title.replace("[SEED] ", "")}
                       </h4>
                       {evt.checkin_open && (
@@ -1568,7 +1669,7 @@ export default function HomePage() {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-2xl">
+                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-2xl line-clamp-2">
                       {evt.description}
                     </p>
                     <div className="flex items-center gap-4 text-xs text-slate-500 mt-2 font-medium">
@@ -1592,48 +1693,62 @@ export default function HomePage() {
           {assemblySubTab === "outreach" && (
             /* Incorporated Community Outreach Tab */
             <div className="space-y-4">
-              <div className="p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
-                    <HeartHandshake className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                      Sierra Madre Watershed Reforestation Project
-                    </h4>
-                    <span className="text-[11px] text-emerald-600 font-bold">Active Community Mission</span>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Annual environmental sustainability and humanitarian outreach organized by Bantayog Elite Eagles Club in partnership with regional local government units and environmental committees.
-                </p>
-                <div className="pt-2 flex items-center gap-4 text-xs text-slate-500 font-medium border-t border-slate-100 dark:border-white/5">
-                  <span>Target: 1,000 Hardwood Saplings</span>
-                  <span>Lead Committee: Humanitarian & Ecology</span>
-                  <span>Status: Mobilizing Volunteers</span>
-                </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  Active & Scheduled Community Outreach Projects ({communityServices.length})
+                </span>
+                {(currentRole === "admin" || currentRole === "officer") && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedService({
+                      id: `cs-${Date.now()}`,
+                      title: "",
+                      description: "",
+                      targetBeneficiaries: "",
+                      leadCommittee: "Community Service",
+                      status: "Mobilizing Volunteers",
+                      mission: "Active Community Mission",
+                      projectDate: new Date().toISOString().split("T")[0],
+                      location: "Camarines Norte Sector",
+                    })}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm flex items-center gap-1 transition"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Propose Mission
+                  </button>
+                )}
               </div>
 
-              <div className="p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="h-9 w-9 rounded-xl bg-blue-500/10 text-eagle-blue flex items-center justify-center font-bold">
-                    <HeartHandshake className="h-5 w-5" />
+              {communityServices.map((srv) => (
+                <div
+                  key={srv.id}
+                  onClick={() => setSelectedService(srv)}
+                  className="p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-3 cursor-pointer hover:border-emerald-500/50 transition group"
+                  title="Click to view/edit outreach mission details"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold shrink-0">
+                        <HeartHandshake className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-display font-bold text-base text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                          {srv.title}
+                        </h4>
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">{srv.mission || "Community Mission"}</span>
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-slate-400 group-hover:text-emerald-600 font-bold transition">View Details →</span>
                   </div>
-                  <div>
-                    <h4 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                      Free Medical & Dental Mission
-                    </h4>
-                    <span className="text-[11px] text-blue-600 font-bold">Scheduled Outreach</span>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
+                    {srv.description}
+                  </p>
+                  <div className="pt-2 flex items-center gap-4 text-xs text-slate-500 font-medium border-t border-slate-100 dark:border-white/5 flex-wrap">
+                    <span>Target: {srv.targetBeneficiaries}</span>
+                    <span>Lead Committee: {srv.leadCommittee}</span>
+                    <span>Status: {srv.status}</span>
                   </div>
                 </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Community health services providing medical consultations, vitamins, and dental checkups for underprivileged families in local barangays.
-                </p>
-                <div className="pt-2 flex items-center gap-4 text-xs text-slate-500 font-medium border-t border-slate-100 dark:border-white/5">
-                  <span>Beneficiaries: 500+ Residents</span>
-                  <span>Date: November 2026</span>
-                </div>
-              </div>
+              ))}
             </div>
           )}
 
@@ -1671,16 +1786,31 @@ export default function HomePage() {
                 )}
               </div>
 
-              {/* Beneficiary Records Grid */}
+              {/* Beneficiary Records Grid (Item 5: Clickable to view and edit details) */}
               <div className="space-y-3">
                 {alalayangGrants.map((grant) => (
                   <div
                     key={grant.id}
-                    className="p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm flex flex-col sm:flex-row sm:items-start justify-between gap-4"
+                    onClick={() => setSelectedAlalayang({
+                      id: grant.id,
+                      recipientName: grant.recipientName,
+                      recipientRelationship: grant.recipientRelationship,
+                      chapterOrAffiliation: grant.chapterOrAffiliation,
+                      contactNumber: grant.contactNumber,
+                      category: grant.category,
+                      reason: grant.reason,
+                      amount: grant.amount,
+                      grantDate: grant.grantDate,
+                      voucherNumber: grant.voucherNumber,
+                      approvedBy: grant.approvedBy,
+                      status: grant.status,
+                    })}
+                    className="p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm flex flex-col sm:flex-row sm:items-start justify-between gap-4 cursor-pointer hover:border-amber-500/50 transition group"
+                    title="Click to view/edit Alalayang Agila grant details"
                   >
                     <div className="space-y-2 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-display font-black text-base text-slate-900 dark:text-white">
+                        <span className="font-display font-black text-base text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
                           {grant.recipientName}
                         </span>
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10">
@@ -1728,7 +1858,7 @@ export default function HomePage() {
       {/* ===================================================================== */}
       {activeTab === "ledger" && (
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-safe pt-6 space-y-6 animate-fadeIn">
-          {/* Focused Tab Header with Treasury Overview */}
+          {/* Focused Tab Header (Item 6: Removed Net Reserve, Inflow, and Release text) */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10 gap-3">
             <div className="flex items-center gap-3">
               <button
@@ -1742,32 +1872,24 @@ export default function HomePage() {
                 <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
                   Fraternal Treasury & Finance
                 </h2>
-                <div className="flex items-center gap-2 sm:gap-3 text-xs font-bold mt-0.5 flex-wrap">
-                  <span className="text-emerald-600 dark:text-emerald-400">
-                    Net Reserve: ₱{netTreasuryReserve.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </span>
-                  <span className="text-slate-400 hidden sm:inline">•</span>
-                  <span className="text-slate-500">
-                    Inflow: ₱{totalVerifiedDues.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </span>
-                  <span className="text-slate-400 hidden sm:inline">•</span>
-                  <span className="text-rose-600 dark:text-rose-400">
-                    Released: ₱{totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  Official Club Financial Dashboard & Audited Accounts
+                </p>
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons (Item 6: No '+', only visible to Treasurer and Secretary) */}
             <div className="flex items-center gap-2 shrink-0">
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => setIsSubmitContribOpen(true)}
-                className="text-xs font-bold flex items-center gap-1.5 h-9 px-3 shadow-sm"
-              >
-                <Plus className="h-3.5 w-3.5" /> Submit Dues
-              </Button>
+              {isTreasurerOrSecretary && (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => setIsSubmitContribOpen(true)}
+                  className="text-xs font-bold flex items-center gap-1.5 h-9 px-3.5 shadow-sm"
+                >
+                  <CreditCard className="h-3.5 w-3.5" /> Submit Dues
+                </Button>
+              )}
               {(currentRole === "admin" || currentRole === "officer") && (
                 <button
                   type="button"
@@ -1781,97 +1903,109 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 1. Executive Financial Reserves Summary Dashboard (Visible to ALL Members) */}
-          <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-canvas-slate dark:via-[#0b1324] dark:to-slate-950 border border-slate-700/60 dark:border-white/10 shadow-xl text-white space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+          {/* 1. Treasury Overview Cards (Theme tokens, removed badge, removed breakdown strip, interactive selector) */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm text-slate-900 dark:text-white space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center font-bold">
+                <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center font-bold">
                   <Landmark className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="font-display font-black text-sm tracking-wide text-white">
-                    Chapter Treasury & Financial Reserves Summary
+                  <h4 className="font-display font-black text-sm tracking-wide text-slate-900 dark:text-white">
+                    Club Treasury & Financial Reserves Summary
                   </h4>
-                  <span className="text-[11px] text-slate-300">
-                    Official Financial Transparency Report • All Members
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Click any overview card below to inspect full account details
                   </span>
                 </div>
               </div>
-              <span className="self-start sm:self-auto text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Fraternal Transparency Active
-              </span>
             </div>
 
-            {/* Main 4 Metric Cards Grid */}
+            {/* Main 4 Metric Cards Grid - Interactive click toggles full details */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {/* 1. Net Treasury Reserves */}
-              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 shadow-sm">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              <button
+                type="button"
+                onClick={() => setTreasuryCardSelection("reserves")}
+                className={`p-3.5 rounded-2xl border text-left transition-all ${
+                  treasuryCardSelection === "reserves"
+                    ? "bg-emerald-500/10 border-emerald-500/50 ring-2 ring-emerald-500/30 shadow-md"
+                    : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-emerald-500/30"
+                }`}
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
                   Net Treasury Reserves
                 </span>
-                <span className="font-mono font-black text-xl text-emerald-400 block mt-1">
+                <span className="font-mono font-black text-xl text-emerald-600 dark:text-emerald-400 block mt-1">
                   ₱{netTreasuryReserve.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
-                  Available chapter funds
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                  Available club funds
                 </span>
-              </div>
+              </button>
 
               {/* 2. Monthly Contributions / Dues Inflow */}
-              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 shadow-sm">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-300 block">
+              <button
+                type="button"
+                onClick={() => setTreasuryCardSelection("dues")}
+                className={`p-3.5 rounded-2xl border text-left transition-all ${
+                  treasuryCardSelection === "dues"
+                    ? "bg-blue-500/10 border-blue-500/50 ring-2 ring-blue-500/30 shadow-md"
+                    : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-blue-500/30"
+                }`}
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-eagle-blue dark:text-blue-400 block">
                   Contributions & Dues
                 </span>
-                <span className="font-mono font-black text-xl text-white block mt-1">
+                <span className="font-mono font-black text-xl text-slate-900 dark:text-white block mt-1">
                   ₱{totalDuesInflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
                   ₱400 monthly assessments
                 </span>
-              </div>
+              </button>
 
               {/* 3. Donations & Pledges Inflow */}
-              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 shadow-sm">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 block">
+              <button
+                type="button"
+                onClick={() => setTreasuryCardSelection("donations")}
+                className={`p-3.5 rounded-2xl border text-left transition-all ${
+                  treasuryCardSelection === "donations"
+                    ? "bg-amber-500/10 border-amber-500/50 ring-2 ring-amber-500/30 shadow-md"
+                    : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-amber-500/30"
+                }`}
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
                   Donations & Pledges
                 </span>
-                <span className="font-mono font-black text-xl text-amber-300 block mt-1">
+                <span className="font-mono font-black text-xl text-amber-600 dark:text-amber-400 block mt-1">
                   ₱{totalDonationsInflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
                   Voluntary & charity gifts
                 </span>
-              </div>
+              </button>
 
               {/* 4. Total Released Expenses */}
-              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 shadow-sm">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-300 block">
+              <button
+                type="button"
+                onClick={() => setTreasuryCardSelection("expenses")}
+                className={`p-3.5 rounded-2xl border text-left transition-all ${
+                  treasuryCardSelection === "expenses"
+                    ? "bg-rose-500/10 border-rose-500/50 ring-2 ring-rose-500/30 shadow-md"
+                    : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-rose-500/30"
+                }`}
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block">
                   Total Released Expenses
                 </span>
-                <span className="font-mono font-black text-xl text-rose-400 block mt-1">
+                <span className="font-mono font-black text-xl text-rose-600 dark:text-rose-400 block mt-1">
                   ₱{totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
                   Disbursed vouchers
                 </span>
-              </div>
-            </div>
-
-            {/* Category Summary Breakdown Strip */}
-            <div className="pt-2 border-t border-white/10 flex items-center justify-between flex-wrap gap-2 text-xs">
-              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                <span className="text-[11px] text-slate-400 font-semibold">Expense Breakdown:</span>
-                <span className="text-[11px] bg-white/10 px-2 py-0.5 rounded-lg text-slate-300">
-                  Renewal Remitted: <b className="text-white">₱{renewalExpensesTotal.toLocaleString()}</b>
-                </span>
-                <span className="text-[11px] bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded-lg border border-amber-500/30">
-                  Alalayang Agila Grants: <b className="text-white">₱{alalayangExpensesTotal.toLocaleString()}</b>
-                </span>
-                <span className="text-[11px] bg-blue-500/20 text-blue-200 px-2 py-0.5 rounded-lg border border-blue-500/30">
-                  Community Outreach: <b className="text-white">₱{serviceExpensesTotal.toLocaleString()}</b>
-                </span>
-              </div>
+              </button>
             </div>
           </div>
 
@@ -1948,125 +2082,76 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* 3. Sub-tab Pills: Contributions vs Released Expenses & Scope Filter */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="inline-flex rounded-xl bg-slate-100 dark:bg-white/5 p-1 text-xs font-bold border border-slate-200 dark:border-white/10 gap-1">
-              <button
-                type="button"
-                id="subtab-contributions"
-                onClick={() => setFinanceSubTab("contributions")}
-                className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap ${
-                  financeSubTab === "contributions"
-                    ? "bg-eagle-blue text-white shadow-sm"
-                    : "text-slate-600 dark:text-slate-400"
-                }`}
-              >
-                {currentRole === "member"
-                  ? `My Contributions & Dues (${myPersonalContributions.length})`
-                  : `Contributions & Dues (${displayedContributions.length})`}
-              </button>
-              <button
-                type="button"
-                id="subtab-expenses"
-                onClick={() => setFinanceSubTab("expenses")}
-                className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap flex items-center gap-1.5 ${
-                  financeSubTab === "expenses"
-                    ? "bg-rose-600 text-white shadow-sm"
-                    : "text-slate-600 dark:text-slate-400"
-                }`}
-              >
-                <ArrowUpRight className="h-3.5 w-3.5" />
-                <span>Released Expenses ({expenses.length})</span>
-              </button>
-            </div>
+          {/* 3. CARD DETAILS SECTION (Replaces old sub-tabs, shows full details of selected overview card) */}
+          {/* OPTION 1: Net Treasury Reserves Details */}
+          {treasuryCardSelection === "reserves" && (
+            <div className="space-y-5 animate-fadeIn">
+              {/* Annual Contributions Table (Item 6 requirement: Year, Month, default amount, Due Date, Status, Amount Paid, Date Paid) */}
+              <AnnualContributionsTable
+                defaultRate={monthlyRateConfig.totalAmount}
+                contributions={contributions}
+                memberId={activeUserMemberId}
+              />
 
-            {/* Officer Scope Filter Toggle (Only for Admin / Officer) */}
-            {financeSubTab === "contributions" && (currentRole === "admin" || currentRole === "officer") && (
-              <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs">
-                <span className="text-[11px] text-slate-500 font-semibold px-2">Scope:</span>
-                <button
-                  type="button"
-                  id="btn-filter-dues-all"
-                  onClick={() => setOfficerDuesFilter("all")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                    officerDuesFilter === "all"
-                      ? "bg-white dark:bg-canvas-slate text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  All Chapter ({contributions.length})
-                </button>
-                <button
-                  type="button"
-                  id="btn-filter-dues-mine"
-                  onClick={() => setOfficerDuesFilter("mine")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                    officerDuesFilter === "mine"
-                      ? "bg-white dark:bg-canvas-slate text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  My Personal Dues ({myPersonalContributions.length})
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* 3A. Contributions List View */}
-          {financeSubTab === "contributions" && (
-            <div className="space-y-3">
-              {/* Member Privacy Notice */}
-              {currentRole === "member" && (
-                <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 flex items-center justify-between text-xs text-blue-900 dark:text-blue-300 animate-fadeIn">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-eagle-blue shrink-0" />
-                    <span>
-                      <b>Personal Dues History:</b> Members can only see their own contributions and dues below. The chapter financial summary above is shared for fraternal transparency.
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-bold bg-eagle-blue/10 text-eagle-blue dark:text-blue-400 px-2 py-0.5 rounded-full shrink-0">
-                    Confidential
+              {/* Audited Balance Sheet Reconciliation Card */}
+              <div className="p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-3">
+                  <h4 className="font-display font-black text-sm text-slate-900 dark:text-white">
+                    Fraternal Reserve Audit & Reconciliation
+                  </h4>
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    Balanced Ledger
                   </span>
                 </div>
-              )}
-
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 block">
-                  {currentRole === "member"
-                    ? "My Fraternal Contributions & Dues"
-                    : officerDuesFilter === "mine"
-                    ? "My Personal Contributions & Dues"
-                    : "All Chapter Contributions & Dues"}
-                </span>
-                <span className="text-[11px] text-slate-500 font-medium">
-                  {displayedContributions.length} record{displayedContributions.length === 1 ? "" : "s"}
-                </span>
-              </div>
-
-              {displayedContributions.length === 0 ? (
-                <div className="p-8 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 text-center space-y-3 shadow-sm">
-                  <div className="h-12 w-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto">
-                    <CreditCard className="h-6 w-6" />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40">
+                    <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase block">Total Verified Inflow</span>
+                    <span className="font-mono font-black text-base text-emerald-700 dark:text-emerald-300 block mt-1">
+                      +₱{totalVerifiedDues.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">{verifiedContributions.length} verified receipts</span>
                   </div>
-                  <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">
-                    No Contributions Recorded
-                  </h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                    {currentRole === "member"
-                      ? "You have not submitted any contributions or dues yet. Tap below to submit your monthly contribution of ₱400.00."
-                      : "No contributions match the selected filter."}
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={() => setIsSubmitContribOpen(true)}
-                    className="text-xs font-bold"
-                  >
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Submit Monthly Dues (₱400.00)
-                  </Button>
+                  <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800/40">
+                    <span className="text-[10px] font-bold text-rose-800 dark:text-rose-300 uppercase block">Total Audited Disbursements</span>
+                    <span className="font-mono font-black text-base text-rose-700 dark:text-rose-300 block mt-1">
+                      -₱{totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">{expenses.length} released vouchers</span>
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40">
+                    <span className="text-[10px] font-bold text-blue-800 dark:text-blue-300 uppercase block">Net Treasury Balance</span>
+                    <span className="font-mono font-black text-base text-blue-700 dark:text-blue-300 block mt-1">
+                      ₱{netTreasuryReserve.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">Liquid reserves in vault</span>
+                  </div>
                 </div>
-              ) : (
-                displayedContributions.map((c) => {
+              </div>
+            </div>
+          )}
+
+          {/* OPTION 2: Contributions & Dues Full Details */}
+          {treasuryCardSelection === "dues" && (
+            <div className="space-y-5 animate-fadeIn">
+              {/* Annual Contributions Table */}
+              <AnnualContributionsTable
+                defaultRate={monthlyRateConfig.totalAmount}
+                contributions={contributions}
+                memberId={activeUserMemberId}
+              />
+
+              {/* Verified Ledger Records List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300 block">
+                    {currentRole === "member" ? "My Personal Dues Records" : "All Club Contributions & Dues"}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {displayedContributions.length} record{displayedContributions.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                {displayedContributions.map((c) => {
                   const contributor = allMembers.find((m) => m.id === c.member_id);
                   const contributorName = contributor
                     ? `Kuya/Ate ${contributor.first_name} ${contributor.last_name}`
@@ -2098,7 +2183,6 @@ export default function HomePage() {
                           </span>
                         </div>
 
-                        {/* Contributor identity (visible to officers viewing all records) */}
                         {(currentRole === "admin" || currentRole === "officer") && contributorName && (
                           <span className="text-[11px] font-bold text-eagle-blue dark:text-blue-400 mt-1 block">
                             Member: {contributorName} {contributor?.member_number ? `(${contributor.member_number})` : ""}
@@ -2139,14 +2223,75 @@ export default function HomePage() {
                       </div>
                     </div>
                   );
-                })
-              )}
+                })}
+              </div>
             </div>
           )}
 
-          {/* 3B. Released Expenses View */}
-          {financeSubTab === "expenses" && (
-            <div className="space-y-4">
+          {/* OPTION 3: Donations & Pledges Full Details */}
+          {treasuryCardSelection === "donations" && (
+            <div className="space-y-4 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                    Voluntary Fraternal Donations & Humanitarian Pledges
+                  </h4>
+                  <span className="text-xs text-slate-500">
+                    Total Inflow: ₱{totalDonationsInflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsSubmitContribOpen(true)}
+                  className="text-xs font-bold"
+                >
+                  Pledge Donation
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {contributions
+                  .filter((c) =>
+                    c.category.toLowerCase().includes("donation") ||
+                    c.category.toLowerCase().includes("pledge") ||
+                    c.category.toLowerCase().includes("relief") ||
+                    c.title.toLowerCase().includes("donation") ||
+                    c.title.toLowerCase().includes("pledge")
+                  )
+                  .map((c) => (
+                    <div
+                      key={c.id}
+                      className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-slate-900 dark:text-white">
+                            {c.title.replace("[SEED] ", "")}
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20">
+                            {c.category}
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                            Verified
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500 font-medium block mt-1">
+                          Date: {c.contribution_date} • Ref: {c.reference_number || "DIRECT"} • Channel: {c.payment_method}
+                        </span>
+                      </div>
+                      <div className="shrink-0 font-mono font-black text-base text-amber-600 dark:text-amber-400">
+                        +₱{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* OPTION 4: Total Released Expenses Full Details */}
+          {treasuryCardSelection === "expenses" && (
+            <div className="space-y-4 animate-fadeIn">
               {/* Category Breakdown Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="p-3.5 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm">
@@ -2259,15 +2404,15 @@ export default function HomePage() {
               </button>
               <div>
                 <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
-                  Chapter Roster & Directory
+                  Club Roster & Directory
                 </h2>
                 <span className="text-xs text-slate-500 font-medium">
-                  {allMembers.length} Registered Members
+                  {rosterTab === "officers" ? `${OFFICERS_2026.length} Club Officers (2026)` : `${allMembers.length} Registered Members`}
                 </span>
               </div>
             </div>
 
-            {/* Register Member Trigger (Item 17: Allows Admin & Officers to add new members) */}
+            {/* Register Member Trigger (Only for Admin & Officers) */}
             {(currentRole === "admin" || currentRole === "officer") && (
               <Button
                 size="sm"
@@ -2280,7 +2425,7 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Search & Filter Bar */}
+          {/* Search & Filter Bar (Item 8: Removed 'All' and 'Directorate', strictly 'Officers' and 'Members') */}
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -2288,76 +2433,154 @@ export default function HomePage() {
                 type="text"
                 value={directorySearch}
                 onChange={(e) => setDirectorySearch(e.target.value)}
-                placeholder="Search Kuya/Ate by name, member ID, or club..."
+                placeholder="Search Kuya/Ate by name or position..."
                 className="w-full h-10 pl-9 pr-3 rounded-xl bg-white dark:bg-canvas-slate border border-slate-300 dark:border-white/20 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
               />
             </div>
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs font-bold">
-              {(["all", "admin", "officer", "member"] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setDirectoryFilter(r)}
-                  className={`px-3 py-2 rounded-xl capitalize transition shrink-0 text-xs ${
-                    directoryFilter === r
-                      ? "bg-eagle-blue text-white shadow-sm font-bold"
-                      : "bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  {r === "all" ? "All" : r === "admin" ? "Directorate" : r === "officer" ? "Officers" : "Members"}
-                </button>
-              ))}
+            <div className="inline-flex rounded-xl bg-slate-100 dark:bg-white/5 p-1 border border-slate-200 dark:border-white/10 text-xs font-bold shrink-0 gap-1">
+              <button
+                type="button"
+                id="roster-tab-officers"
+                onClick={() => setRosterTab("officers")}
+                className={`px-4 py-1.5 rounded-lg transition ${
+                  rosterTab === "officers"
+                    ? "bg-eagle-blue text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                Officers (2026)
+              </button>
+              <button
+                type="button"
+                id="roster-tab-members"
+                onClick={() => setRosterTab("members")}
+                className={`px-4 py-1.5 rounded-lg transition ${
+                  rosterTab === "members"
+                    ? "bg-eagle-blue text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                Members ({allMembers.length})
+              </button>
             </div>
           </div>
 
-          {/* Member List */}
-          <div className="space-y-3">
-            {filteredDirectoryMembers.map((m) => (
-              <div
-                key={m.id}
-                className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 flex items-center justify-between gap-3 shadow-sm hover:border-eagle-blue/40 transition"
-              >
-                <div className="flex items-center gap-3.5">
-                  <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-amber-400 via-eagle-blue to-emerald-500 p-0.5 shrink-0 shadow-sm">
-                    <div className="h-full w-full rounded-[14px] bg-slate-100 dark:bg-canvas-slate flex items-center justify-center font-bold text-xs text-slate-900 dark:text-white">
-                      {m.first_name[0]}{m.last_name[0]}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-display font-bold text-sm text-slate-900 dark:text-white">
-                        Kuya/Ate {m.first_name} {m.last_name}
-                      </span>
-                      <Badge variant={m.role === "admin" ? "gold" : m.role === "officer" ? "blue" : "neutral"} size="sm">
-                        {m.role === "admin" ? "President / Directorate" : m.role === "officer" ? "Officer" : "Charter"}
-                      </Badge>
-                    </div>
-                    <span className="text-[11px] text-slate-500 font-medium block">
-                      {m.member_number || "BEEC-PENDING"} • {m.chapter_or_branch || "Bantayog Elite Eagles Club"}
-                    </span>
-                  </div>
+          {/* 1. OFFICERS VIEW (Item 8: Set of Officers 2026 from officer20026.jpg) */}
+          {rosterTab === "officers" && (
+            <div className="space-y-3 animate-fadeIn">
+              <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-500/10 via-slate-50 to-amber-500/5 dark:from-amber-500/10 dark:via-canvas-slate dark:to-transparent border border-amber-400/30 flex items-center justify-between">
+                <div>
+                  <h3 className="font-display font-black text-sm text-slate-900 dark:text-white uppercase tracking-wider">
+                    SET OF OFFICERS 2026
+                  </h3>
+                  <span className="text-[11px] text-amber-700 dark:text-amber-300 font-bold">
+                    Bantayog Elite Eagles Club • Executive Directorate
+                  </span>
                 </div>
-
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setInspectedMember(m);
-                    setActiveTab("home");
-                  }}
-                  className="text-xs font-bold shrink-0 h-8 px-3"
-                >
-                  <IdCard className="h-3.5 w-3.5 mr-1 text-amber-500" /> Inspect ID
-                </Button>
+                <span className="text-xs font-mono font-bold bg-amber-500/20 text-amber-800 dark:text-amber-200 px-2.5 py-1 rounded-xl">
+                  TERM 2026
+                </span>
               </div>
-            ))}
-          </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {OFFICERS_2026.filter((o) => {
+                  if (!directorySearch.trim()) return true;
+                  const term = directorySearch.toLowerCase();
+                  return o.name.toLowerCase().includes(term) || o.position.toLowerCase().includes(term);
+                }).map((officer, idx) => (
+                  <div
+                    key={idx}
+                    className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm flex items-center justify-between gap-3 hover:border-amber-400/40 transition"
+                  >
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-mono font-extrabold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
+                        {officer.position}
+                      </span>
+                      <h4 className="font-display font-black text-sm text-slate-900 dark:text-white">
+                        {officer.name}
+                      </h4>
+                      <span className="text-[10px] text-slate-400 block font-medium">
+                        {officer.category}
+                      </span>
+                    </div>
+
+                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center font-bold text-xs shrink-0">
+                      <Shield className="h-4 w-4" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 2. MEMBERS VIEW (Item 8: Alphabetical registered members, clickable to view details modal) */}
+          {rosterTab === "members" && (
+            <div className="space-y-3 animate-fadeIn">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  Registered Club Members (Alphabetical Order • Click to view details)
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {allMembers.length} Members in Roster
+                </span>
+              </div>
+
+              {[...allMembers]
+                .sort((a, b) => {
+                  const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
+                  const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
+                  return nameA.localeCompare(nameB);
+                })
+                .filter((m) => {
+                  if (!directorySearch.trim()) return true;
+                  const term = directorySearch.toLowerCase();
+                  return (
+                    `${m.first_name} ${m.last_name}`.toLowerCase().includes(term) ||
+                    (m.member_number || "").toLowerCase().includes(term) ||
+                    (m.phone || "").toLowerCase().includes(term)
+                  );
+                })
+                .map((m) => (
+                  <div
+                    key={m.id}
+                    onClick={() => setSelectedRosterMember(m)}
+                    className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 flex items-center justify-between gap-3 shadow-sm hover:border-eagle-blue/50 dark:hover:border-amber-400/40 cursor-pointer transition group"
+                    title="Click to view member details (Address, Birthday, Mobile, Full Name)"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-amber-400 via-eagle-blue to-emerald-500 p-0.5 shrink-0 shadow-sm">
+                        <div className="h-full w-full rounded-[14px] bg-slate-100 dark:bg-canvas-slate flex items-center justify-center font-bold text-xs text-slate-900 dark:text-white">
+                          {m.first_name[0]}{m.last_name[0]}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-display font-bold text-sm text-slate-900 dark:text-white group-hover:text-eagle-blue dark:group-hover:text-amber-300 transition-colors">
+                            Kuya/Ate {m.first_name} {m.last_name}
+                          </span>
+                          <Badge variant={m.role === "admin" ? "gold" : m.role === "officer" ? "blue" : "neutral"} size="sm">
+                            {m.role === "admin" ? "President / Directorate" : m.role === "officer" ? "Officer" : "Charter Member"}
+                          </Badge>
+                        </div>
+                        <span className="text-[11px] text-slate-500 font-medium block mt-0.5">
+                          {m.member_number || "BEEC-PENDING"} • {extractClub(m.chapter_or_branch)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-400 group-hover:text-eagle-blue dark:group-hover:text-amber-300 transition-colors">
+                      <span className="hidden sm:inline">Details</span>
+                      <span>→</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
         </main>
       )}
 
       {/* ===================================================================== */}
-      {/* E. TAB 4: VAULT TAB (NO Header & Utility Bar, matching app color,      */}
-      {/*    AGILA Hub Logo, 2024 Edition beside Open Portal, Ask AI search)    */}
+      {/* E. TAB 4: VAULT TAB (Item 11: Logo updated to TFOE-PE_LGO.png)         */}
       {/* ===================================================================== */}
       {activeTab === "documents" && (
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-safe pt-6 space-y-6 animate-fadeIn">
@@ -2381,18 +2604,18 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Magna Carta & Constitution Card (Updated as per Item 12) */}
+          {/* Magna Carta & Constitution Card (Item 11: Updated Logo to TFOE-PE_LGO.png) */}
           <div className="p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-lg text-slate-900 dark:text-white relative overflow-hidden">
             {/* Top Amber Accent Bar */}
             <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500" />
 
             <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-start gap-4">
-                {/* AGILA Hub Emblem Logo */}
-                <div className="relative h-14 w-14 rounded-2xl bg-white p-1.5 border border-amber-400 shrink-0 shadow-md flex items-center justify-center overflow-hidden">
+                {/* Official TFOE-PE Emblem Logo */}
+                <div className="relative h-14 w-14 rounded-2xl bg-white p-1 border border-amber-400 shrink-0 shadow-md flex items-center justify-center overflow-hidden">
                   <Image
-                    src="/assets/AGILA Hub.png"
-                    alt="AGILA Hub Emblem"
+                    src="/assets/TFOE-PE_LGO.png"
+                    alt="TFOE-PE Official Logo"
                     width={48}
                     height={48}
                     className="object-contain"
@@ -2540,7 +2763,7 @@ export default function HomePage() {
       {/* ===================================================================== */}
       <QrAttendanceScanner
         eventId={activeEvent?.id || ""}
-        eventTitle={activeEvent?.title || "Chapter Assembly"}
+        eventTitle={activeEvent?.title || "Club Assembly"}
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         onAttendanceRecorded={fetchHubData}
@@ -2638,7 +2861,7 @@ export default function HomePage() {
           setAllMembers((prev) => [newMem, ...prev]);
           setRealtimeToast({
             title: "Member Registered",
-            message: `Kuya/Ate ${newMem.first_name} ${newMem.last_name} was added to the Chapter Roster!`,
+            message: `Kuya/Ate ${newMem.first_name} ${newMem.last_name} was added to the Club Roster!`,
             type: "success",
           });
         }}
@@ -2759,6 +2982,149 @@ export default function HomePage() {
         onTabChange={(tab) =>
           setActiveTab(tab as "home" | "assemblies" | "ledger" | "directory" | "documents")
         }
+      />
+
+      {/* Announcement Detail / Edit Modal */}
+      <AnnouncementDetailModal
+        isOpen={Boolean(selectedAnnouncement)}
+        onClose={() => {
+          setSelectedAnnouncement(null);
+          setIsNewAnnouncementOpen(false);
+        }}
+        announcement={selectedAnnouncement}
+        canEdit={currentRole === "admin" || currentRole === "officer"}
+        isNew={isNewAnnouncementOpen}
+        onSave={(updated) => {
+          const record: AnnouncementRecord = {
+            id: updated.id,
+            title: updated.title,
+            content: updated.content,
+            category: updated.category,
+            priority: updated.priority,
+            target_role: updated.target_role || "all",
+            is_pinned: Boolean(updated.is_pinned),
+            published_at: updated.published_at || new Date().toISOString(),
+          };
+          setAnnouncements((prev) => {
+            const idx = prev.findIndex((a) => a.id === record.id);
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = record;
+              return copy;
+            }
+            return [record, ...prev];
+          });
+          setRealtimeToast({
+            title: isNewAnnouncementOpen ? "Announcement Posted" : "Announcement Updated",
+            message: `"${updated.title}" has been saved.`,
+            type: "success",
+          });
+        }}
+        onDelete={(delId) => {
+          setAnnouncements((prev) => prev.filter((a) => a.id !== delId));
+          setRealtimeToast({
+            title: "Announcement Deleted",
+            message: "The notice has been removed.",
+            type: "info",
+          });
+        }}
+      />
+
+      {/* Assembly Meeting Detail / Edit Modal */}
+      <MeetingDetailModal
+        isOpen={Boolean(selectedMeeting)}
+        onClose={() => setSelectedMeeting(null)}
+        meeting={selectedMeeting}
+        canEdit={currentRole === "admin" || currentRole === "officer"}
+        onSave={(updated) => {
+          const rec: EventRecord = {
+            id: updated.id,
+            title: updated.title,
+            description: updated.description || "",
+            event_date: updated.event_date,
+            location: updated.location,
+            checkin_code: updated.checkin_code,
+            checkin_open: Boolean(updated.checkin_open),
+            status: updated.status || "scheduled",
+          };
+          setEvents((prev) => {
+            const idx = prev.findIndex((e) => e.id === rec.id);
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = rec;
+              return copy;
+            }
+            return [rec, ...prev];
+          });
+          setRealtimeToast({
+            title: "Assembly Meeting Saved",
+            message: `"${updated.title}" details updated successfully.`,
+            type: "success",
+          });
+        }}
+      />
+
+      {/* Community Service Detail / Edit Modal */}
+      <CommunityServiceDetailModal
+        isOpen={Boolean(selectedService)}
+        onClose={() => setSelectedService(null)}
+        service={selectedService}
+        canEdit={currentRole === "admin" || currentRole === "officer"}
+        onSave={(updated) => {
+          setCommunityServices((prev) => {
+            const idx = prev.findIndex((s) => s.id === updated.id);
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = updated;
+              return copy;
+            }
+            return [updated, ...prev];
+          });
+          setRealtimeToast({
+            title: "Outreach Mission Saved",
+            message: `"${updated.title}" project details updated.`,
+            type: "success",
+          });
+        }}
+      />
+
+      {/* Alalayang Agila Detail / Edit Modal */}
+      <AlalayangDetailModal
+        isOpen={Boolean(selectedAlalayang)}
+        onClose={() => setSelectedAlalayang(null)}
+        grant={selectedAlalayang}
+        canEdit={currentRole === "admin" || currentRole === "officer"}
+        onSave={(updated) => {
+          const rec: AlalayangGrantRecord = {
+            id: updated.id,
+            recipientName: updated.recipientName || updated.beneficiaryName || "Brother Eagle",
+            recipientRelationship: (updated.recipientRelationship || updated.relationship || "Member (Kuya/Ate)") as any,
+            chapterOrAffiliation: updated.chapterOrAffiliation || "Bantayog Elite Eagles Club",
+            contactNumber: updated.contactNumber,
+            reason: updated.reason,
+            category: (updated.category || "Medical & Hospitalization") as any,
+            amount: updated.amount,
+            grantDate: updated.grantDate || updated.dateGranted || new Date().toISOString().split("T")[0],
+            voucherNumber: updated.voucherNumber || "VOUCHER-AUTO",
+            approvedBy: updated.approvedBy || updated.approvedByName || "President Joy M. Aragon",
+            status: updated.status === "disbursed" ? "disbursed" : "approved",
+          };
+          setAlalayangGrants((prev) =>
+            prev.map((g) => (g.id === rec.id ? rec : g))
+          );
+          setRealtimeToast({
+            title: "Benevolence Grant Updated",
+            message: `Record for ${rec.recipientName} saved.`,
+            type: "success",
+          });
+        }}
+      />
+
+      {/* Member Detail Modal (Item 8: Full Name, Mobile, Address, Birthday) */}
+      <MemberDetailModal
+        isOpen={Boolean(selectedRosterMember)}
+        onClose={() => setSelectedRosterMember(null)}
+        member={selectedRosterMember}
       />
 
       {/* Logout Confirmation Dialog Modal */}

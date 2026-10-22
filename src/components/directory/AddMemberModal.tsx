@@ -132,7 +132,7 @@ export function AddMemberModal({ isOpen, onClose, onMemberAdded }: AddMemberModa
                 Register New Member
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Add an official member into the Chapter Roster & Directory
+                Add an official member into the Club Roster & Directory
               </p>
             </div>
           </div>
@@ -289,7 +289,7 @@ export function AddMemberModal({ isOpen, onClose, onMemberAdded }: AddMemberModa
                 </>
               ) : (
                 <>
-                  <UserPlus className="h-4 w-4" /> Add Member to Chapter Roster
+                  <UserPlus className="h-4 w-4" /> Add Member to Club Roster
                 </>
               )}
             </Button>

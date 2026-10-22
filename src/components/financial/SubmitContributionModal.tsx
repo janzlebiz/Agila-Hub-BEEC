@@ -313,7 +313,7 @@ export function SubmitContributionModal({
                 Voluntary Fraternal Donation:
               </span>
               <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                Thank you for your generous gift. Voluntary donations directly empower Alalayang Agila emergency assistance and chapter community service.
+                Thank you for your generous gift. Voluntary donations directly empower Alalayang Agila emergency assistance and club community service.
               </p>
             </div>
           )}

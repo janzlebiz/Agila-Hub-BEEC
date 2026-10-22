@@ -76,20 +76,21 @@ export function MobileNavBar({ activeTab, onTabChange }: MobileNavBarProps) {
                 aria-label="Home Dashboard"
               >
                 <div
-                  className={`h-14 w-14 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-300 p-2 ${
+                  className={`h-14 w-14 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-300 p-1.5 bg-black border-2 transition ${
                     isActive
-                      ? "bg-gradient-to-tr from-eagle-blue via-eagle-blue-dark to-amber-500 scale-110 shadow-eagle-blue/40 ring-2 ring-amber-400"
-                      : "bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-white/20 shadow-md hover:scale-105"
+                      ? "border-amber-400 scale-110 shadow-amber-500/40 ring-2 ring-amber-400"
+                      : "border-slate-300 dark:border-white/20 shadow-md hover:scale-105"
                   }`}
                 >
-                  <div className="relative h-9 w-9 flex items-center justify-center">
+                  <div className="relative h-10 w-10 rounded-xl overflow-hidden flex items-center justify-center">
                     <Image
-                      src="/assets/AGILA Hub.png"
-                      alt="AGILA Hub Emblem"
-                      width={36}
-                      height={36}
-                      className="object-contain drop-shadow"
+                      src="/assets/eagle_vector.jpg"
+                      alt="Home Eagle Emblem"
+                      width={40}
+                      height={40}
+                      className="object-contain"
                       priority
+                      unoptimized
                     />
                   </div>
                 </div>

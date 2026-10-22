@@ -36,7 +36,7 @@ export default function RegisterPage() {
     });
   }, [supabase, router]);
 
-  // Claim mode fields (issued privately by chapter Secretariat)
+  // Claim mode fields (issued privately by club Secretariat)
   const [memberNumber, setMemberNumber] = useState("");
   const [claimToken, setClaimToken] = useState("");
 

@@ -502,7 +502,7 @@ export function OfficialIdScannerModal({
                 </div>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
-                Use the verified chapter crest as your primary high-fidelity official credential image immediately.
+                Use the verified club crest as your primary high-fidelity official credential image immediately.
               </p>
               <button
                 id="btn-use-official-crest"

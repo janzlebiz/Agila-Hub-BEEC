@@ -21,6 +21,8 @@ export interface DirectoryMember {
   last_name: string;
   email: string;
   phone?: string | null;
+  address?: string | null;
+  birthday?: string | null;
   member_number?: string | null;
   role: "admin" | "officer" | "member";
   membership_status: "pending" | "active" | "suspended" | "inactive";
@@ -92,7 +94,7 @@ export function MemberDirectoryModal({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by Kuya/Ate name, Member ID (e.g. AGILA-2024-001), or chapter..."
+              placeholder="Search by Kuya/Ate name, Member ID (e.g. AGILA-2024-001), or club..."
               className="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-100 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
             />
           </div>

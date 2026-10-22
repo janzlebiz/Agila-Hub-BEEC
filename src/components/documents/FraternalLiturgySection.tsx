@@ -27,38 +27,38 @@ export function FraternalLiturgySection() {
   const eaglesLetters = [
     {
       letter: "E",
-      title: "Enlightened",
-      desc: "Striving for continuous intellectual enlightenment, civic awareness, and moral uprightness in every fraternal endeavor.",
+      title: "Enlightened and Innovative Humanitarian",
+      desc: "Enlightened and innovative humanitarian",
       color: "from-blue-600 to-indigo-600 dark:from-blue-500 dark:to-indigo-500",
     },
     {
       letter: "A",
-      title: "Animated by Brotherhood",
-      desc: "United in spirit through sincere, unbreakable fraternal love, walking hand-in-hand as genuine Kuya and Ate.",
+      title: "Animated primarily by Brotherhood",
+      desc: "Animated primarily by a strong bond of brotherhood and fraternal ties",
       color: "from-amber-500 to-yellow-500 dark:from-amber-400 dark:to-yellow-400",
     },
     {
       letter: "G",
       title: "God-Loving",
-      desc: "Submitting humbly to Divine Providence, guided by the solemn fraternal motto 'Deo Et Patria' (For God and Country).",
+      desc: "God-loving, non sectarian",
       color: "from-emerald-600 to-teal-600 dark:from-emerald-500 dark:to-teal-500",
     },
     {
       letter: "L",
       title: "Law-Abiding",
-      desc: "Upholding the Constitution of the Republic of the Philippines and the Eagles Magna Carta with utmost discipline and honor.",
+      desc: "Law-abiding, liberty-oriented, non-political",
       color: "from-purple-600 to-violet-600 dark:from-purple-500 dark:to-violet-500",
     },
     {
       letter: "E",
-      title: "Liberty-Oriented",
-      desc: "Emblazed with a passion to defend human freedom, equality, justice, and the democratic institutions of our nation.",
+      title: "Emblazed with Intense Mission",
+      desc: "Emblazed with intense mission of",
       color: "from-rose-600 to-red-600 dark:from-rose-500 dark:to-red-500",
     },
     {
       letter: "S",
-      title: "Service-Driven",
-      desc: "Dedicated to humanitarian relief, community empowerment, and selfless stewardship without expectation of personal glory.",
+      title: "Service to Country & Community",
+      desc: "Service to country, its people and its community",
       color: "from-amber-600 to-orange-600 dark:from-amber-500 dark:to-orange-500",
     },
   ];
@@ -89,7 +89,7 @@ Pillars of the Nation.
 For brotherhood we work and serve
 Peace, Equality and Unity
 Emblazed with zeal of human care,
-We will share our lives to keep our Liberty.`;
+We will share our lives to all humanity / keep our Liberty.`;
 
   const pledgeText = `I, [State Your Name], having consciously subscribed to the Constitution and the Eagles Magna Carta of the Philippine Eagles, and aware of my responsibility to my GOD and COUNTRY, do hereby pledge to promote and defend at all times said Constitution and Magna Carta and their ideals to the best of my ability and within my power and capacity.
 
@@ -233,11 +233,8 @@ SO HELP ME GOD.`;
                 The Philosophy of Eagleism
               </h4>
             </div>
-            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
-              <strong>Eagleism</strong> is the overarching socio-civic and fraternal philosophy of 
-              <em> The Fraternal Order of Eagles (Philippine Eagles)</em>—the first Philippine-born 
-              fraternal organization founded in 1979 under the guiding principle of 
-              <span className="text-eagle-blue dark:text-amber-300 font-bold"> &ldquo;Service Through Strong Brotherhood&rdquo;</span>.
+            <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed font-semibold">
+              &ldquo;Eagleism is fraternalism, or that state of relationship characteristic of brothers. In the Philippine Eagles, members must have primodially developed a deep sense of brotherhood among them. It is the primacy of their relationship is brotherhood&rdquo;
             </p>
           </div>
 
@@ -384,7 +381,7 @@ SO HELP ME GOD.`;
               <p>For brotherhood we work and serve,</p>
               <p>Peace, Equality and Unity,</p>
               <p>Emblazed with zeal of human care,</p>
-              <p>We will share our lives to keep our Liberty.</p>
+              <p>We will share our lives to all humanity / keep our Liberty.</p>
             </div>
           </div>
         </div>

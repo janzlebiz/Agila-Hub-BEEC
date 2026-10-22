@@ -19,7 +19,8 @@ import {
   Building,
   LogOut,
   Upload,
-  MapPin
+  MapPin,
+  Calendar
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -29,6 +30,8 @@ export interface MemberProfileData {
   last_name: string;
   email: string;
   phone?: string | null;
+  address?: string | null;
+  birthday?: string | null;
   member_number?: string | null;
   role: "admin" | "officer" | "member";
   membership_status: "pending" | "active" | "suspended" | "inactive";
@@ -67,6 +70,8 @@ export function ProfileSettingsModal({
   const [firstName, setFirstName] = useState(member?.first_name || "");
   const [lastName, setLastName] = useState(member?.last_name || "");
   const [phone, setPhone] = useState(member?.phone || "");
+  const [address, setAddress] = useState(member?.address || "");
+  const [birthday, setBirthday] = useState(member?.birthday || "");
   const [chapter, setChapter] = useState(
     member?.chapter_or_branch?.includes("•")
       ? member.chapter_or_branch.split("•")[0].trim()
@@ -169,6 +174,8 @@ export function ProfileSettingsModal({
             first_name: firstName,
             last_name: lastName,
             phone,
+            address,
+            birthday,
             blood_type: bloodType,
             emergency_contact_name: emergencyName,
             emergency_contact_phone: emergencyPhone,
@@ -182,6 +189,8 @@ export function ProfileSettingsModal({
         first_name: firstName,
         last_name: lastName,
         phone,
+        address,
+        birthday,
         blood_type: bloodType,
         emergency_contact_name: emergencyName,
         emergency_contact_phone: emergencyPhone,
@@ -400,6 +409,40 @@ export function ProfileSettingsModal({
                     </option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            {/* Address & Birthday */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Address
+                </label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Residential / Office Address"
+                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-eagle-blue"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Birthday
+                </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="date"
+                    value={birthday}
+                    onChange={(e) => setBirthday(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-eagle-blue"
+                  />
+                </div>
               </div>
             </div>
 

@@ -167,7 +167,7 @@ export function MonthlyDuesAdjustmentModal({
         <div className="mt-4 p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/50 dark:from-white/[0.04] dark:to-eagle-blue/10 border border-slate-200 dark:border-white/10 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Active Chapter Rate
+              Active Club Rate
             </span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
               <ShieldCheck className="h-3 w-3" /> Official Policy
