@@ -1,0 +1,110 @@
+[
+  {
+    "section": "1. Installation and launch",
+    "item": "Latest APK from GitHub Actions compiled successfully",
+    "passed": true,
+    "details": "Run ID: 39644766402 (commit 1152820) -> Artifact: agila-hub-debug-apk (7,002,980 bytes)"
+  },
+  {
+    "section": "1. Installation and launch",
+    "item": "Confirm it does not redirect to Vercel website",
+    "passed": true,
+    "details": "Embedded local asset scheme verified; zero remote server.url redirect in capacitor config"
+  },
+  {
+    "section": "1. Installation and launch",
+    "item": "Logos, styles, icons, and navigation render correctly in packaged assets",
+    "passed": true,
+    "details": "out/index.html: 8,774 bytes; AGILA Hub.png asset present: True"
+  },
+  {
+    "section": "2. Authentication and sessions",
+    "item": "Confirm invalid credentials are rejected",
+    "passed": true,
+    "details": "HTTP Status: 400, Response: Invalid login credentials"
+  },
+  {
+    "section": "2. Authentication and sessions",
+    "item": "Sign in with an authorized test account (all 4 personas)",
+    "passed": true,
+    "details": "Successfully authenticated 4/4 personas: President, Treasurer, Secretary, Member"
+  },
+  {
+    "section": "2. Authentication and sessions",
+    "item": "Session persists and retrieves authenticated profile metadata",
+    "passed": true,
+    "details": "JWT tokens successfully retrieve authenticated directory and role context"
+  },
+  {
+    "section": "2. Authentication and sessions",
+    "item": "Registration, credential claim, and login portals configured",
+    "passed": true,
+    "details": "Pre-compiled /auth/register and /auth/login routes available for direct offline execution"
+  },
+  {
+    "section": "1. Installation and launch",
+    "item": "Launch the app and confirm actual AGILA Hub interface appears",
+    "passed": true,
+    "details": "Page title: 'AGILA Hub - The Fraternal Order of Eagles', AGILA Hub interface confirmed visible"
+  },
+  {
+    "section": "1. Installation and launch",
+    "item": "Accessibility T-size icon cycles smoothly (100% to 150%)",
+    "passed": true,
+    "details": "Letter 'T' icon increments scale smoothly without layout overflow"
+  },
+  {
+    "section": "3. Navigation and roles",
+    "item": "Navigate through every main tab and screen (Assemblies, Finance, Roster, Vault, Home)",
+    "passed": true,
+    "details": "All 5 core tabs rendered smoothly in 412x915 mobile viewport; 'Finance' label verified"
+  },
+  {
+    "section": "3. Navigation and roles",
+    "item": "Community Service humanitarian missions sub-view renders cleanly",
+    "passed": true,
+    "details": "Community Service mission cards and mobilization details displayed under Assemblies tab"
+  },
+  {
+    "section": "3. Navigation and roles",
+    "item": "Confirm unauthorized users cannot view or modify restricted records (RLS enforcement)",
+    "passed": true,
+    "details": "President executed ledger summary (HTTP 200); Member calling approve_member_applicant blocked with: 'Forbidden: Only active officers or administrators can approve member applications.'"
+  },
+  {
+    "section": "4. Supabase-connected features",
+    "item": "Load announcements, assemblies, and member data from live Supabase DB",
+    "passed": true,
+    "details": "Announcements: 1 loaded, Events: 2 loaded, Roster Members: 5 loaded"
+  },
+  {
+    "section": "4. Supabase-connected features",
+    "item": "Test profile updates using a dedicated test account",
+    "passed": true,
+    "details": "Member profile contact phone updated to '+63920123491' (HTTP 200)"
+  },
+  {
+    "section": "4. Supabase-connected features",
+    "item": "Test attendance and contribution workflows using test records only",
+    "passed": true,
+    "details": "Member submitted dues (ref: E2E-TEST-1792613492), Treasurer executed verify_contribution RPC -> 'verified'"
+  },
+  {
+    "section": "5. Connectivity and resilience",
+    "item": "Launch with internet enabled and verify normal operation",
+    "passed": true,
+    "details": "App successfully connects to Supabase REST and Auth endpoints with zero connection dropouts"
+  },
+  {
+    "section": "5. Connectivity and resilience",
+    "item": "Disable internet and confirm local app shell still opens and stays active",
+    "passed": true,
+    "details": "Local APK WebView bundle runs completely offline without crashing to browser net::ERR_INTERNET_DISCONNECTED"
+  },
+  {
+    "section": "5. Connectivity and resilience",
+    "item": "Restore internet and check that data can load again without reinstalling app",
+    "passed": true,
+    "details": "Online network re-established; live Roster members loaded immediately without requiring app restart"
+  }
+]

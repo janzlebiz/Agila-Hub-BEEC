@@ -20,6 +20,11 @@ interface SubmitContributionModalProps {
   onClose: () => void;
   memberId?: string;
   memberName?: string;
+  monthlyRateConfig?: {
+    totalAmount: number;
+    renewalAmount: number;
+    alalayangAndServiceAmount: number;
+  };
   onContributionSubmitted?: () => void;
 }
 
@@ -28,13 +33,18 @@ export function SubmitContributionModal({
   onClose,
   memberId,
   memberName = "Kuya Juan Dela Cruz",
+  monthlyRateConfig = {
+    totalAmount: 400,
+    renewalAmount: 100,
+    alalayangAndServiceAmount: 300,
+  },
   onContributionSubmitted,
 }: SubmitContributionModalProps) {
   const supabase = createClient();
 
-  const [title, setTitle] = useState("2026 Annual Membership Dues");
+  const [title, setTitle] = useState("Monthly Fraternal Contribution");
   const [category, setCategory] = useState("Monthly Dues");
-  const [amount, setAmount] = useState("2400");
+  const [amount, setAmount] = useState(monthlyRateConfig.totalAmount.toString());
   const [paymentMethod, setPaymentMethod] = useState("GCash");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [receiptStoragePath, setReceiptStoragePath] = useState<string | null>(null);
@@ -224,14 +234,30 @@ export function SubmitContributionModal({
               </label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(e) => {
+                  const newCat = e.target.value;
+                  setCategory(newCat);
+                  if (newCat === "Monthly Dues") {
+                    setTitle("Monthly Fraternal Contribution");
+                    setAmount(monthlyRateConfig.totalAmount.toString());
+                  } else if (newCat === "Donation") {
+                    setTitle("Special Fraternal Donation");
+                    if (Number(amount) < 500) setAmount("1000");
+                  } else if (newCat === "Alalayang Agila Pledge") {
+                    setTitle("Alalayang Agila Emergency Fund Donation");
+                    if (Number(amount) < 500) setAmount("1000");
+                  } else if (newCat === "Community Outreach") {
+                    setTitle("Community Outreach Project Support");
+                  }
+                }}
                 className="w-full h-10 px-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 text-xs font-bold text-slate-900 dark:text-white focus:outline-none"
               >
-                <option value="Monthly Dues">Monthly Dues</option>
+                <option value="Monthly Dues">Monthly Dues (₱{monthlyRateConfig.totalAmount})</option>
+                <option value="Donation">Special Donation</option>
+                <option value="Alalayang Agila Pledge">Alalayang Agila Donation</option>
+                <option value="Community Outreach">Community Outreach Support</option>
                 <option value="Annual Dues">Annual Dues</option>
                 <option value="Building Assessment">Building Assessment</option>
-                <option value="Community Outreach">Community Outreach</option>
-                <option value="Emergency Relief">Emergency Relief</option>
               </select>
             </div>
 
@@ -255,6 +281,42 @@ export function SubmitContributionModal({
               </div>
             </div>
           </div>
+
+          {/* Monthly Dues Allocation Breakdown */}
+          {category === "Monthly Dues" && (
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-400/30 text-xs space-y-1.5 animate-fadeIn">
+              <div className="flex items-center justify-between font-bold text-amber-900 dark:text-amber-200">
+                <span>Monthly Fraternal Allocation Breakdown:</span>
+                <span className="font-mono">₱{monthlyRateConfig.totalAmount.toLocaleString()}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                <div className="p-2 rounded-xl bg-white/80 dark:bg-canvas-slate/80 border border-amber-300/40">
+                  <span className="text-slate-500 block text-[10px]">Renewal Remittance:</span>
+                  <span className="font-bold text-slate-900 dark:text-white font-mono">
+                    ₱{monthlyRateConfig.renewalAmount.toLocaleString()}
+                  </span>
+                </div>
+                <div className="p-2 rounded-xl bg-white/80 dark:bg-canvas-slate/80 border border-amber-300/40">
+                  <span className="text-slate-500 block text-[10px]">Alalayang Agila & Service:</span>
+                  <span className="font-bold text-slate-900 dark:text-white font-mono">
+                    ₱{monthlyRateConfig.alalayangAndServiceAmount.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Voluntary Donation Fraternal Notice */}
+          {(category === "Donation" || category === "Alalayang Agila Pledge" || category === "Community Outreach") && (
+            <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-400/30 text-xs space-y-1 animate-fadeIn">
+              <span className="font-bold text-emerald-900 dark:text-emerald-200 block">
+                Voluntary Fraternal Donation:
+              </span>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                Thank you for your generous gift. Voluntary donations directly empower Alalayang Agila emergency assistance and chapter community service.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

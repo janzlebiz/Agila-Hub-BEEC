@@ -16,199 +16,207 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 DO $$
 DECLARE
-    v_pwd_pres TEXT;
-    v_pwd_treas TEXT;
-    v_pwd_sec TEXT;
-    v_pwd_mem TEXT;
-
-    v_pres_id UUID  := 'b0000000-0000-0000-0000-000000000001';
-    v_treas_id UUID := 'b0000000-0000-0000-0000-000000000002';
-    v_sec_id UUID   := 'b0000000-0000-0000-0000-000000000003';
-    v_mem_id UUID   := 'b0000000-0000-0000-0000-000000000004';
+    r RECORD;
+    v_pwd TEXT;
+    v_user_id UUID;
+    v_now TIMESTAMPTZ := timezone('utc'::text, now());
 BEGIN
-    -- 1. Compute individual bcrypt password hashes
-    v_pwd_pres  := extensions.crypt('AgilaPresident2026!', extensions.gen_salt('bf', 10));
-    v_pwd_treas := extensions.crypt('AgilaTreasurer2026!', extensions.gen_salt('bf', 10));
-    v_pwd_sec   := extensions.crypt('AgilaSecretary2026!', extensions.gen_salt('bf', 10));
-    v_pwd_mem   := extensions.crypt('AgilaMember2026!',    extensions.gen_salt('bf', 10));
+    -- Prevent unique member_number conflicts if test numbers were temporarily assigned to other records
+    UPDATE public.members 
+    SET member_number = NULL 
+    WHERE member_number IN ('BEEC-2024-001', 'BEEC-2024-002', 'BEEC-2024-003', 'BEEC-2025-101') 
+      AND email NOT IN ('president@agilahub.ph', 'treasurer@agilahub.ph', 'secretary@agilahub.ph', 'member@agilahub.ph');
 
-    -- 2. Clear circular foreign keys before deletions
-    UPDATE public.members SET approved_by = NULL;
+    -- Iterate through the 4 personas and perform idempotent upserts
+    -- (NO DELETIONS that could trigger foreign key constraint violations on announcements/events)
+    FOR r IN (
+        SELECT 
+            'president@agilahub.ph' AS email,
+            'AgilaPresident2026!' AS raw_password,
+            'Juan' AS first_name,
+            'Dela Cruz' AS last_name,
+            'BEEC-2024-001' AS member_number,
+            'admin'::public.user_role AS role,
+            'O+' AS blood_type,
+            '+639171230001' AS phone,
+            'b0000000-0000-0000-0000-000000000001'::UUID AS default_id
+        UNION ALL
+        SELECT 
+            'treasurer@agilahub.ph',
+            'AgilaTreasurer2026!',
+            'Maria',
+            'Santos',
+            'BEEC-2024-002',
+            'officer'::public.user_role,
+            'A+',
+            '+639181230002',
+            'b0000000-0000-0000-0000-000000000002'::UUID
+        UNION ALL
+        SELECT 
+            'secretary@agilahub.ph',
+            'AgilaSecretary2026!',
+            'Ricardo',
+            'Reyes',
+            'BEEC-2024-003',
+            'officer'::public.user_role,
+            'B+',
+            '+639191230003',
+            'b0000000-0000-0000-0000-000000000003'::UUID
+        UNION ALL
+        SELECT 
+            'member@agilahub.ph',
+            'AgilaMember2026!',
+            'Antonio',
+            'Luna',
+            'BEEC-2025-101',
+            'member'::public.user_role,
+            'O+',
+            '+639201230004',
+            'b0000000-0000-0000-0000-000000000004'::UUID
+    ) LOOP
+        -- 1. Compute bcrypt password hash
+        v_pwd := extensions.crypt(r.raw_password, extensions.gen_salt('bf', 10));
 
-    -- 3. Delete old administrator credentials & obsolete probe accounts
-    DELETE FROM public.members 
-    WHERE email IN (
-        'admin@agilahub.ph',
-        'admin@eagles.internal',
-        'juan@agilahub.example',
-        'admin@agilahub.example',
-        'kuya.juan@eagles.org.ph'
-    ) OR member_number = 'AGILA-ADMIN-001';
+        -- 2. Find or insert into auth.users
+        SELECT id INTO v_user_id FROM auth.users WHERE lower(email) = lower(r.email) LIMIT 1;
 
-    DELETE FROM auth.users 
-    WHERE email IN (
-        'admin@agilahub.ph',
-        'admin@eagles.internal',
-        'juan@agilahub.example',
-        'admin@agilahub.example',
-        'kuya.juan@eagles.org.ph'
-    );
+        IF v_user_id IS NOT NULL THEN
+            UPDATE auth.users
+            SET encrypted_password = v_pwd,
+                email_confirmed_at = COALESCE(email_confirmed_at, v_now),
+                raw_app_meta_data = '{"provider":"email","providers":["email"]}'::jsonb,
+                raw_user_meta_data = jsonb_build_object(
+                    'first_name', r.first_name,
+                    'last_name', r.last_name,
+                    'role', r.role::text
+                ),
+                updated_at = v_now
+            WHERE id = v_user_id;
+        ELSE
+            v_user_id := r.default_id;
 
-    -- Delete any previous test persona rows to ensure clean state
-    DELETE FROM public.members WHERE email IN (
-        'president@agilahub.ph',
-        'treasurer@agilahub.ph',
-        'secretary@agilahub.ph',
-        'member@agilahub.ph'
-    );
+            IF EXISTS (SELECT 1 FROM auth.users WHERE id = v_user_id) THEN
+                v_user_id := gen_random_uuid();
+            END IF;
 
-    DELETE FROM auth.users WHERE email IN (
-        'president@agilahub.ph',
-        'treasurer@agilahub.ph',
-        'secretary@agilahub.ph',
-        'member@agilahub.ph'
-    );
+            INSERT INTO auth.users (
+                instance_id,
+                id,
+                aud,
+                role,
+                email,
+                encrypted_password,
+                email_confirmed_at,
+                raw_app_meta_data,
+                raw_user_meta_data,
+                created_at,
+                updated_at,
+                confirmation_token,
+                email_change,
+                email_change_token_new,
+                recovery_token
+            ) VALUES (
+                '00000000-0000-0000-0000-000000000000',
+                v_user_id,
+                'authenticated',
+                'authenticated',
+                lower(r.email),
+                v_pwd,
+                v_now,
+                '{"provider":"email","providers":["email"]}'::jsonb,
+                jsonb_build_object(
+                    'first_name', r.first_name,
+                    'last_name', r.last_name,
+                    'role', r.role::text
+                ),
+                v_now,
+                v_now,
+                '', '', '', ''
+            );
+        END IF;
 
-    -- -------------------------------------------------------------------------
-    -- 4. Insert Persona 1: Club President (Admin)
-    -- -------------------------------------------------------------------------
-    INSERT INTO auth.users (
-        instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-        raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
-        confirmation_token, email_change, email_change_token_new, recovery_token
-    ) VALUES (
-        '00000000-0000-0000-0000-000000000000', v_pres_id, 'authenticated', 'authenticated',
-        'president@agilahub.ph', v_pwd_pres, timezone('utc'::text, now()),
-        '{"provider":"email","providers":["email"]}'::jsonb,
-        '{"first_name":"Juan","last_name":"Dela Cruz","role":"admin"}'::jsonb,
-        timezone('utc'::text, now()), timezone('utc'::text, now()),
-        '', '', '', ''
-    );
+        -- 3. Upsert into auth.identities
+        DELETE FROM auth.identities WHERE user_id = v_user_id;
+        INSERT INTO auth.identities (
+            id,
+            user_id,
+            provider_id,
+            identity_data,
+            provider,
+            last_sign_in_at,
+            created_at,
+            updated_at
+        ) VALUES (
+            v_user_id,
+            v_user_id,
+            v_user_id::text,
+            jsonb_build_object('sub', v_user_id::text, 'email', lower(r.email)),
+            'email',
+            v_now,
+            v_now,
+            v_now
+        );
 
-    INSERT INTO auth.identities (
-        id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
-    ) VALUES (
-        v_pres_id, v_pres_id, v_pres_id::text,
-        jsonb_build_object('sub', v_pres_id::text, 'email', 'president@agilahub.ph'),
-        'email', timezone('utc'::text, now()), timezone('utc'::text, now()), timezone('utc'::text, now())
-    );
+        -- 4. Upsert into public.members
+        IF EXISTS (SELECT 1 FROM public.members WHERE lower(email) = lower(r.email)) THEN
+            UPDATE public.members
+            SET user_id = v_user_id,
+                first_name = r.first_name,
+                last_name = r.last_name,
+                role = r.role,
+                membership_status = 'active',
+                member_number = r.member_number,
+                chapter_or_branch = 'Bantayog Elite Eagles Club',
+                blood_type = r.blood_type,
+                phone = r.phone,
+                updated_at = v_now
+            WHERE lower(email) = lower(r.email);
+        ELSE
+            IF EXISTS (SELECT 1 FROM public.members WHERE user_id = v_user_id) THEN
+                UPDATE public.members
+                SET email = lower(r.email),
+                    first_name = r.first_name,
+                    last_name = r.last_name,
+                    role = r.role,
+                    membership_status = 'active',
+                    member_number = r.member_number,
+                    chapter_or_branch = 'Bantayog Elite Eagles Club',
+                    blood_type = r.blood_type,
+                    phone = r.phone,
+                    updated_at = v_now
+                WHERE user_id = v_user_id;
+            ELSE
+                INSERT INTO public.members (
+                    user_id,
+                    email,
+                    first_name,
+                    last_name,
+                    member_number,
+                    role,
+                    membership_status,
+                    chapter_or_branch,
+                    blood_type,
+                    phone
+                ) VALUES (
+                    v_user_id,
+                    lower(r.email),
+                    r.first_name,
+                    r.last_name,
+                    r.member_number,
+                    r.role,
+                    'active',
+                    'Bantayog Elite Eagles Club',
+                    r.blood_type,
+                    r.phone
+                );
+            END IF;
+        END IF;
 
-    INSERT INTO public.members (
-        user_id, email, first_name, last_name, member_number, role,
-        membership_status, chapter_or_branch, blood_type, phone
-    ) VALUES (
-        v_pres_id, 'president@agilahub.ph', 'Juan', 'Dela Cruz', 'BEEC-2024-001', 'admin',
-        'active', 'Bantayog Elite Eagles Club', 'O+', '+639171230001'
-    ) ON CONFLICT (email) DO UPDATE SET
-        user_id = v_pres_id, role = 'admin', membership_status = 'active',
-        first_name = 'Juan', last_name = 'Dela Cruz', member_number = 'BEEC-2024-001';
-
-    -- -------------------------------------------------------------------------
-    -- 5. Insert Persona 2: Treasurer (Officer)
-    -- -------------------------------------------------------------------------
-    INSERT INTO auth.users (
-        instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-        raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
-        confirmation_token, email_change, email_change_token_new, recovery_token
-    ) VALUES (
-        '00000000-0000-0000-0000-000000000000', v_treas_id, 'authenticated', 'authenticated',
-        'treasurer@agilahub.ph', v_pwd_treas, timezone('utc'::text, now()),
-        '{"provider":"email","providers":["email"]}'::jsonb,
-        '{"first_name":"Maria","last_name":"Santos","role":"officer"}'::jsonb,
-        timezone('utc'::text, now()), timezone('utc'::text, now()),
-        '', '', '', ''
-    );
-
-    INSERT INTO auth.identities (
-        id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
-    ) VALUES (
-        v_treas_id, v_treas_id, v_treas_id::text,
-        jsonb_build_object('sub', v_treas_id::text, 'email', 'treasurer@agilahub.ph'),
-        'email', timezone('utc'::text, now()), timezone('utc'::text, now()), timezone('utc'::text, now())
-    );
-
-    INSERT INTO public.members (
-        user_id, email, first_name, last_name, member_number, role,
-        membership_status, chapter_or_branch, blood_type, phone
-    ) VALUES (
-        v_treas_id, 'treasurer@agilahub.ph', 'Maria', 'Santos', 'BEEC-2024-002', 'officer',
-        'active', 'Bantayog Elite Eagles Club', 'A+', '+639181230002'
-    ) ON CONFLICT (email) DO UPDATE SET
-        user_id = v_treas_id, role = 'officer', membership_status = 'active',
-        first_name = 'Maria', last_name = 'Santos', member_number = 'BEEC-2024-002';
-
-    -- -------------------------------------------------------------------------
-    -- 6. Insert Persona 3: Secretary (Officer)
-    -- -------------------------------------------------------------------------
-    INSERT INTO auth.users (
-        instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-        raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
-        confirmation_token, email_change, email_change_token_new, recovery_token
-    ) VALUES (
-        '00000000-0000-0000-0000-000000000000', v_sec_id, 'authenticated', 'authenticated',
-        'secretary@agilahub.ph', v_pwd_sec, timezone('utc'::text, now()),
-        '{"provider":"email","providers":["email"]}'::jsonb,
-        '{"first_name":"Ricardo","last_name":"Reyes","role":"officer"}'::jsonb,
-        timezone('utc'::text, now()), timezone('utc'::text, now()),
-        '', '', '', ''
-    );
-
-    INSERT INTO auth.identities (
-        id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
-    ) VALUES (
-        v_sec_id, v_sec_id, v_sec_id::text,
-        jsonb_build_object('sub', v_sec_id::text, 'email', 'secretary@agilahub.ph'),
-        'email', timezone('utc'::text, now()), timezone('utc'::text, now()), timezone('utc'::text, now())
-    );
-
-    INSERT INTO public.members (
-        user_id, email, first_name, last_name, member_number, role,
-        membership_status, chapter_or_branch, blood_type, phone
-    ) VALUES (
-        v_sec_id, 'secretary@agilahub.ph', 'Ricardo', 'Reyes', 'BEEC-2024-003', 'officer',
-        'active', 'Bantayog Elite Eagles Club', 'B+', '+639191230003'
-    ) ON CONFLICT (email) DO UPDATE SET
-        user_id = v_sec_id, role = 'officer', membership_status = 'active',
-        first_name = 'Ricardo', last_name = 'Reyes', member_number = 'BEEC-2024-003';
-
-    -- -------------------------------------------------------------------------
-    -- 7. Insert Persona 4: Normal Club Member (Member)
-    -- -------------------------------------------------------------------------
-    INSERT INTO auth.users (
-        instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-        raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
-        confirmation_token, email_change, email_change_token_new, recovery_token
-    ) VALUES (
-        '00000000-0000-0000-0000-000000000000', v_mem_id, 'authenticated', 'authenticated',
-        'member@agilahub.ph', v_pwd_mem, timezone('utc'::text, now()),
-        '{"provider":"email","providers":["email"]}'::jsonb,
-        '{"first_name":"Antonio","last_name":"Luna","role":"member"}'::jsonb,
-        timezone('utc'::text, now()), timezone('utc'::text, now()),
-        '', '', '', ''
-    );
-
-    INSERT INTO auth.identities (
-        id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
-    ) VALUES (
-        v_mem_id, v_mem_id, v_mem_id::text,
-        jsonb_build_object('sub', v_mem_id::text, 'email', 'member@agilahub.ph'),
-        'email', timezone('utc'::text, now()), timezone('utc'::text, now()), timezone('utc'::text, now())
-    );
-
-    INSERT INTO public.members (
-        user_id, email, first_name, last_name, member_number, role,
-        membership_status, chapter_or_branch, blood_type, phone
-    ) VALUES (
-        v_mem_id, 'member@agilahub.ph', 'Antonio', 'Luna', 'BEEC-2025-101', 'member',
-        'active', 'Bantayog Elite Eagles Club', 'O+', '+639201230004'
-    ) ON CONFLICT (email) DO UPDATE SET
-        user_id = v_mem_id, role = 'member', membership_status = 'active',
-        first_name = 'Antonio', last_name = 'Luna', member_number = 'BEEC-2025-101';
-
+    END LOOP;
 END $$;
 
 -- -----------------------------------------------------------------------------
--- 8. Add Member RPC: Allows President / Officers to Register New Members
+-- 5. Add Member RPC: Allows President / Officers to Register New Members
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.admin_add_member(
     p_first_name TEXT,
@@ -295,19 +303,17 @@ $$;
 GRANT EXECUTE ON FUNCTION public.admin_add_member TO authenticated;
 
 -- -----------------------------------------------------------------------------
--- 9. RLS Policy: Allow Officers/Admins to INSERT directly into public.members
+-- 6. RLS Policy: Allow Officers/Admins to INSERT directly into public.members
 -- -----------------------------------------------------------------------------
-DO $$ BEGIN
-    CREATE POLICY "Officers and Admins can insert members"
-        ON public.members FOR INSERT
-        TO authenticated
-        WITH CHECK (
-            EXISTS (
-                SELECT 1 FROM public.members m
-                WHERE m.user_id = auth.uid()
-                  AND m.role IN ('admin', 'officer')
-                  AND m.membership_status = 'active'
-            )
-        );
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
+DROP POLICY IF EXISTS "Officers and Admins can insert members" ON public.members;
+CREATE POLICY "Officers and Admins can insert members"
+    ON public.members FOR INSERT
+    TO authenticated
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.members m
+            WHERE m.user_id = auth.uid()
+              AND m.role IN ('admin', 'officer')
+              AND m.membership_status = 'active'
+        )
+    );

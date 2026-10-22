@@ -145,10 +145,10 @@ export function Header({
                 type="button"
                 onClick={onOpenProfile}
                 aria-label="Open Profile and Settings"
-                className="h-9 px-3 rounded-xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white hover:brightness-110 flex items-center gap-2 text-xs font-bold shadow-md transition active:scale-95"
+                className="h-9 px-2.5 sm:px-3 rounded-xl bg-slate-100 dark:bg-white/[0.06] hover:bg-slate-200 dark:hover:bg-white/[0.12] border border-slate-200 dark:border-white/10 flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition active:scale-95 shadow-sm"
                 title="Profile & Settings"
               >
-                <div className="h-5 w-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-black">
+                <div className="h-5 w-5 rounded-full bg-slate-200 dark:bg-white/15 flex items-center justify-center text-[10px] font-black text-slate-700 dark:text-slate-200">
                   {authMember.first_name ? authMember.first_name.charAt(0) : "E"}
                 </div>
                 <span className="hidden sm:inline">
@@ -171,7 +171,7 @@ export function Header({
           ) : (
             <Link
               href="/auth/login"
-              className="h-9 px-3 rounded-xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white hover:brightness-110 flex items-center gap-1.5 text-xs font-bold shadow-md transition active:scale-95"
+              className="h-9 px-3 rounded-xl bg-slate-100 dark:bg-white/[0.06] hover:bg-slate-200 dark:hover:bg-white/[0.12] border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 text-xs font-bold shadow-sm transition active:scale-95"
               title="Sign In / Claim ID"
             >
               <User className="h-3.5 w-3.5" />

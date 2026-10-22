@@ -18,7 +18,8 @@ import {
   Lock, 
   Building,
   LogOut,
-  Upload
+  Upload,
+  MapPin
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -66,7 +67,16 @@ export function ProfileSettingsModal({
   const [firstName, setFirstName] = useState(member?.first_name || "");
   const [lastName, setLastName] = useState(member?.last_name || "");
   const [phone, setPhone] = useState(member?.phone || "");
-  const [chapter, setChapter] = useState(member?.chapter_or_branch || "Bantayog Elite Eagles Club");
+  const [chapter, setChapter] = useState(
+    member?.chapter_or_branch?.includes("•")
+      ? member.chapter_or_branch.split("•")[0].trim()
+      : member?.chapter_or_branch || "Bantayog Elite Eagles Club"
+  );
+  const [region, setRegion] = useState(
+    member?.chapter_or_branch?.includes("•")
+      ? member.chapter_or_branch.split("•")[1].trim()
+      : "Region V - Bicol Region"
+  );
   const [bloodType, setBloodType] = useState(member?.blood_type || "O+");
   const [emergencyName, setEmergencyName] = useState(member?.emergency_contact_name || "");
   const [emergencyPhone, setEmergencyPhone] = useState(member?.emergency_contact_phone || "");
@@ -138,6 +148,8 @@ export function ProfileSettingsModal({
     setProfileFeedback(null);
 
     try {
+      const fullChapterOrBranch = region ? `${chapter} • ${region}` : chapter;
+
       // 1. Try secure RPC
       const { data, error } = await supabase.rpc("update_self_profile", {
         p_first_name: firstName,
@@ -146,7 +158,7 @@ export function ProfileSettingsModal({
         p_blood_type: bloodType,
         p_emergency_name: emergencyName,
         p_emergency_phone: emergencyPhone,
-        p_chapter: chapter,
+        p_chapter: fullChapterOrBranch,
       });
 
       // 2. Direct table update fallback if user is authenticated
@@ -160,7 +172,7 @@ export function ProfileSettingsModal({
             blood_type: bloodType,
             emergency_contact_name: emergencyName,
             emergency_contact_phone: emergencyPhone,
-            chapter_or_branch: chapter,
+            chapter_or_branch: fullChapterOrBranch,
           })
           .eq("id", member.id);
       }
@@ -173,7 +185,7 @@ export function ProfileSettingsModal({
         blood_type: bloodType,
         emergency_contact_name: emergencyName,
         emergency_contact_phone: emergencyPhone,
-        chapter_or_branch: chapter,
+        chapter_or_branch: fullChapterOrBranch,
         avatar_url: avatarUrl,
       });
 
@@ -226,10 +238,13 @@ export function ProfileSettingsModal({
 
   // Handle Explicit Logout
   const handleLogout = async () => {
+    if (onLogout) {
+      onLogout();
+      return;
+    }
     setLoggingOut(true);
     try {
       await supabase.auth.signOut();
-      if (onLogout) onLogout();
       onClose();
       window.location.href = "/auth/login";
     } catch (err) {
@@ -389,19 +404,37 @@ export function ProfileSettingsModal({
             </div>
 
             {/* Eagles Club (Updated from Eagles Chapter / Branch) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Eagles Club
-              </label>
-              <div className="relative">
-                <Building className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  value={chapter}
-                  onChange={(e) => setChapter(e.target.value)}
-                  placeholder="Bantayog Elite Eagles Club"
-                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-eagle-blue"
-                />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Eagles Club
+                </label>
+                <div className="relative">
+                  <Building className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={chapter}
+                    onChange={(e) => setChapter(e.target.value)}
+                    placeholder="Bantayog Elite Eagles Club"
+                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-eagle-blue"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Eagles Region
+                </label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    placeholder="Region V - Bicol Region"
+                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-eagle-blue"
+                  />
+                </div>
               </div>
             </div>
 
