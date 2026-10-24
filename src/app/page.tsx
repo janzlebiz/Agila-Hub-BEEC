@@ -9,6 +9,12 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+import { 
+  formatDate, 
+  formatDateTime, 
+  isDateTodayManila, 
+  isMeetingPastManila 
+} from "@/lib/utils";
 import {
   Calendar,
   CreditCard,
@@ -472,7 +478,10 @@ export default function HomePage() {
   const [idCardBackUrl, setIdCardBackUrl] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [bloodType, setBloodType] = useState<string>("O+");
-  const [assemblyHeadcount, setAssemblyHeadcount] = useState<number>(38);
+  const [assemblyHeadcount, setAssemblyHeadcount] = useState<number>(0);
+  const [hasCheckedIn, setHasCheckedIn] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [realtimeToast, setRealtimeToast] = useState<{
     title: string;
     message: string;
@@ -485,7 +494,7 @@ export default function HomePage() {
   const [ragInlineQuery, setRagInlineQuery] = useState("");
 
   // Interactive Live Check-in States
-  const [checkInCode, setCheckInCode] = useState("AGILA-GMM-2026");
+  const [checkInCode, setCheckInCode] = useState("");
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkInFeedback, setCheckInFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -499,6 +508,24 @@ export default function HomePage() {
 
   // Logout Confirmation Modal State
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+
+  // Network offline listener
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      setFetchError(null);
+    };
+    const handleOffline = () => setIsOffline(true);
+    if (typeof window !== "undefined") {
+      setIsOffline(!navigator.onLine);
+      window.addEventListener("online", handleOnline);
+      window.addEventListener("offline", handleOffline);
+      return () => {
+        window.removeEventListener("online", handleOnline);
+        window.removeEventListener("offline", handleOffline);
+      };
+    }
+  }, []);
 
   // Theme & text size synchronization
   useEffect(() => {
@@ -666,15 +693,68 @@ export default function HomePage() {
         ]);
       }
 
-      // 8. Fetch Assembly Headcount
-      const { count: attCount } = await supabase
-        .from("attendance")
-        .select("id", { count: "exact", head: true });
-      if (typeof attCount === "number") {
-        setAssemblyHeadcount(32 + attCount);
+      // 8. Fetch Assembly Headcount & Verify Authenticated Member Check-in
+      if (evtData && evtData.length > 0) {
+        // Resolve target relevant meeting (active today -> upcoming -> latest past)
+        const todayActive = evtData.find(
+          (e) => isDateTodayManila(e.event_date) && Boolean(e.checkin_open)
+        );
+        const todayAny = evtData.find((e) => isDateTodayManila(e.event_date));
+        const upcoming = evtData
+          .filter((e) => !isMeetingPastManila(e.event_date))
+          .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())[0];
+        const latestPast = evtData
+          .slice()
+          .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime())[0];
+
+        const targetEvt = todayActive || todayAny || upcoming || latestPast;
+
+        if (targetEvt?.id) {
+          const { count: attCount } = await supabase
+            .from("attendance")
+            .select("id", { count: "exact", head: true })
+            .eq("event_id", targetEvt.id);
+          setAssemblyHeadcount(attCount ?? 0);
+
+          // Verify whether active user has an attendance record
+          if (user) {
+            const { data: curMem } = await supabase
+              .from("members")
+              .select("id")
+              .eq("user_id", user.id)
+              .maybeSingle();
+
+            if (curMem?.id) {
+              const { data: userAtt } = await supabase
+                .from("attendance")
+                .select("id, status, created_at")
+                .eq("event_id", targetEvt.id)
+                .eq("member_id", curMem.id)
+                .maybeSingle();
+
+              if (userAtt) {
+                setHasCheckedIn(true);
+                setCheckInFeedback({
+                  success: true,
+                  message: "Attendance confirmed on server.",
+                });
+              } else {
+                setHasCheckedIn(false);
+              }
+            }
+          }
+        } else {
+          setAssemblyHeadcount(0);
+          setHasCheckedIn(false);
+        }
+      } else {
+        setAssemblyHeadcount(0);
+        setHasCheckedIn(false);
       }
+      setFetchError(null);
     } catch (err) {
       console.error("Error fetching live database data:", err);
+      setFetchError("Unable to load latest records from server. Viewing cached view.");
     } finally {
       // Smooth minimum splash presentation
       setTimeout(() => {
@@ -696,7 +776,6 @@ export default function HomePage() {
         { event: "*", schema: "public", table: "attendance" },
         () => {
           fetchHubData();
-          setAssemblyHeadcount((prev) => prev + 1);
           setRealtimeToast({
             title: "Assembly Quorum Live",
             message: "A brother / sister has recorded attendance!",
@@ -846,8 +925,51 @@ export default function HomePage() {
         },
       }[currentRole];
 
-  // Active check-in assembly
-  const activeEvent = events.find((e) => e.checkin_open) || events[0];
+  // Determine relevant assembly & correct stale states
+  const activeEvent = React.useMemo(() => {
+    if (!events || events.length === 0) return null;
+
+    // 1. Check for active/ongoing meeting today
+    const todayActive = events.find(
+      (e) => isDateTodayManila(e.event_date) && Boolean(e.checkin_open)
+    );
+    if (todayActive) return todayActive;
+
+    // 2. Check for any meeting scheduled today
+    const todayAny = events.find((e) => isDateTodayManila(e.event_date));
+    if (todayAny) return todayAny;
+
+    // 3. Nearest upcoming meeting
+    const upcoming = events
+      .filter((e) => !isMeetingPastManila(e.event_date))
+      .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())[0];
+    if (upcoming) return upcoming;
+
+    // 4. Fallback to latest meeting (concluded)
+    return events
+      .slice()
+      .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime())[0];
+  }, [events]);
+
+  // Evaluated assembly status correcting stale backend rows
+  const activeEventStatus = React.useMemo(() => {
+    if (!activeEvent) {
+      return { isToday: false, isPast: false, effectiveCheckinOpen: false, label: "No Assemblies" };
+    }
+    const isPast = isMeetingPastManila(activeEvent.event_date);
+    const isToday = isDateTodayManila(activeEvent.event_date);
+    // If meeting date is in the past, it CANNOT be checkin_open (stale state correction)
+    const effectiveCheckinOpen = !isPast && Boolean(activeEvent.checkin_open);
+
+    let label = "Upcoming Assembly";
+    if (effectiveCheckinOpen) {
+      label = "Assembly Quorum Open";
+    } else if (isPast) {
+      label = "Concluded Assembly";
+    }
+
+    return { isToday, isPast, effectiveCheckinOpen, label };
+  }, [activeEvent]);
 
   // Active user identification for personal dues scope filtering
   const activeUserMemberId = authMember?.id || (
@@ -1035,7 +1157,13 @@ export default function HomePage() {
 
   // Handle Tactile Check-In
   const handleCheckIn = async (eventId: string) => {
-    if (!checkInCode.trim()) return;
+    if (!checkInCode.trim()) {
+      setCheckInFeedback({
+        success: false,
+        message: "Please enter the official assembly passkey to check in.",
+      });
+      return;
+    }
     setCheckInLoading(true);
     setCheckInFeedback(null);
     try {
@@ -1053,8 +1181,16 @@ export default function HomePage() {
       }
 
       if (data) {
-        const res = data as { success: boolean; message: string };
+        const res = data as { success: boolean; message: string; already_checked_in?: boolean };
         setCheckInFeedback({ success: res.success, message: res.message });
+        if (res.success) {
+          setHasCheckedIn(true);
+          const { count } = await supabase
+            .from("attendance")
+            .select("id", { count: "exact", head: true })
+            .eq("event_id", eventId);
+          if (typeof count === "number") setAssemblyHeadcount(count);
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error executing check-in";
@@ -1295,7 +1431,7 @@ export default function HomePage() {
     <div data-hydrated={hydrated} className="min-h-screen flex flex-col pb-28 text-slate-900 dark:text-white transition-colors duration-300">
       
       {/* ===================================================================== */}
-      {/* A. HOME VIEW (Contains Header, Greetings, Digital ID, Announcements)   */}
+      {/* A. HOME VIEW (Contains Header, Greetings, Next Assembly, Digital ID, Announcements) */}
       {/* ===================================================================== */}
       {activeTab === "home" && (
         <>
@@ -1312,12 +1448,40 @@ export default function HomePage() {
             onLogout={() => setIsLogoutConfirmOpen(true)}
           />
 
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-5 space-y-6">
-            {/* Fraternal Greeting Section: Time-based + Nickname only! */}
-            <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 pt-3 space-y-4">
+            {/* Offline Notification Banner */}
+            {isOffline && (
+              <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-400/30 flex items-center gap-2.5 text-xs font-bold text-amber-800 dark:text-amber-200 animate-fadeIn">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>Offline Mode: Operating with cached member and assembly data.</span>
+              </div>
+            )}
+
+            {/* Fetch Error Banner with Retry */}
+            {fetchError && !isOffline && (
+              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-400/30 flex items-center justify-between gap-2.5 text-xs font-bold text-rose-800 dark:text-rose-200 animate-fadeIn">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+                  <span>{fetchError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFetchError(null);
+                    fetchHubData();
+                  }}
+                  className="px-2.5 py-1 rounded-xl bg-white dark:bg-white/10 text-rose-700 dark:text-rose-200 border border-rose-200 dark:border-white/10 text-[11px] font-bold hover:bg-rose-100"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Fraternal Greeting Section: Compact Time-based + Nickname only */}
+            <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 pt-1">
               <div>
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                     <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -1325,19 +1489,19 @@ export default function HomePage() {
                     Mabuhay ang Agila!
                   </span>
                   <span className="text-slate-300 dark:text-slate-600 font-bold">•</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold truncate max-w-[240px]">
                     {activeProfile.club}
                   </span>
                 </div>
 
-                <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 dark:text-white tracking-tight">
+                <h1 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900 dark:text-white tracking-tight">
                   {getTimeGreeting()}, {activeProfile.nickname}
                 </h1>
               </div>
 
               {/* Inspected member from directory banner */}
               {inspectedMember && (
-                <div className="p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-400/30 flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200 animate-fadeIn">
+                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-400/30 flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200 animate-fadeIn">
                   <span>Inspecting ID: {activeProfile.name}</span>
                   <button
                     type="button"
@@ -1350,77 +1514,179 @@ export default function HomePage() {
               )}
             </section>
 
-            {/* Announcements Section (Item 4: Removed 'Official Circulars', clickable to view/edit details) */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-1">
-                <h3 className="font-display font-bold text-lg text-slate-900 dark:text-white">
-                  Announcements
-                </h3>
-                {(currentRole === "admin" || currentRole === "officer") && (
+            {/* PRIORITY 1: Next Relevant Meeting / Assembly Card */}
+            {activeEvent && (
+              <GlassCard variant="glow-blue" className="p-4 sm:p-5 shadow-lg border-eagle-blue/20">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <Badge
+                        variant={
+                          activeEventStatus.effectiveCheckinOpen
+                            ? "blue"
+                            : activeEventStatus.isPast
+                            ? "neutral"
+                            : "yellow"
+                        }
+                        size="sm"
+                      >
+                        {activeEventStatus.label}
+                      </Badge>
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
+                        <span className={`h-2 w-2 rounded-full bg-emerald-500 ${activeEventStatus.effectiveCheckinOpen ? "animate-pulse" : ""}`} />
+                        Quorum: {assemblyHeadcount} Checked In
+                      </span>
+                    </div>
+
+                    <h2
+                      onClick={() => setSelectedMeeting({
+                        id: activeEvent.id,
+                        title: activeEvent.title,
+                        description: activeEvent.description,
+                        event_date: activeEvent.event_date,
+                        location: activeEvent.location,
+                        checkin_code: activeEvent.checkin_code,
+                        checkin_open: activeEvent.checkin_open,
+                        status: activeEvent.status,
+                      })}
+                      className="font-display font-extrabold text-base sm:text-lg text-slate-900 dark:text-white cursor-pointer hover:text-eagle-blue dark:hover:text-amber-300 transition-colors leading-snug"
+                      title="Tap to view meeting details & agenda"
+                    >
+                      {activeEvent.title.replace("[SEED] ", "")}
+                    </h2>
+
+                    <div className="mt-1.5 space-y-1 text-xs text-slate-600 dark:text-slate-300 font-medium">
+                      <p className="flex items-center gap-1.5 truncate">
+                        <MapPin className="h-3.5 w-3.5 text-eagle-blue shrink-0" />
+                        <span className="truncate">{activeEvent.location || "Agila Clubhouse & Conference Hall"}</span>
+                      </p>
+                      <p className="flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span>Date: {formatDate(activeEvent.event_date, { month: "long" })} (PST / Manila)</span>
+                      </p>
+                    </div>
+                  </div>
+
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedAnnouncement({
-                        id: `ann-${Date.now()}`,
-                        title: "",
-                        content: "",
-                        category: "General",
-                        priority: "normal",
-                        published_at: new Date().toISOString(),
-                      });
-                      setIsNewAnnouncementOpen(true);
-                    }}
-                    className="text-xs font-bold text-eagle-blue dark:text-amber-300 hover:underline flex items-center gap-1"
+                    onClick={() => setIsScannerOpen(true)}
+                    aria-label="Open QR Attendance Scanner"
+                    title="Scan Meeting Check-in QR"
+                    className="h-11 w-11 rounded-2xl bg-white dark:bg-canvas-slate shadow-sm border border-slate-200 dark:border-white/10 flex items-center justify-center shrink-0 hover:border-eagle-blue/50 dark:hover:border-amber-400/40 transition active:scale-95"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Post Announcement
+                    <QrCode className="h-5 w-5 text-slate-800 dark:text-white" />
                   </button>
-                )}
-              </div>
+                </div>
 
-              {announcements.length === 0 ? (
-                <GlassCard variant="default" className="p-5 text-center text-xs text-slate-500">
-                  No published announcements found.
-                </GlassCard>
-              ) : (
-                announcements.map((ann) => (
+                {checkInFeedback && (
                   <div
-                    key={ann.id}
-                    onClick={() => {
-                      setSelectedAnnouncement(ann);
-                      setIsNewAnnouncementOpen(false);
-                    }}
-                    className="p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-2.5 cursor-pointer hover:border-eagle-blue/50 dark:hover:border-amber-400/40 transition group"
+                    className={`mt-3 p-2.5 rounded-xl border flex items-center gap-2 text-xs font-semibold animate-fadeIn ${
+                      checkInFeedback.success
+                        ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-800 dark:text-emerald-300"
+                        : "bg-rose-50 dark:bg-rose-950/30 border-rose-300 text-rose-800 dark:text-rose-300"
+                    }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span
-                        className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                          ann.priority === "urgent" || ann.priority === "high"
-                            ? "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
-                            : ann.category === "Finance"
-                            ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
-                            : "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
-                        }`}
-                      >
-                        {ann.priority === "urgent" ? "Urgent Circular" : ann.priority === "high" ? "High Priority" : "Official Notice"} • {ann.category}
+                    {checkInFeedback.success ? <Check className="h-4 w-4 shrink-0 text-emerald-600" /> : <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />}
+                    <span>{checkInFeedback.message}</span>
+                  </div>
+                )}
+
+                {/* Check-In Controls or Status Display */}
+                <div className="mt-4 pt-3 border-t border-slate-200/80 dark:border-white/10 flex flex-col gap-2.5">
+                  {hasCheckedIn ? (
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        Attendance Confirmed (Verified on Server)
                       </span>
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
-                        <span>{ann.published_at ? new Date(ann.published_at).toLocaleDateString() : "Active"}</span>
-                        <span className="text-eagle-blue dark:text-amber-300 font-bold group-hover:translate-x-1 transition-transform">→</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMeeting({
+                          id: activeEvent.id,
+                          title: activeEvent.title,
+                          description: activeEvent.description,
+                          event_date: activeEvent.event_date,
+                          location: activeEvent.location,
+                          checkin_code: activeEvent.checkin_code,
+                          checkin_open: activeEvent.checkin_open,
+                          status: activeEvent.status,
+                        })}
+                        className="text-[11px] underline text-eagle-blue dark:text-amber-300 font-bold"
+                      >
+                        Details
+                      </button>
+                    </div>
+                  ) : activeEventStatus.effectiveCheckinOpen ? (
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1.5">
+                        Enter Official Assembly Passkey:
+                      </label>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={checkInCode}
+                            onChange={(e) => setCheckInCode(e.target.value.toUpperCase())}
+                            placeholder="ENTER PASSKEY"
+                            className="w-full h-10 px-3.5 rounded-xl bg-slate-100/90 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 font-mono text-xs font-black tracking-widest text-slate-900 dark:text-white text-center uppercase focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          disabled={checkInLoading || !checkInCode.trim()}
+                          onClick={() => handleCheckIn(activeEvent.id)}
+                          className="h-10 px-4 text-xs font-bold shadow-md"
+                        >
+                          {checkInLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "Confirm Attendance"
+                          )}
+                        </Button>
                       </div>
                     </div>
-                    <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white group-hover:text-eagle-blue dark:group-hover:text-amber-300 transition-colors">
-                      {ann.title.replace("[SEED] ", "")}
-                    </h4>
-                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal line-clamp-2">
-                      {ann.content}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
+                  ) : activeEventStatus.isPast ? (
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+                      This assembly quorum session has concluded.
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+                      Quorum check-in passkey will open during the scheduled assembly.
+                    </div>
+                  )}
 
-            {/* Interactive Digital Eagle ID Card (Moved below Announcements) */}
-            <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between text-xs pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMeeting({
+                        id: activeEvent.id,
+                        title: activeEvent.title,
+                        description: activeEvent.description,
+                        event_date: activeEvent.event_date,
+                        location: activeEvent.location,
+                        checkin_code: activeEvent.checkin_code,
+                        checkin_open: activeEvent.checkin_open,
+                        status: activeEvent.status,
+                      })}
+                      className="text-xs font-bold text-eagle-blue dark:text-amber-300 hover:underline flex items-center gap-1"
+                    >
+                      View Agenda & Assembly Details <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("assemblies")}
+                      className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    >
+                      All Meetings ({events.length}) →
+                    </button>
+                  </div>
+                </div>
+              </GlassCard>
+            )}
+
+            {/* PRIORITY 2: Interactive Digital Eagle ID Card */}
+            <div className="space-y-2 pt-1">
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300 tracking-wider">
                   Interactive Digital Eagle ID Card
@@ -1451,96 +1717,100 @@ export default function HomePage() {
               />
             </div>
 
-            {/* Tactile Assembly Check-In Card (if active event) */}
-            {activeEvent && (
-              <GlassCard variant="glow-blue" className="p-5 shadow-lg border-eagle-blue/20">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <Badge variant={activeEvent.checkin_open ? "blue" : "neutral"} size="sm">
-                        {activeEvent.checkin_open ? "Assembly Quorum Open" : "Upcoming Meeting"}
-                      </Badge>
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                        Quorum: {assemblyHeadcount} Checked In
-                      </span>
-                    </div>
-                    <h4 
-                      onClick={() => setSelectedMeeting({
-                        id: activeEvent.id,
-                        title: activeEvent.title,
-                        description: activeEvent.description,
-                        event_date: activeEvent.event_date,
-                        location: activeEvent.location,
-                        checkin_code: activeEvent.checkin_code,
-                        checkin_open: activeEvent.checkin_open,
-                        status: activeEvent.status,
-                      })}
-                      className="font-display font-bold text-base text-slate-900 dark:text-white cursor-pointer hover:underline"
-                      title="Click to view/edit assembly details"
-                    >
-                      {activeEvent.title.replace("[SEED] ", "")}
-                    </h4>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
-                      <MapPin className="h-3.5 w-3.5 text-eagle-blue shrink-0" />
-                      {activeEvent.location || "Agila Clubhouse & Conference Hall"}
-                    </p>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
-                      <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      Date: {new Date(activeEvent.event_date).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="h-12 w-12 rounded-2xl bg-white dark:bg-canvas-slate shadow-sm border border-slate-200 dark:border-white/10 flex items-center justify-center shrink-0">
-                    <QrCode className="h-6 w-6 text-slate-800 dark:text-white" />
-                  </div>
+            {/* PRIORITY 3: Latest Announcements & Official Circulars */}
+            <div className="space-y-2.5 pt-1">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
+                    Announcements
+                  </h3>
+                  {announcements.length > 0 && (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300">
+                      {announcements.length}
+                    </span>
+                  )}
                 </div>
-
-                {checkInFeedback && (
-                  <div
-                    className={`mt-4 p-3 rounded-xl border flex items-center gap-2 text-xs font-semibold animate-fadeIn ${
-                      checkInFeedback.success
-                        ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-800 dark:text-emerald-300"
-                        : "bg-rose-50 dark:bg-rose-950/30 border-rose-300 text-rose-800 dark:text-rose-300"
-                    }`}
-                  >
-                    {checkInFeedback.success ? <Check className="h-4 w-4 shrink-0 text-emerald-600" /> : <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />}
-                    <span>{checkInFeedback.message}</span>
-                  </div>
-                )}
-
-                <div className="mt-5 pt-4 border-t border-slate-200/80 dark:border-white/10">
-                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-2">
-                    Enter Official Assembly Passcode:
-                  </span>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={checkInCode}
-                        onChange={(e) => setCheckInCode(e.target.value.toUpperCase())}
-                        placeholder="ENTER CODE"
-                        className="w-full h-11 px-3.5 rounded-xl bg-slate-100/90 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 font-mono text-sm font-black tracking-widest text-slate-900 dark:text-white text-center uppercase focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
-                      />
-                    </div>
-                    <Button
-                      size="sm"
-                      variant={checkInFeedback?.success ? "secondary" : "primary"}
-                      disabled={checkInLoading}
-                      onClick={() => handleCheckIn(activeEvent.id)}
-                      className="h-11 px-5 text-xs font-bold shadow-md"
+                <div className="flex items-center gap-3">
+                  {(currentRole === "admin" || currentRole === "officer") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAnnouncement({
+                          id: `ann-${Date.now()}`,
+                          title: "",
+                          content: "",
+                          category: "General",
+                          priority: "normal",
+                          published_at: new Date().toISOString(),
+                        });
+                        setIsNewAnnouncementOpen(true);
+                      }}
+                      className="text-xs font-bold text-eagle-blue dark:text-amber-300 hover:underline flex items-center gap-1"
                     >
-                      {checkInLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : checkInFeedback?.success ? (
-                        "✓ Attendance Confirmed"
-                      ) : (
-                        "Confirm Attendance"
-                      )}
-                    </Button>
-                  </div>
+                      <Plus className="h-3.5 w-3.5" /> Post Announcement
+                    </button>
+                  )}
                 </div>
-              </GlassCard>
-            )}
+              </div>
+
+              {announcements.length === 0 ? (
+                <GlassCard variant="default" className="p-4 text-center text-xs text-slate-500">
+                  No published announcements found.
+                </GlassCard>
+              ) : (
+                <div className="space-y-2.5">
+                  {announcements.slice(0, 2).map((ann) => (
+                    <div
+                      key={ann.id}
+                      onClick={() => {
+                        setSelectedAnnouncement(ann);
+                        setIsNewAnnouncementOpen(false);
+                      }}
+                      className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-2 cursor-pointer hover:border-eagle-blue/50 dark:hover:border-amber-400/40 transition group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            ann.priority === "urgent" || ann.priority === "high"
+                              ? "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
+                              : ann.category === "Finance"
+                              ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                              : "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
+                          }`}
+                        >
+                          {ann.priority === "urgent" ? "Urgent Circular" : ann.priority === "high" ? "High Priority" : "Official Notice"} • {ann.category}
+                        </span>
+                        <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                          <span>{ann.published_at ? formatDate(ann.published_at) : "Active"}</span>
+                          <span className="text-eagle-blue dark:text-amber-300 font-bold group-hover:translate-x-1 transition-transform">→</span>
+                        </div>
+                      </div>
+                      <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white group-hover:text-eagle-blue dark:group-hover:text-amber-300 transition-colors">
+                        {ann.title.replace("[SEED] ", "")}
+                      </h4>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal line-clamp-2">
+                        {ann.content}
+                      </p>
+                    </div>
+                  ))}
+
+                  {announcements.length > 2 && (
+                    <div className="text-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedAnnouncement(announcements[2]);
+                          setIsNewAnnouncementOpen(false);
+                        }}
+                        className="text-xs font-bold text-eagle-blue dark:text-amber-300 hover:underline"
+                      >
+                        View More Announcements ({announcements.length - 2} more) →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </main>
         </>
       )}

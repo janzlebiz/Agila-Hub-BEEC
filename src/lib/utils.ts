@@ -12,10 +12,102 @@ export function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-export function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
+export function formatDate(
+  dateStr: string | Date | number,
+  options?: Intl.DateTimeFormatOptions
+): string {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "TBA";
+    return new Intl.DateTimeFormat("en-PH", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      ...options,
+    }).format(d);
+  } catch {
+    return String(dateStr);
+  }
+}
+
+export function formatDateTime(
+  dateStr: string | Date | number,
+  options?: Intl.DateTimeFormatOptions
+): string {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "TBA";
+    return new Intl.DateTimeFormat("en-PH", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      ...options,
+    }).format(d);
+  } catch {
+    return String(dateStr);
+  }
+}
+
+/**
+ * Returns date components in Philippine timezone (Asia/Manila)
+ */
+export function getManilaDateParts(date: Date = new Date()): { year: number; month: number; day: number } {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
     year: "numeric",
-    month: "short",
+    month: "numeric",
     day: "numeric",
   });
+  const parts = formatter.formatToParts(date);
+  const getPart = (type: string) => parseInt(parts.find((p) => p.type === type)?.value || "0", 10);
+  return {
+    year: getPart("year"),
+    month: getPart("month"),
+    day: getPart("day"),
+  };
 }
+
+/**
+ * Checks if a date falls on today in Philippine timezone
+ */
+export function isDateTodayManila(dateInput: string | Date | number): boolean {
+  try {
+    const target = new Date(dateInput);
+    if (isNaN(target.getTime())) return false;
+    const targetParts = getManilaDateParts(target);
+    const nowParts = getManilaDateParts(new Date());
+    return (
+      targetParts.year === nowParts.year &&
+      targetParts.month === nowParts.month &&
+      targetParts.day === nowParts.day
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Checks if a meeting date has passed (prior to today in Philippine timezone)
+ */
+export function isMeetingPastManila(dateInput: string | Date | number): boolean {
+  try {
+    const target = new Date(dateInput);
+    if (isNaN(target.getTime())) return false;
+    const targetParts = getManilaDateParts(target);
+    const nowParts = getManilaDateParts(new Date());
+
+    if (targetParts.year < nowParts.year) return true;
+    if (targetParts.year > nowParts.year) return false;
+    if (targetParts.month < nowParts.month) return true;
+    if (targetParts.month > nowParts.month) return false;
+    return targetParts.day < nowParts.day;
+  } catch {
+    return false;
+  }
+}
+

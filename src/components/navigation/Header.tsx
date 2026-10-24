@@ -108,8 +108,8 @@ export function Header({
             <button
               type="button"
               onClick={() => onChangeTextSize(nextTextSize)}
-              title={`Text Size: ${textSize.toUpperCase()}. Click to enlarge.`}
-              aria-label="Toggle text size"
+              title={`Current text size: ${textSize.toUpperCase()}. Tap to switch to ${nextTextSize.toUpperCase()}.`}
+              aria-label={`Adjust text size (Current: ${textSize.toUpperCase()}, next: ${nextTextSize.toUpperCase()})`}
               className="h-9 w-9 rounded-xl bg-slate-100 dark:bg-white/[0.06] hover:bg-slate-200 dark:hover:bg-white/[0.12] border border-slate-200 dark:border-white/10 flex items-center justify-center transition active:scale-95 shadow-sm"
             >
               <span className={`select-none transition-all duration-200 ${tClassBySize}`}>

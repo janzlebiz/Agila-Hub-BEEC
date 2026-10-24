@@ -64,7 +64,7 @@ export function MobileNavBar({ activeTab, onTabChange }: MobileNavBarProps) {
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
 
-          // Center Action Button: AGILA Hub Eagle Vector Emblem, NO text label below
+          // Center Action Button: TFOE-PE Official Logo Emblem, NO text label below
           if (tab.isCenter) {
             return (
               <button
@@ -84,8 +84,8 @@ export function MobileNavBar({ activeTab, onTabChange }: MobileNavBarProps) {
                 >
                   <div className="relative h-10 w-10 rounded-xl overflow-hidden flex items-center justify-center">
                     <Image
-                      src="/assets/eagle_vector.jpg"
-                      alt="Home Eagle Emblem"
+                      src="/assets/TFOE-PE_LGO.png"
+                      alt="TFOE-PE Official Logo"
                       width={40}
                       height={40}
                       className="object-contain"

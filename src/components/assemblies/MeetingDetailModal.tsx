@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { X, Calendar, MapPin, Clock, Edit3, Trash2, Check, QrCode, Save, Shield } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { formatDate } from "@/lib/utils";
 
 export interface MeetingItem {
   id: string;
@@ -39,7 +40,7 @@ export function MeetingDetailModal({
   const [description, setDescription] = useState(meeting?.description || "");
   const [eventDate, setEventDate] = useState(meeting?.event_date ? meeting.event_date.split("T")[0] : "");
   const [location, setLocation] = useState(meeting?.location || "Agila Clubhouse & Conference Hall");
-  const [checkinCode, setCheckinCode] = useState(meeting?.checkin_code || "AGILA-GMM-2026");
+  const [checkinCode, setCheckinCode] = useState(meeting?.checkin_code || "");
   const [checkinOpen, setCheckinOpen] = useState(meeting?.checkin_open ?? true);
 
   React.useEffect(() => {
@@ -48,7 +49,7 @@ export function MeetingDetailModal({
       setDescription(meeting.description || "");
       setEventDate(meeting.event_date ? meeting.event_date.split("T")[0] : "");
       setLocation(meeting.location || "Agila Clubhouse & Conference Hall");
-      setCheckinCode(meeting.checkin_code || "AGILA-GMM-2026");
+      setCheckinCode(meeting.checkin_code || "");
       setCheckinOpen(meeting.checkin_open ?? true);
       setIsEditing(isNew);
     }
@@ -211,9 +212,11 @@ export function MeetingDetailModal({
                   {meeting.checkin_open ? "Quorum Check-in Active" : "Scheduled Assembly"}
                 </span>
 
-                <span className="text-xs font-mono font-bold bg-slate-100 dark:bg-white/10 px-2.5 py-0.5 rounded-lg border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
-                  Code: {meeting.checkin_code || "AGILA-GMM-2026"}
-                </span>
+                {canEdit && meeting.checkin_code && (
+                  <span className="text-xs font-mono font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-lg border border-amber-300 dark:border-amber-400/30 text-amber-800 dark:text-amber-300">
+                    Passkey: {meeting.checkin_code}
+                  </span>
+                )}
               </div>
 
               <h4 className="font-display font-black text-lg text-slate-900 dark:text-white">
@@ -226,7 +229,7 @@ export function MeetingDetailModal({
                   <div>
                     <span className="text-[10px] text-slate-400 font-bold block uppercase">Date</span>
                     <span className="font-bold text-slate-900 dark:text-white">
-                      {eventDate ? new Date(eventDate).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : "TBA"}
+                      {eventDate ? formatDate(eventDate, { month: "long" }) : "TBA"}
                     </span>
                   </div>
                 </div>
