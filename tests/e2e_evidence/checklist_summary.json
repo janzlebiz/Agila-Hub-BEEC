@@ -3,7 +3,7 @@
     "section": "1. Installation and launch",
     "item": "Latest APK from GitHub Actions compiled successfully",
     "passed": true,
-    "details": "Run ID: 39826495547 (commit ff4f728) -> Artifact: agila-hub-debug-apk (8,688,015 bytes)"
+    "details": "Run ID: 40113930135 (commit b4a0fc9) -> Artifact: agila-hub-debug-apk (8,690,990 bytes)"
   },
   {
     "section": "1. Installation and launch",
@@ -81,13 +81,13 @@
     "section": "4. Supabase-connected features",
     "item": "Test profile updates using a dedicated test account",
     "passed": true,
-    "details": "Member profile contact phone updated to '+63920120714' (HTTP 200)"
+    "details": "Member profile contact phone updated to '+63920126945' (HTTP 200)"
   },
   {
     "section": "4. Supabase-connected features",
     "item": "Test attendance and contribution workflows using test records only",
     "passed": true,
-    "details": "Member submitted dues (ref: E2E-TEST-1792860715), Treasurer executed verify_contribution RPC -> 'verified'"
+    "details": "Member submitted dues (ref: E2E-TEST-1792866947), Treasurer executed verify_contribution RPC -> 'verified'"
   },
   {
     "section": "5. Connectivity and resilience",

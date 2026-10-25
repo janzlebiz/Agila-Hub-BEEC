@@ -19,7 +19,8 @@ import {
   Send,
   Loader2,
   Maximize2,
-  Bookmark
+  Bookmark,
+  AlertTriangle
 } from "lucide-react";
 import { 
   articles, 
@@ -234,84 +235,157 @@ export function MagnaCartaRagModal({
             {/* RAG Answer Display Card */}
             {ragResult ? (
               <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-white via-slate-50 to-amber-50/20 dark:from-canvas-slate dark:via-[#0f172a] dark:to-canvas-dark border border-amber-400/40 shadow-xl space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
+                
+                {/* Header & Source Authority Badge */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-white/10">
                   <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                    <div className="h-8 w-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
                       <Scale className="h-4 w-4" />
                     </div>
                     <div>
                       <h4 className="font-display font-extrabold text-sm text-slate-900 dark:text-white">
-                        Magna Carta Fraternal Counsel
+                        Magna Carta Constitutional Counsel
                       </h4>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                        Synthesized from 2024 Constitution Database
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                          Corpus: The Philippine Eagles Constitution of 2024 (Ratified Oct 2024)
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-full border border-emerald-500/20 flex items-center gap-1">
-                    <ShieldCheck className="h-3 w-3" /> {ragResult.confidence} Citation Match
-                  </span>
-                </div>
 
-                {/* Synthesis Answer Body */}
-                <div className="prose dark:prose-invert max-w-none text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed space-y-2">
-                  <p className="font-medium whitespace-pre-line">{ragResult.answer}</p>
-                </div>
-
-                {/* Verbatim Constitutional Citations */}
-                <div className="pt-3 border-t border-slate-200 dark:border-white/10">
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-2.5">
-                    Official Constitutional Citations:
-                  </span>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {ragResult.citations.map((cite, i) => (
-                      <div
-                        key={i}
-                        className="p-3.5 rounded-2xl bg-white dark:bg-canvas-dark border border-slate-200 dark:border-white/10 shadow-sm space-y-1.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-xs font-black text-amber-600 dark:text-amber-400">
-                            {cite.article_number}
-                          </span>
-                          <span className="text-[10px] font-bold text-slate-400">
-                            {cite.page_range}
-                          </span>
-                        </div>
-                        <h5 className="font-display font-bold text-xs text-slate-900 dark:text-white line-clamp-1">
-                          {cite.article_title}
-                        </h5>
-                        <p className="text-[11px] text-slate-600 dark:text-slate-300 italic line-clamp-3 bg-slate-50 dark:bg-white/5 p-2 rounded-lg border border-slate-200/50 dark:border-white/5">
-                          "{cite.excerpt}"
-                        </p>
-                        <div className="pt-1 flex items-center justify-between text-[10px]">
-                          <button
-                            type="button"
-                            onClick={() => handleCopyCitation(`${cite.article_title} (${cite.page_range})\n${cite.excerpt}`)}
-                            className="text-slate-500 hover:text-slate-900 dark:hover:text-white font-semibold flex items-center gap-1"
-                          >
-                            {copiedText ? (
-                              <>
-                                <Check className="h-3 w-3 text-emerald-500" /> Copied
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="h-3 w-3" /> Copy Citation
-                              </>
-                            )}
-                          </button>
-                          <a
-                            href={cite.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-eagle-blue dark:text-amber-300 font-bold hover:underline flex items-center gap-0.5"
-                          >
-                            Open in e-Constitution →
-                          </a>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="flex items-center gap-2">
+                    {ragResult.isAbstained ? (
+                      <span className="text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-full border border-amber-500/30 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3 text-amber-500" /> Insufficient Evidence (Abstained)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                        <ShieldCheck className="h-3 w-3" /> {ragResult.confidence} Evidence Match
+                      </span>
+                    )}
                   </div>
                 </div>
+
+                {/* Safeguard Alert: Explicit Abstention */}
+                {ragResult.isAbstained && (
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>Constitutional Safeguard — Evidence Abstention</span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300/90 leading-relaxed">
+                      {ragResult.abstainReason || "This inquiry could not be matched with high certainty to the ratified 2024 Philippine Eagles Constitution. Agila Hub AI strictly avoids fabricating legal interpretations or unratified rules."}
+                    </p>
+                  </div>
+                )}
+
+                {/* SECTION 1: Fraternal Synthesis / AI Explanation */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-eagle-blue dark:text-amber-400" />
+                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                      Fraternal Synthesis & Explanation:
+                    </span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-white/80 dark:bg-canvas-dark/60 border border-slate-200/80 dark:border-white/10 text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed font-medium whitespace-pre-line shadow-sm">
+                    {ragResult.answer}
+                  </div>
+                </div>
+
+                {/* SECTION 2: Direct Verbatim Excerpt (Primary Ratified Source) */}
+                {(ragResult.directQuotation || (ragResult.citations.length > 0 && ragResult.citations[0].excerpt)) && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Bookmark className="h-3.5 w-3.5 text-amber-500" />
+                        <span className="text-[11px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                          Direct Verbatim Excerpt (Primary Ratified Source):
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {ragResult.citations[0]?.document_version || "2024 Ratified Edition"}
+                      </span>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-amber-500/5 dark:bg-amber-400/5 border-l-4 border-l-amber-500 border border-slate-200 dark:border-white/10 shadow-sm space-y-2">
+                      <p className="text-xs sm:text-sm font-serif italic text-slate-800 dark:text-slate-200 leading-relaxed">
+                        &ldquo;{ragResult.directQuotation || ragResult.citations[0].excerpt}&rdquo;
+                      </p>
+                      {ragResult.citations.length > 0 && (
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-sans pt-1 border-t border-slate-200/50 dark:border-white/5">
+                          <span>
+                            — <strong>{ragResult.citations[0].article_number}</strong>: {ragResult.citations[0].article_title} ({ragResult.citations[0].page_range})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyCitation(ragResult.directQuotation || ragResult.citations[0].excerpt)}
+                            className="text-eagle-blue dark:text-amber-300 font-bold hover:underline flex items-center gap-1"
+                          >
+                            {copiedText ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                            <span>{copiedText ? "Copied" : "Copy Verbatim"}</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Citations Grid */}
+                {ragResult.citations.length > 0 && (
+                  <div className="pt-3 border-t border-slate-200 dark:border-white/10">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-2.5">
+                      Corpus Citations & Verification:
+                    </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {ragResult.citations.map((cite, i) => (
+                        <div
+                          key={i}
+                          className="p-3.5 rounded-2xl bg-white dark:bg-canvas-dark border border-slate-200 dark:border-white/10 shadow-sm space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-xs font-black text-amber-600 dark:text-amber-400">
+                              {cite.article_number}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400">
+                              {cite.page_range}
+                            </span>
+                          </div>
+                          <h5 className="font-display font-bold text-xs text-slate-900 dark:text-white line-clamp-1">
+                            {cite.article_title}
+                          </h5>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300 italic line-clamp-3 bg-slate-50 dark:bg-white/5 p-2 rounded-lg border border-slate-200/50 dark:border-white/5">
+                            "{cite.excerpt}"
+                          </p>
+                          <div className="pt-1 flex items-center justify-between text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyCitation(`${cite.article_title} (${cite.page_range})\n${cite.excerpt}`)}
+                              className="text-slate-500 hover:text-slate-900 dark:hover:text-white font-semibold flex items-center gap-1"
+                            >
+                              {copiedText ? (
+                                <>
+                                  <Check className="h-3 w-3 text-emerald-500" /> Copied
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3 w-3" /> Copy Citation
+                                </>
+                              )}
+                            </button>
+                            <a
+                              href={cite.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-eagle-blue dark:text-amber-300 font-bold hover:underline flex items-center gap-0.5"
+                            >
+                              Open in e-Constitution →
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Disclaimer banner */}
                 <div className="p-3 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[10px] text-slate-500 dark:text-slate-400 leading-normal">

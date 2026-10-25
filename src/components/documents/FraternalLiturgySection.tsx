@@ -52,7 +52,7 @@ export function FraternalLiturgySection() {
     {
       letter: "E",
       title: "Emblazed with Intense Mission",
-      desc: "Emblazed with intense mission of",
+      desc: "Emblazed with intense mission of sharing human care",
       color: "from-rose-600 to-red-600 dark:from-rose-500 dark:to-red-500",
     },
     {
@@ -89,7 +89,7 @@ Pillars of the Nation.
 For brotherhood we work and serve
 Peace, Equality and Unity
 Emblazed with zeal of human care,
-We will share our lives to all humanity / keep our Liberty.`;
+We will share our lives to keep our liberty.`;
 
   const pledgeText = `I, [State Your Name], having consciously subscribed to the Constitution and the Eagles Magna Carta of the Philippine Eagles, and aware of my responsibility to my GOD and COUNTRY, do hereby pledge to promote and defend at all times said Constitution and Magna Carta and their ideals to the best of my ability and within my power and capacity.
 
@@ -234,7 +234,7 @@ SO HELP ME GOD.`;
               </h4>
             </div>
             <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed font-semibold">
-              &ldquo;Eagleism is fraternalism, or that state of relationship characteristic of brothers. In the Philippine Eagles, members must have primodially developed a deep sense of brotherhood among them. It is the primacy of their relationship is brotherhood&rdquo;
+              &ldquo;Eagleism is fraternalism, or that state of relationship characteristic of brothers. In the Philippine Eagles, members must have primordially developed a deep sense of brotherhood among them. The primacy of their relationship is brotherhood.&rdquo;
             </p>
           </div>
 
@@ -381,7 +381,7 @@ SO HELP ME GOD.`;
               <p>For brotherhood we work and serve,</p>
               <p>Peace, Equality and Unity,</p>
               <p>Emblazed with zeal of human care,</p>
-              <p>We will share our lives to all humanity / keep our Liberty.</p>
+              <p>We will share our lives to keep our liberty.</p>
             </div>
           </div>
         </div>

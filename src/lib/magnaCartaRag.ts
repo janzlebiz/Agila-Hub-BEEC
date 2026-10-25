@@ -17,15 +17,20 @@ export interface RagCitation {
   page_range: string;
   excerpt: string;
   source_url: string;
+  document_id: string;
+  document_version: string;
 }
 
 export interface RagResponse {
   query: string;
   answer: string;
+  directQuotation?: string;
   citations: RagCitation[];
   suggestedQueries: string[];
   confidence: "High" | "Medium" | "Verified" | "Insufficient Evidence";
   isWeakMatch?: boolean;
+  isAbstained?: boolean;
+  abstainReason?: string;
   disclaimer: string;
 }
 
@@ -92,7 +97,38 @@ export function searchMagnaCarta(query: string): { article: MagnaArticle; score:
 export function askMagnaCartaCounsel(query: string): RagResponse {
   const cleanQuery = query.trim().toLowerCase();
 
-  // 1. Direct match with verified QA presets
+  // 1. Security Safeguard: Prompt Injection & Adversarial Jailbreak Defense
+  const injectionPatterns = [
+    "ignore previous instructions",
+    "disregard previous",
+    "system prompt",
+    "jailbreak",
+    "act as a",
+    "pretend you are",
+    "simulate",
+    "you are now evil",
+    "override rules",
+    "dan mode",
+  ];
+  if (injectionPatterns.some((pattern) => cleanQuery.includes(pattern))) {
+    return {
+      query,
+      answer:
+        "Adversarial prompt instruction detected and rejected. The Constitutional AI Counsel operates strictly within the boundaries of the ratified 2024 Philippine Eagles Magna Carta and cannot be reprogrammed or overridden by user prompts.",
+      citations: [],
+      suggestedQueries: [
+        "What are the qualifications and rights of an Eagle Member?",
+        "What is the quorum requirement for chapter and assembly meetings?",
+        "How are national dues and club contributions allocated and audited?",
+      ],
+      confidence: "Insufficient Evidence",
+      isAbstained: true,
+      abstainReason: "Adversarial prompt injection attempt detected.",
+      disclaimer: LEGAL_DISCLAIMER,
+    };
+  }
+
+  // 2. Direct match with verified QA presets
   for (const preset of qaPresets) {
     const presetTokens = tokenize(preset.query);
     const queryTokens = tokenize(cleanQuery);
@@ -102,6 +138,7 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
       return {
         query,
         answer: preset.answer,
+        directQuotation: preset.citation,
         citations: [
           {
             article_number: preset.article.split(" - ")[0] || "MAGNA CARTA",
@@ -109,6 +146,8 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
             page_range: preset.page,
             excerpt: preset.citation,
             source_url: BASE_SOURCE_URL,
+            document_id: "doc-tfoe-constitution-2024",
+            document_version: "2024 Ratified Edition",
           },
         ],
         suggestedQueries: [
@@ -118,28 +157,31 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
           "What are the grounds and procedures for member suspension or expulsion?",
         ].filter((q) => q.toLowerCase() !== preset.query.toLowerCase()),
         confidence: "Verified",
+        isAbstained: false,
         disclaimer: LEGAL_DISCLAIMER,
       };
     }
   }
 
-  // 2. Dynamic Retrieval across 21 articles
+  // 3. Dynamic Retrieval across 21 articles
   const searchResults = searchMagnaCarta(query);
 
-  // If no match or weak match (< 12 relevance score), return explicit insufficient evidence response
-  if (searchResults.length === 0 || searchResults[0].score < 12) {
+  // If no match or weak match (< 25 relevance score), return explicit abstention with insufficient evidence
+  if (searchResults.length === 0 || searchResults[0].score < 25) {
     return {
       query,
       answer:
-        "Insufficient direct match found in the 2024 Magna Carta database for this query. The terms could not be conclusively paired with ratified constitutional provisions. Please consult your Chapter Secretariat, the National Legal Directorate, or search the official e-Constitution repository for formal verification.",
+        "Insufficient direct match found in the ratified 2024 Magna Carta database for this query. The submitted terms could not be conclusively paired with ratified constitutional provisions. To preserve legal accuracy, the system abstains from inventing article numbers or unratified interpretations.",
       citations: [
         {
           article_number: "MAGNA CARTA 2024",
           article_title: "The Philippine Eagles Constitution of 2024",
           page_range: "Pages 1–326",
           excerpt:
-            "Official verbatim e-Constitution publication available at e-constitution.tfoe-peinc.com. Verify with your Chapter Secretariat for official rulings.",
+            "Official verbatim e-Constitution publication available at e-constitution.tfoe-peinc.com. Consult your Chapter Secretariat or National Legal Directorate for formal rulings.",
           source_url: BASE_SOURCE_URL,
+          document_id: "doc-tfoe-constitution-2024",
+          document_version: "2024 Ratified Edition",
         },
       ],
       suggestedQueries: [
@@ -150,6 +192,8 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
       ],
       confidence: "Insufficient Evidence",
       isWeakMatch: true,
+      isAbstained: true,
+      abstainReason: "Query terms did not meet relevance threshold in the approved 2024 constitutional corpus.",
       disclaimer: LEGAL_DISCLAIMER,
     };
   }
@@ -183,7 +227,7 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
     .trim()
     .slice(0, 360);
 
-  const answer = `Based on constitutional indexing for **${topMatch.number} (${topMatch.title})**: ${topMatch.summary} Refer to the cited verbatim provisions below for exact legal terms and conditions ratified under the 2024 Philippine Eagles Constitution.`;
+  const answer = `Based on constitutional indexing for **${topMatch.number} (${topMatch.title})**: ${topMatch.summary} The official provisions below are retrieved directly from the ratified 2024 Philippine Eagles Constitution.`;
 
   const citations: RagCitation[] = [
     {
@@ -192,6 +236,8 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
       page_range: topMatch.page_range,
       excerpt: cleanExcerpt + "...",
       source_url: BASE_SOURCE_URL,
+      document_id: "doc-tfoe-constitution-2024",
+      document_version: "2024 Ratified Edition",
     },
   ];
 
@@ -202,12 +248,15 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
       page_range: secondaryMatch.page_range,
       excerpt: secondaryMatch.summary.slice(0, 240) + "...",
       source_url: BASE_SOURCE_URL,
+      document_id: "doc-tfoe-constitution-2024",
+      document_version: "2024 Ratified Edition",
     });
   }
 
   return {
     query,
     answer,
+    directQuotation: cleanExcerpt,
     citations,
     suggestedQueries: [
       "What are the rights and obligations of an Eagle member?",
@@ -216,6 +265,7 @@ export function askMagnaCartaCounsel(query: string): RagResponse {
     ],
     confidence: "High",
     isWeakMatch: false,
+    isAbstained: false,
     disclaimer: LEGAL_DISCLAIMER,
   };
 }

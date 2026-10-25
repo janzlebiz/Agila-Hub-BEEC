@@ -29,6 +29,9 @@ export interface DirectoryMember {
   chapter_or_branch?: string | null;
   official_id_url?: string | null;
   id_card_back_url?: string | null;
+  blood_type?: string | null;
+  avatar_url?: string | null;
+  joined_date?: string | null;
 }
 
 interface MemberDirectoryModalProps {
@@ -71,7 +74,7 @@ export function MemberDirectoryModal({
             </div>
             <div>
               <h3 className="font-display font-extrabold text-base text-slate-900 dark:text-white">
-                Fraternal Member Directory & Official Roster
+                Membership Directory
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 The Fraternal Order of Eagles • Bantayog Elite Eagles Club

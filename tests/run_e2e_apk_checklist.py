@@ -552,11 +552,12 @@ def run_e2e_tests():
         # Navigate between tabs while offline
         offline_shell_ok = True
         try:
-            page.locator("button[data-tab='documents']").click()
+            doc_btn = page.locator("nav button[data-tab='documents']").first
+            doc_btn.click(timeout=5000)
             time.sleep(1)
             page.screenshot(path=str(EVIDENCE_DIR / "09_offline_vault_shell.png"))
             # Confirm app shell is still alive (no unhandled white screen)
-            has_vault_header = page.locator("text=Fraternal Liturgy").first.is_visible() or page.locator("button[data-tab='documents']").is_visible() or page.locator("text=Vault").first.is_visible()
+            has_vault_header = page.locator("text=Fraternal Liturgy").first.is_visible() or page.locator("button[data-tab='documents']").first.is_visible() or page.locator("text=Vault").first.is_visible()
             offline_shell_ok = has_vault_header
         except Exception as e:
             print(f"  -> Offline shell navigation error: {e}")
@@ -575,7 +576,7 @@ def run_e2e_tests():
         time.sleep(1)
 
         # Verify live queries resume cleanly
-        page.locator("button:has-text('Roster')").last.click()
+        page.locator("nav button[data-tab='directory']").first.click(timeout=5000)
         time.sleep(1.5)
         page.screenshot(path=str(EVIDENCE_DIR / "10_restored_online_roster.png"))
         has_roster = page.locator("text=Bantayog Elite Eagles Club").first.is_visible()

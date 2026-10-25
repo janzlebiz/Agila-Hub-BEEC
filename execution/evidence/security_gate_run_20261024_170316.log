@@ -1,0 +1,22 @@
+=== AGILA HUB STRICT SECURITY GATE RUN: 2026-10-24T17:03:16.537140+00:00 ===
+[2026-10-24T17:03:16.538894+00:00] ================================================================================
+[2026-10-24T17:03:16.539808+00:00] AGILA HUB: AUTONOMOUS STRICT SECURITY GATE ORCHESTRATOR
+[2026-10-24T17:03:16.540688+00:00] Target Supabase API: https://jgpigkeekfuawbyilycq.supabase.co
+[2026-10-24T17:03:16.541629+00:00] Run Started UTC:    2026-10-24T17:03:16.537140+00:00
+[2026-10-24T17:03:16.542475+00:00] ================================================================================
+[2026-10-24T17:03:16.621506+00:00] [i] Checked-Out Git Commit SHA: b4a0fc9243d027e288071bbc5a3a15fd9ba301a7
+[2026-10-24T17:03:16.623892+00:00] 
+--- 1. Authenticating All 5 Strict Role Personas ---
+[2026-10-24T17:03:17.022360+00:00] [FAIL] Member A (Active) (member.a@eagles.internal) -> Login failed: HTTP 400: {"code":400,"error_code":"invalid_credentials","msg":"Invalid login credentials"}
+[2026-10-24T17:03:17.223899+00:00] [FAIL] Member B (Cross-Chapter) (member.b@eagles.internal) -> Login failed: HTTP 400: {"code":400,"error_code":"invalid_credentials","msg":"Invalid login credentials"}
+[2026-10-24T17:03:17.453719+00:00] [FAIL] Officer (officer@eagles.internal) -> Login failed: HTTP 400: {"code":400,"error_code":"invalid_credentials","msg":"Invalid login credentials"}
+[2026-10-24T17:03:17.662503+00:00] [FAIL] Administrator (admin@eagles.internal) -> Login failed: HTTP 400: {"code":400,"error_code":"invalid_credentials","msg":"Invalid login credentials"}
+[2026-10-24T17:03:17.922765+00:00] [FAIL] Suspended Member (suspended@eagles.internal) -> Login failed: HTTP 400: {"code":400,"error_code":"invalid_credentials","msg":"Invalid login credentials"}
+[2026-10-24T17:03:17.923923+00:00] 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[2026-10-24T17:03:17.925106+00:00] ACTION REQUIRED: Test accounts not yet seeded or passwords mismatch in auth.users.
+[2026-10-24T17:03:17.926014+00:00] To provision these 5 accounts instantly:
+[2026-10-24T17:03:17.926928+00:00]   1. Open Supabase Dashboard -> SQL Editor
+[2026-10-24T17:03:17.927835+00:00]   2. Run the script: execution/seed_test_auth_personas.sql
+[2026-10-24T17:03:17.928967+00:00]   3. Rerun: python execution/run_full_strict_security_gate.py
+[2026-10-24T17:03:17.929764+00:00] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

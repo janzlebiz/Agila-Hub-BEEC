@@ -111,3 +111,25 @@ export function isMeetingPastManila(dateInput: string | Date | number): boolean 
   }
 }
 
+/**
+ * Formats time in Philippine timezone (Asia/Manila)
+ */
+export function formatTime(
+  dateStr: string | Date | number,
+  options?: Intl.DateTimeFormatOptions
+): string {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "TBA";
+    return new Intl.DateTimeFormat("en-PH", {
+      timeZone: "Asia/Manila",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      ...options,
+    }).format(d);
+  } catch {
+    return "";
+  }
+}
+

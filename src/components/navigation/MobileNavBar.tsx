@@ -40,7 +40,7 @@ export function MobileNavBar({ activeTab, onTabChange }: MobileNavBarProps) {
     },
     {
       id: "directory",
-      label: "Roster",
+      label: "Directory",
       icon: Users,
       isCenter: false,
       activeColor: "text-amber-600 dark:text-amber-400",
