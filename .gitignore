@@ -8,6 +8,9 @@
 .env.*.local
 *.pem
 *.key
+*.keystore
+*.jks
+agila-hub-keystore-base64.txt
 
 # Dependencies & Build Outputs
 node_modules/
