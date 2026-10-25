@@ -88,39 +88,148 @@ import { CommunityServiceDetailModal, CommunityServiceItem } from "@/components/
 import { AlalayangDetailModal, AlalayangItem } from "@/components/assemblies/AlalayangDetailModal";
 import { MemberDetailModal, MemberDetailItem } from "@/components/directory/MemberDetailModal";
 import { OfficerDetailModal, OfficerItem } from "@/components/directory/OfficerDetailModal";
+import { ManualAttendanceModal } from "@/components/assemblies/ManualAttendanceModal";
 import { AnnualContributionsTable } from "@/components/financial/AnnualContributionsTable";
 import { calculateTreasuryReconciliation, formatPeso, isSameMemberId } from "@/lib/financeUtils";
 
-const OFFICERS_2026 = [
-  { position: "PRESIDENT", name: "JOY M. ARAGON", category: "Executive Officers" },
-  { position: "VICE PRESIDENT", name: "GENMIL M. RAIT", category: "Executive Officers" },
-  { position: "SECRETARY", name: "CHESTER JAN T. CAMACHO", category: "Executive Officers" },
-  { position: "TREASURER", name: "JOENATHAN L. TALENTO", category: "Executive Officers" },
-  { position: "AUDITOR", name: "JERIC R. MAGO", category: "Executive Officers" },
-  { position: "PROTOCOL OFFICER", name: "RANDY B. DELFINALDO", category: "Protocol & Information" },
-  { position: "PROTOCOL OFFICER", name: "STEWARD J. GARDOSE", category: "Protocol & Information" },
-  { position: "INFORMATION OFFICER", name: "CHESTER JAN T. CAMACHO", category: "Protocol & Information" },
-  { position: "PEACE OFFICER", name: "ROLDAN B. ROJAS", category: "Peace & Order" },
-  { position: "PEACE OFFICER", name: "JOENATHAN L. TALENTO", category: "Peace & Order" },
-  { position: "CARE CHAIRMAN", name: "DIVINO RAY A. PEREZ", category: "Committees" },
-  { position: "COMELEC CHAIRMAN", name: "MARC POL R. QUIOZON", category: "Committees" },
-  { position: "TRIBUNAL / GRIEVANCE CHAIRMAN", name: "JOY M. ARAGON", category: "Tribunal & Grievance" },
-  { position: "TRIBUNAL / GRIEVANCE MEMBER", name: "ELISEO D. EBDANI", category: "Tribunal & Grievance" },
-  { position: "REGIONAL ASSEMBLYMAN", name: "CHESTER JAN T. CAMACHO", category: "Regional Assembly" },
-  { position: "REGIONAL ASSEMBLYMAN", name: "EDWIN T. ALEGRE", category: "Regional Assembly" },
-  { position: "ALT. ASSEMBLYMAN", name: "ALLAN G. CALAYAN", category: "Regional Assembly" },
-  { position: "ALT. ASSEMBLYMAN", name: "MARC POL R. QUIOZON", category: "Regional Assembly" },
-  { position: "ALALAYAN AGILA CHAIRMAN", name: "JOENATHAN L. TALENTO", category: "Committees" },
-  { position: "SPORT COORDINATOR", name: "MARC POL R. QUIOZON", category: "Committees" },
-  { position: "COMMUNITY SERVICE CHAIRMAN", name: "GENMIL M. RAIT", category: "Committees" },
-  { position: "COMMUNITY SERVICE CHAIRMAN", name: "JOENATHAN L. TALENTO", category: "Committees" },
-  { position: "MEMBERSHIP CHAIRMAN", name: "GENMIL M. RAIT", category: "Committees" },
-  { position: "MEMBERSHIP CHAIRMAN", name: "ROLDAN B. ROJAS", category: "Committees" },
-  { position: "CHAIRMAN OF THE BOARD", name: "JOY M. ARAGON", category: "Board of Directors" },
-  { position: "BOARD MEMBER", name: "ELISEO D. EBDANI", category: "Board of Directors" },
-  { position: "BOARD MEMBER", name: "GENMIL M. RAIT", category: "Board of Directors" },
-  { position: "BOARD MEMBER", name: "CHESTER JAN T. CAMACHO", category: "Board of Directors" },
+interface OfficerPositionGroup {
+  position: string;
+  category: string;
+  officers: { name: string; category: string }[];
+}
+
+const OFFICER_ROSTER_2026: OfficerPositionGroup[] = [
+  {
+    position: "President",
+    category: "Executive Officers",
+    officers: [{ name: "JOY M. ARAGON", category: "Executive Officers" }],
+  },
+  {
+    position: "Vice President",
+    category: "Executive Officers",
+    officers: [{ name: "GENMIL M. RAIT", category: "Executive Officers" }],
+  },
+  {
+    position: "Secretary",
+    category: "Executive Officers",
+    officers: [{ name: "CHESTER JAN T. CAMACHO", category: "Executive Officers" }],
+  },
+  {
+    position: "Treasurer",
+    category: "Executive Officers",
+    officers: [{ name: "JOENATHAN L. TALENTO", category: "Executive Officers" }],
+  },
+  {
+    position: "Auditor",
+    category: "Executive Officers",
+    officers: [{ name: "JERIC R. MAGO", category: "Executive Officers" }],
+  },
+  {
+    position: "Protocol Officers",
+    category: "Protocol & Information",
+    officers: [
+      { name: "RANDY B. DELFINALDO", category: "Protocol & Information" },
+      { name: "STEWARD J. GARDOSE", category: "Protocol & Information" },
+    ],
+  },
+  {
+    position: "Information Officer",
+    category: "Protocol & Information",
+    officers: [{ name: "CHESTER JAN T. CAMACHO", category: "Protocol & Information" }],
+  },
+  {
+    position: "Peace Officer",
+    category: "Peace & Order",
+    officers: [
+      { name: "ROLDAN B. ROJAS", category: "Peace & Order" },
+      { name: "JOENATHAN L. TALENTO", category: "Peace & Order" },
+    ],
+  },
+  {
+    position: "Care Chairman",
+    category: "Committees",
+    officers: [{ name: "DIVINO RAY A. PEREZ", category: "Committees" }],
+  },
+  {
+    position: "COMELEC Chairman",
+    category: "Committees",
+    officers: [{ name: "MARC POL R. QUIOZON", category: "Committees" }],
+  },
+  {
+    position: "Tribunal/Grievance Chairman",
+    category: "Tribunal & Grievance",
+    officers: [{ name: "JOY M. ARAGON", category: "Tribunal & Grievance" }],
+  },
+  {
+    position: "Tribunal/Grievance Member",
+    category: "Tribunal & Grievance",
+    officers: [{ name: "ELISEO D. EBDANI", category: "Tribunal & Grievance" }],
+  },
+  {
+    position: "Regional Assemblyman",
+    category: "Regional Assembly",
+    officers: [
+      { name: "CHESTER JAN T. CAMACHO", category: "Regional Assembly" },
+      { name: "EDWIN T. ALEGRE", category: "Regional Assembly" },
+    ],
+  },
+  {
+    position: "Alt. Assemblyman",
+    category: "Regional Assembly",
+    officers: [
+      { name: "ALLAN G. CALAYAN", category: "Regional Assembly" },
+      { name: "MARC POL R. QUIOZON", category: "Regional Assembly" },
+    ],
+  },
+  {
+    position: "Alalayang Agila Chairman",
+    category: "Committees",
+    officers: [{ name: "JOENATHAN L. TALENTO", category: "Committees" }],
+  },
+  {
+    position: "Sport Coordinator",
+    category: "Committees",
+    officers: [{ name: "MARC POL R. QUIOZON", category: "Committees" }],
+  },
+  {
+    position: "Community Service Chairman",
+    category: "Committees",
+    officers: [
+      { name: "GENMIL M. RAIT", category: "Committees" },
+      { name: "JOENATHAN L. TALENTO", category: "Committees" },
+    ],
+  },
+  {
+    position: "Membership Chairman",
+    category: "Committees",
+    officers: [
+      { name: "GENMIL M. RAIT", category: "Committees" },
+      { name: "ROLDAN B. ROJAS", category: "Committees" },
+    ],
+  },
+  {
+    position: "Chairman of the Board",
+    category: "Board of Directors",
+    officers: [{ name: "JOY M. ARAGON", category: "Board of Directors" }],
+  },
+  {
+    position: "Board Members",
+    category: "Board of Directors",
+    officers: [
+      { name: "ELISEO D. EBDANI", category: "Board of Directors" },
+      { name: "GENMIL M. RAIT", category: "Board of Directors" },
+      { name: "CHESTER JAN T. CAMACHO", category: "Board of Directors" },
+    ],
+  },
 ];
+
+const OFFICERS_2026 = OFFICER_ROSTER_2026.flatMap((group) =>
+  group.officers.map((off) => ({
+    position: group.position,
+    name: off.name,
+    category: group.category,
+  }))
+);
 
 interface MemberRecord {
   id: string;
@@ -647,6 +756,33 @@ export default function HomePage() {
   // Logout Confirmation Modal State
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
 
+  // Manual Attendance Check Modal (President & Secretary only - Req 4.3)
+  const [isManualAttendanceOpen, setIsManualAttendanceOpen] = useState(false);
+
+  // Authoritative Role Gates (Req 3.2, 4.3, 4.4)
+  const canManageAttendance = Boolean(
+    authMember &&
+    (authMember.role === "admin" || authMember.role === "officer") &&
+    (
+      authMember.role === "admin" ||
+      authMember.email.toLowerCase().includes("president") ||
+      authMember.email.toLowerCase().includes("secretary") ||
+      authMember.email.toLowerCase().includes("aragon") ||
+      authMember.email.toLowerCase().includes("camacho")
+    )
+  );
+
+  const canManageFinance = Boolean(
+    authMember &&
+    (authMember.role === "officer" || authMember.role === "admin") &&
+    (
+      authMember.email.toLowerCase().includes("treasurer") ||
+      authMember.email.toLowerCase().includes("secretary") ||
+      authMember.email.toLowerCase().includes("talento") ||
+      authMember.email.toLowerCase().includes("camacho")
+    )
+  );
+
   // Network offline listener
   useEffect(() => {
     const handleOnline = () => {
@@ -789,6 +925,57 @@ export default function HomePage() {
           );
           return [...(contData as ContributionRecord[]), ...nonDuplicatedPrev];
         });
+
+        // Hydrate persisted Expenses from authoritative backend (Req 3.1 & 3.3)
+        const remoteExpenses: ExpenseRecord[] = contData
+          .filter((c: any) => c.title.startsWith("[EXPENSE]") || (c.category && c.category.startsWith("Expense - ")))
+          .map((c: any) => ({
+            id: c.id,
+            title: c.title.replace("[EXPENSE] ", ""),
+            category: c.category.replace("Expense - ", ""),
+            amount: Number(c.amount),
+            disbursedTo: "Disbursed via Club Voucher",
+            disbursementDate: c.contribution_date,
+            voucherNumber: c.reference_number || `EXP-${c.id.substring(0, 8)}`,
+            approvedBy: "Authorized Directorate / Treasurer",
+            status: "released",
+            notes: "Authoritative persisted chapter expenditure voucher.",
+          }));
+        if (remoteExpenses.length > 0) {
+          setExpenses((prev) => {
+            const liveIds = new Set(remoteExpenses.map((e) => e.id));
+            const prevFiltered = prev.filter((p) => !liveIds.has(p.id));
+            return [...remoteExpenses, ...prevFiltered];
+          });
+        }
+
+        // Hydrate persisted Alalayang Agila Grants from authoritative backend (Req 3.1 & 3.3)
+        const remoteGrants: AlalayangGrantRecord[] = contData
+          .filter((c: any) => c.title.startsWith("[GRANT]") || c.category === "Alalayang Agila")
+          .map((c: any) => {
+            const cleanTitle = c.title.replace("[GRANT] ", "");
+            const parts = cleanTitle.split(" - ");
+            return {
+              id: c.id,
+              recipientName: parts[0] || "Brother Eagle / Beneficiary",
+              recipientRelationship: "Member (Kuya/Ate)" as const,
+              chapterOrAffiliation: "Bantayog Elite Eagles Club",
+              category: (parts[1] || "Medical & Hospitalization") as any,
+              reason: cleanTitle,
+              amount: Number(c.amount),
+              grantDate: c.contribution_date,
+              voucherNumber: c.reference_number || `AA-${c.id.substring(0, 8)}`,
+              approvedBy: "President & Alalayang Agila Committee",
+              status: "disbursed",
+            };
+          });
+        if (remoteGrants.length > 0) {
+          setAlalayangGrants((prev) => {
+            const liveIds = new Set(remoteGrants.map((g) => g.id));
+            const prevFiltered = prev.filter((p) => !liveIds.has(p.id));
+            return [...remoteGrants, ...prevFiltered];
+          });
+        }
       }
 
       // 5. Fetch Documents (Authoritative Ratified & Working Fraternal Instruments)
@@ -1382,20 +1569,8 @@ export default function HomePage() {
     ? myPersonalContributions
     : (officerDuesFilter === "mine" ? myPersonalContributions : contributions);
 
-  // Check if current user is Treasurer or Secretary (strictly gates Submit Dues button)
-  const isTreasurerOrSecretary = Boolean(
-    (authMember && (
-      authMember.email?.toLowerCase().includes("treasurer") || 
-      authMember.email?.toLowerCase().includes("secretary") ||
-      authMember.email === "treasurer@agilahub.ph" ||
-      authMember.email === "secretary@agilahub.ph" ||
-      (authMember.first_name?.toLowerCase().includes("maria") && authMember.role === "officer") ||
-      (authMember.first_name?.toLowerCase().includes("chester") || authMember.last_name?.toLowerCase().includes("camacho")) ||
-      (authMember.first_name?.toLowerCase().includes("joenathan") || authMember.last_name?.toLowerCase().includes("talento")) ||
-      authMember.role === "admin"
-    )) ||
-    (!authMember && (currentRole === "officer" || currentRole === "admin"))
-  );
+  // Check if current user is Treasurer or Secretary (strictly gates Submit Dues & Expense - Req 4.4)
+  const isTreasurerOrSecretary = canManageFinance;
 
   // Handle Club Logo Upload & Persistence
   const handleUpdateClubLogo = (newLogoUrl: string) => {
@@ -1489,11 +1664,26 @@ export default function HomePage() {
   // Dynamic list of officer categories
   const officerCategories = React.useMemo(() => {
     const set = new Set<string>();
-    OFFICERS_2026.forEach((o) => {
+    OFFICER_ROSTER_2026.forEach((o) => {
       if (o.category?.trim()) set.add(o.category.trim());
     });
     return Array.from(set).sort();
   }, []);
+
+  // Filtered officer position groups for Club Officers 2-column view (Req 4.7)
+  const filteredOfficerGroups = React.useMemo(() => {
+    return OFFICER_ROSTER_2026.filter((group) => {
+      const matchesCategory =
+        officerCategoryFilter === "all" || group.category === officerCategoryFilter;
+      if (!matchesCategory) return false;
+      if (!directorySearch.trim()) return true;
+      const term = directorySearch.toLowerCase().trim();
+      const posMatches = group.position.toLowerCase().includes(term);
+      const catMatches = group.category.toLowerCase().includes(term);
+      const nameMatches = group.officers.some((o) => o.name.toLowerCase().includes(term));
+      return posMatches || catMatches || nameMatches;
+    });
+  }, [officerCategoryFilter, directorySearch]);
 
   // Filtered officers for Officers 2026 tab
   const filteredOfficers = React.useMemo(() => {
@@ -1511,7 +1701,7 @@ export default function HomePage() {
     });
   }, [officerCategoryFilter, directorySearch]);
 
-  // Filtered members for Directory Members tab
+  // Filtered members for Directory Members tab (Affiliation and Role filters removed per Req 4.8)
   const filteredDirectoryMembers = React.useMemo(() => {
     return [...allMembers]
       .sort((a, b) => {
@@ -1521,35 +1711,98 @@ export default function HomePage() {
       })
       .filter((m) => {
         const term = directorySearch.toLowerCase().trim();
+        if (!term) return true;
         const fullName = `${m.first_name} ${m.last_name}`.toLowerCase();
         const memberNum = (m.member_number || "").toLowerCase();
         const chapter = (m.chapter_or_branch || "").toLowerCase();
         const phone = (m.phone || "").toLowerCase();
-        const roleLabel = (
-          m.role === "admin"
-            ? "president directorate"
-            : m.role === "officer"
-            ? "officer"
-            : "charter member"
-        ).toLowerCase();
-
-        const matchesSearch =
-          !term ||
+        return (
           fullName.includes(term) ||
           memberNum.includes(term) ||
           chapter.includes(term) ||
-          phone.includes(term) ||
-          roleLabel.includes(term);
-
-        const matchesRole = directoryFilter === "all" || m.role === directoryFilter;
-
-        const matchesAffiliation =
-          directoryAffiliationFilter === "all" ||
-          m.chapter_or_branch === directoryAffiliationFilter;
-
-        return matchesSearch && matchesRole && matchesAffiliation;
+          phone.includes(term)
+        );
       });
-  }, [allMembers, directorySearch, directoryFilter, directoryAffiliationFilter]);
+  }, [allMembers, directorySearch]);
+
+  // Financial persistence handlers (Req 3.1 & 3.3)
+  const handleSaveExpense = async (newExp: ExpenseRecord): Promise<{ success: boolean; error?: string }> => {
+    if (!authMember) {
+      return { success: false, error: "Authentication required to disburse financial expenses." };
+    }
+    const { error } = await supabase.from("contributions").insert({
+      member_id: authMember.id,
+      title: `[EXPENSE] ${newExp.title}`,
+      category: `Expense - ${newExp.category}`,
+      amount: newExp.amount,
+      payment_method: "Voucher Disbursement",
+      reference_number: newExp.voucherNumber,
+      status: "verified",
+      contribution_date: newExp.disbursementDate || new Date().toISOString().split("T")[0],
+      verified_by: authMember.id,
+      verified_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      console.error("Failed to save expense to backend:", error);
+      return { success: false, error: error.message };
+    }
+    await fetchHubData();
+    return { success: true };
+  };
+
+  const handleSaveGrant = async (newGrant: AlalayangGrantRecord): Promise<{ success: boolean; error?: string }> => {
+    if (!authMember) {
+      return { success: false, error: "Authentication required to record Alalayang Agila grants." };
+    }
+    const { error } = await supabase.from("contributions").insert({
+      member_id: authMember.id,
+      title: `[GRANT] ${newGrant.recipientName} - ${newGrant.category}`,
+      category: "Alalayang Agila",
+      amount: newGrant.amount,
+      payment_method: "Direct Welfare Transfer",
+      reference_number: newGrant.voucherNumber,
+      status: "verified",
+      contribution_date: newGrant.grantDate || new Date().toISOString().split("T")[0],
+      verified_by: authMember.id,
+      verified_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      console.error("Failed to save grant to backend:", error);
+      return { success: false, error: error.message };
+    }
+    await fetchHubData();
+    return { success: true };
+  };
+
+  // Manual Attendance Persistence Handler (Req 4.3)
+  const handleRecordAttendance = async (
+    eventId: string,
+    memberId: string,
+    memberNumber: string,
+    status: string
+  ) => {
+    if (!authMember) {
+      throw new Error("Authentication required to record assembly attendance.");
+    }
+    const { error } = await supabase.from("attendance").upsert(
+      {
+        event_id: eventId,
+        member_id: memberId,
+        status: status as any,
+        check_in_time: new Date().toISOString(),
+        check_in_method: "officer_manual",
+        verified_by: authMember.id,
+      },
+      { onConflict: "event_id,member_id" }
+    );
+    if (error) {
+      console.error("Failed to persist manual attendance:", error);
+      throw new Error(`Backend attendance error: ${error.message}`);
+    }
+    await fetchHubData();
+  };
 
   // Handle Tactile Check-In
   const handleCheckIn = async (eventId: string, overrideCode?: string) => {
@@ -2272,7 +2525,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("home")}
-                className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+                className="h-9 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
               >
                 <ArrowLeft className="h-4 w-4" /> Home
               </button>
@@ -2374,13 +2627,16 @@ export default function HomePage() {
                     >
                       <Plus className="h-3.5 w-3.5" /> Schedule Meeting
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsScannerOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 text-xs font-bold transition"
-                    >
-                      <Camera className="h-3.5 w-3.5" /> Scanner
-                    </button>
+                    {canManageAttendance && (
+                      <button
+                        type="button"
+                        id="btn-manual-attendance"
+                        onClick={() => setIsManualAttendanceOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-eagle-blue text-white text-xs font-bold shadow-sm hover:brightness-110 transition"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Check Attendance
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -2878,7 +3134,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("home")}
-                className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+                className="h-9 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
               >
                 <ArrowLeft className="h-4 w-4" /> Home
               </button>
@@ -2892,17 +3148,18 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => setIsSubmitContribOpen(true)}
-                className="text-xs font-bold flex items-center gap-1.5 h-9 px-3.5 shadow-sm"
-              >
-                <CreditCard className="h-3.5 w-3.5" /> Submit Dues
-              </Button>
-              {(currentRole === "admin" || currentRole === "officer") && (
+            {/* Action Buttons - Available only to Treasurer and Secretary (Req 4.4) */}
+            {canManageFinance && (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  id="btn-submit-dues"
+                  size="sm"
+                  variant="primary"
+                  onClick={() => setIsSubmitContribOpen(true)}
+                  className="text-xs font-bold flex items-center gap-1.5 h-9 px-3.5 shadow-sm"
+                >
+                  <CreditCard className="h-3.5 w-3.5" /> Submit Dues
+                </Button>
                 <button
                   type="button"
                   id="btn-open-record-expense"
@@ -2911,8 +3168,8 @@ export default function HomePage() {
                 >
                   <ArrowUpRight className="h-3.5 w-3.5" /> Record Expense
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* 1. Treasury Overview Cards */}
@@ -3030,81 +3287,83 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* 2. Monthly Contribution Rate Policy Banner (₱400 total = ₱100 renewal + ₱300 alalayang & service) */}
-          <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-500/10 via-slate-50 to-blue-500/10 dark:from-amber-500/10 dark:via-canvas-slate dark:to-eagle-blue/10 border border-amber-400/30 dark:border-white/10 shadow-sm space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <div className="h-9 w-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shrink-0">
-                  <Banknote className="h-4 w-4" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-display font-black text-sm text-slate-900 dark:text-white">
-                      Monthly Contribution Policy: ₱{monthlyRateConfig.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                      Approved Policy (v2.4)
-                    </span>
+          {/* 2. Monthly Contribution Rate Policy Banner - Visible only when Contributions / Dues card is selected (Req 4.5) */}
+          {treasuryCardSelection === "dues" && (
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-500/10 via-slate-50 to-blue-500/10 dark:from-amber-500/10 dark:via-canvas-slate dark:to-eagle-blue/10 border border-amber-400/30 dark:border-white/10 shadow-sm space-y-3 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shrink-0">
+                    <Banknote className="h-4 w-4" />
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Effective: <span className="font-bold text-slate-700 dark:text-slate-200">October 1, 2026</span> • Ratified by <span className="font-bold text-slate-700 dark:text-slate-200">President Juan Dela Cruz & Directorate</span>
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Breakdown: <span className="font-bold text-slate-700 dark:text-slate-200">₱{monthlyRateConfig.renewalAmount}</span> Membership Renewal • <span className="font-bold text-slate-700 dark:text-slate-200">₱{monthlyRateConfig.alalayangAndServiceAmount}</span> Alalayang Agila & Community Service
-                  </p>
-                </div>
-              </div>
-
-              {(currentRole === "admin" || currentRole === "officer") && (
-                <button
-                  type="button"
-                  id="btn-adjust-monthly-dues"
-                  onClick={() => setIsRateModalOpen(true)}
-                  className="h-8 px-3 rounded-xl bg-white dark:bg-white/10 hover:bg-slate-100 dark:hover:bg-white/20 border border-slate-200 dark:border-white/15 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 shadow-sm transition active:scale-95 shrink-0"
-                >
-                  <Sliders className="h-3.5 w-3.5" /> Adjust Policy Rate
-                </button>
-              )}
-            </div>
-
-            {/* Pending Rate Proposal Alert (If Present) */}
-            {pendingRateProposal && (
-              <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-400/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-fadeIn">
-                <div>
-                  <span className="font-bold text-amber-900 dark:text-amber-200 block">
-                    Adjustment Proposed by {pendingRateProposal.proposedByName}: ₱{pendingRateProposal.proposedTotal} / mo (₱{pendingRateProposal.proposedRenewal} renewal + ₱{pendingRateProposal.proposedAlalayang} alalayang)
-                  </span>
-                  <span className="text-[11px] text-slate-600 dark:text-slate-300">
-                    &ldquo;{pendingRateProposal.justification}&rdquo;
-                  </span>
-                </div>
-                {currentRole === "admin" ? (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      id="btn-approve-dues-rate"
-                      onClick={() => handleApproveRateProposal(pendingRateProposal.id)}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1"
-                    >
-                      <Check className="h-3.5 w-3.5" /> Approve
-                    </button>
-                    <button
-                      type="button"
-                      id="btn-reject-dues-rate"
-                      onClick={() => handleRejectRateProposal(pendingRateProposal.id)}
-                      className="px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300 text-xs font-bold transition"
-                    >
-                      Reject
-                    </button>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-display font-black text-sm text-slate-900 dark:text-white">
+                        Monthly Contribution Policy: ₱{monthlyRateConfig.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                        Approved Policy (v2.4)
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Effective: <span className="font-bold text-slate-700 dark:text-slate-200">October 1, 2026</span> • Ratified by <span className="font-bold text-slate-700 dark:text-slate-200">President Juan Dela Cruz & Directorate</span>
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Breakdown: <span className="font-bold text-slate-700 dark:text-slate-200">₱{monthlyRateConfig.renewalAmount}</span> Membership Renewal • <span className="font-bold text-slate-700 dark:text-slate-200">₱{monthlyRateConfig.alalayangAndServiceAmount}</span> Alalayang Agila & Community Service
+                    </p>
                   </div>
-                ) : (
-                  <span className="text-[10px] text-amber-700 dark:text-amber-300 font-bold bg-amber-500/20 px-2 py-0.5 rounded-md">
-                    Pending Presidential Approval
-                  </span>
+                </div>
+
+                {(currentRole === "admin" || currentRole === "officer") && (
+                  <button
+                    type="button"
+                    id="btn-adjust-monthly-dues"
+                    onClick={() => setIsRateModalOpen(true)}
+                    className="h-8 px-3 rounded-xl bg-white dark:bg-white/10 hover:bg-slate-100 dark:hover:bg-white/20 border border-slate-200 dark:border-white/15 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 shadow-sm transition active:scale-95 shrink-0"
+                  >
+                    <Sliders className="h-3.5 w-3.5" /> Adjust Policy Rate
+                  </button>
                 )}
               </div>
-            )}
-          </div>
+
+              {/* Pending Rate Proposal Alert (If Present) */}
+              {pendingRateProposal && (
+                <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-400/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-fadeIn">
+                  <div>
+                    <span className="font-bold text-amber-900 dark:text-amber-200 block">
+                      Adjustment Proposed by {pendingRateProposal.proposedByName}: ₱{pendingRateProposal.proposedTotal} / mo (₱{pendingRateProposal.proposedRenewal} renewal + ₱{pendingRateProposal.proposedAlalayang} alalayang)
+                    </span>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300">
+                      &ldquo;{pendingRateProposal.justification}&rdquo;
+                    </span>
+                  </div>
+                  {currentRole === "admin" ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        id="btn-approve-dues-rate"
+                        onClick={() => handleApproveRateProposal(pendingRateProposal.id)}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1"
+                      >
+                        <Check className="h-3.5 w-3.5" /> Approve
+                      </button>
+                      <button
+                        type="button"
+                        id="btn-reject-dues-rate"
+                        onClick={() => handleRejectRateProposal(pendingRateProposal.id)}
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300 text-xs font-bold transition"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-amber-700 dark:text-amber-300 font-bold bg-amber-500/20 px-2 py-0.5 rounded-md">
+                      Pending Presidential Approval
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 3. CARD DETAILS SECTION (Replaces old sub-tabs, shows full details of selected overview card) */}
           {/* OPTION 1: Net Treasury Reserves Details */}
@@ -3602,7 +3861,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("home")}
-                className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+                className="h-9 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
               >
                 <ArrowLeft className="h-4 w-4" /> Home
               </button>
@@ -3612,8 +3871,8 @@ export default function HomePage() {
                 </h2>
                 <span className="text-xs text-slate-500 font-medium">
                   {rosterTab === "officers"
-                    ? `${filteredOfficers.length} of ${OFFICERS_2026.length} Club Officers (2026)`
-                    : `${filteredDirectoryMembers.length} of ${allMembers.length} Registered Members`}
+                    ? `${filteredOfficerGroups.length} of ${OFFICER_ROSTER_2026.length} Club Officers`
+                    : `${filteredDirectoryMembers.length} of ${allMembers.length} Club Members`}
                 </span>
               </div>
             </div>
@@ -3640,7 +3899,7 @@ export default function HomePage() {
                 id="directory-search-input"
                 value={directorySearch}
                 onChange={(e) => setDirectorySearch(e.target.value)}
-                placeholder="Search Kuya/Ate by name, member ID, role, or chapter..."
+                placeholder="Search Kuya/Ate by name, member ID, or chapter..."
                 className="w-full h-10 pl-9 pr-3 rounded-xl bg-white dark:bg-canvas-slate border border-slate-300 dark:border-white/20 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
               />
             </div>
@@ -3655,7 +3914,7 @@ export default function HomePage() {
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
-                Officers · 2026
+                Club Officers
               </button>
               <button
                 type="button"
@@ -3667,12 +3926,12 @@ export default function HomePage() {
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
-                Members
+                Club Members
               </button>
             </div>
           </div>
 
-          {/* Secondary Filter Controls Bar */}
+          {/* Secondary Filter Controls Bar (Req 4.8: Affiliation & Role filters removed for single club) */}
           {rosterTab === "officers" ? (
             <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs">
               <div className="flex items-center gap-2">
@@ -3684,7 +3943,7 @@ export default function HomePage() {
                   onChange={(e) => setOfficerCategoryFilter(e.target.value)}
                   className="h-8 px-2.5 rounded-xl bg-white dark:bg-canvas-slate border border-slate-300 dark:border-white/20 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                 >
-                  <option value="all">All Officer Categories ({OFFICERS_2026.length})</option>
+                  <option value="all">All Officer Categories ({OFFICER_ROSTER_2026.length})</option>
                   {officerCategories.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
@@ -3707,59 +3966,21 @@ export default function HomePage() {
                 </button>
               )}
             </div>
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <Filter className="h-3.5 w-3.5 text-eagle-blue dark:text-blue-400" />
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-slate-700 dark:text-slate-300">Affiliation:</span>
-                  <select
-                    id="directory-affiliation-filter"
-                    value={directoryAffiliationFilter}
-                    onChange={(e) => setDirectoryAffiliationFilter(e.target.value)}
-                    className="h-8 px-2.5 rounded-xl bg-white dark:bg-canvas-slate border border-slate-300 dark:border-white/20 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-eagle-blue"
-                  >
-                    <option value="all">All Affiliations / Chapters ({directoryAffiliations.length})</option>
-                    {directoryAffiliations.map((aff) => (
-                      <option key={aff} value={aff}>
-                        {aff}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-slate-700 dark:text-slate-300">Role:</span>
-                  <select
-                    id="directory-role-filter"
-                    value={directoryFilter}
-                    onChange={(e) => setDirectoryFilter(e.target.value as "all" | "admin" | "officer" | "member")}
-                    className="h-8 px-2.5 rounded-xl bg-white dark:bg-canvas-slate border border-slate-300 dark:border-white/20 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-eagle-blue"
-                  >
-                    <option value="all">All Classifications</option>
-                    <option value="admin">President / Directorate</option>
-                    <option value="officer">Club Officer</option>
-                    <option value="member">Charter Member</option>
-                  </select>
-                </div>
-              </div>
-
-              {(directoryAffiliationFilter !== "all" || directoryFilter !== "all" || directorySearch.trim()) && (
-                <button
-                  type="button"
-                  id="reset-member-filters"
-                  onClick={() => {
-                    setDirectoryAffiliationFilter("all");
-                    setDirectoryFilter("all");
-                    setDirectorySearch("");
-                  }}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-eagle-blue dark:text-blue-400 hover:bg-eagle-blue/10 transition"
-                >
-                  Reset Filters
-                </button>
-              )}
+          ) : directorySearch.trim() ? (
+            <div className="flex items-center justify-between p-2.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs">
+              <span className="text-slate-500 text-xs">
+                Searching Club Members for: <span className="font-bold text-slate-800 dark:text-white">&quot;{directorySearch}&quot;</span>
+              </span>
+              <button
+                type="button"
+                id="reset-member-filters"
+                onClick={() => setDirectorySearch("")}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-eagle-blue dark:text-blue-400 hover:bg-eagle-blue/10 transition"
+              >
+                Clear Search
+              </button>
             </div>
-          )}
+          ) : null}
 
           {/* 1. OFFICERS VIEW */}
           {rosterTab === "officers" && (
@@ -3783,7 +4004,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {filteredOfficers.length === 0 ? (
+              {filteredOfficerGroups.length === 0 ? (
                 <div className="p-8 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 text-center space-y-3 shadow-sm">
                   <div className="h-12 w-12 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
                     <Shield className="h-6 w-6" />
@@ -3809,46 +4030,48 @@ export default function HomePage() {
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {filteredOfficers.map((officer, idx) => (
+                <div className="rounded-2xl border border-slate-200 dark:border-white/10 overflow-hidden bg-white dark:bg-canvas-slate shadow-sm divide-y divide-slate-100 dark:divide-white/5">
+                  <div className="grid grid-cols-12 px-4 py-3 bg-slate-50 dark:bg-white/5 text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-white/10">
+                    <div className="col-span-5 sm:col-span-5">Club Position / Title</div>
+                    <div className="col-span-7 sm:col-span-7">Officer Name(s)</div>
+                  </div>
+                  {filteredOfficerGroups.map((group, idx) => (
                     <div
                       key={idx}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setSelectedOfficer(officer)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setSelectedOfficer(officer);
-                        }
-                      }}
-                      className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm flex items-center justify-between gap-3 hover:border-amber-400/50 hover:shadow-md cursor-pointer transition group"
+                      className="grid grid-cols-12 px-4 py-3.5 items-center hover:bg-slate-50/80 dark:hover:bg-white/[0.03] transition-colors gap-2"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] font-mono font-extrabold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                            {officer.position}
-                          </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
-                            Filled Position
-                          </span>
-                        </div>
-                        <h4 className="font-display font-black text-sm text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">
-                          {officer.name}
-                        </h4>
-                        <span className="text-[10px] text-slate-400 block font-medium">
-                          {officer.category} • Bantayog Elite Eagles Club
+                      <div className="col-span-5 sm:col-span-5 pr-2">
+                        <span className="font-bold text-xs sm:text-sm text-amber-600 dark:text-amber-400 block leading-tight">
+                          {group.position}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          {group.category}
                         </span>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center font-bold text-xs shrink-0 group-hover:scale-105 transition-transform">
-                          <Shield className="h-4 w-4" />
-                        </div>
-                        <div className="hidden sm:flex items-center gap-1 text-xs font-bold text-slate-400 group-hover:text-amber-500 transition-colors">
-                          <span>Details</span>
-                          <span>→</span>
-                        </div>
+                      <div className="col-span-7 sm:col-span-7 flex flex-col gap-1.5">
+                        {group.officers.map((off, oIdx) => (
+                          <button
+                            key={oIdx}
+                            type="button"
+                            onClick={() =>
+                              setSelectedOfficer({
+                                position: group.position,
+                                name: off.name,
+                                category: group.category,
+                                term: "2026",
+                                termPeriod: "January 1, 2026 – December 31, 2026",
+                                club: "Bantayog Elite Eagles Club",
+                              })
+                            }
+                            aria-label={`View officer profile for ${off.name}, ${group.position}`}
+                            className="text-left group/btn flex items-center justify-between p-2 rounded-xl hover:bg-amber-500/10 transition border border-transparent hover:border-amber-400/30 active:scale-[0.99] touch-manipulation"
+                          >
+                            <span className="font-display font-black text-xs sm:text-sm text-slate-900 dark:text-white group-hover/btn:text-amber-600 dark:group-hover/btn:text-amber-300 transition-colors">
+                              {off.name}
+                            </span>
+                            <ChevronRight className="h-4 w-4 text-slate-300 group-hover/btn:text-amber-500 transition-colors shrink-0" />
+                          </button>
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -3967,7 +4190,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("home")}
-                className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition"
+                className="h-9 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
               >
                 <ArrowLeft className="h-4 w-4" /> Home
               </button>
@@ -4447,11 +4670,12 @@ export default function HomePage() {
         onRejectProposal={(propId) => handleRejectRateProposal(propId)}
       />
 
-      {/* Record Expense Disbursement Modal */}
+      {/* Record Expense Disbursement Modal (Req 3.1 & 3.3) */}
       <RecordExpenseModal
         isOpen={isRecordExpenseOpen}
         onClose={() => setIsRecordExpenseOpen(false)}
         currentRole={currentRole}
+        onSaveExpense={handleSaveExpense}
         onExpenseRecorded={(newExp) => {
           setExpenses((prev) => [newExp, ...prev]);
           setRealtimeToast({
@@ -4462,11 +4686,12 @@ export default function HomePage() {
         }}
       />
 
-      {/* Record Alalayang Agila Grant Modal */}
+      {/* Record Alalayang Agila Grant Modal (Req 3.1 & 3.3) */}
       <RecordAlalayangGrantModal
         isOpen={isRecordGrantOpen}
         onClose={() => setIsRecordGrantOpen(false)}
         currentRole={currentRole}
+        onSaveGrant={handleSaveGrant}
         onGrantRecorded={(newGrant) => {
           setAlalayangGrants((prev) => [newGrant, ...prev]);
           // Sync to expense releases
@@ -4490,6 +4715,17 @@ export default function HomePage() {
             type: "success",
           });
         }}
+      />
+
+      {/* Manual Attendance Check Modal for President & Secretary (Req 4.3) */}
+      <ManualAttendanceModal
+        isOpen={isManualAttendanceOpen}
+        onClose={() => setIsManualAttendanceOpen(false)}
+        events={events}
+        members={allMembers}
+        recordingOfficerName={authMember ? `${authMember.first_name} ${authMember.last_name}` : "President Joy M. Aragon"}
+        recordingOfficerRole={authMember?.role === "admin" ? "President / Directorate" : "Club Secretary"}
+        onRecordAttendance={handleRecordAttendance}
       />
 
       <MemberDirectoryModal

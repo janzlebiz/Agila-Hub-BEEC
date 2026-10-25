@@ -89,7 +89,8 @@ Pillars of the Nation.
 For brotherhood we work and serve
 Peace, Equality and Unity
 Emblazed with zeal of human care,
-We will share our lives to keep our liberty.`;
+We will share our lives to all humanity
+to keep our Liberty`;
 
   const pledgeText = `I, [State Your Name], having consciously subscribed to the Constitution and the Eagles Magna Carta of the Philippine Eagles, and aware of my responsibility to my GOD and COUNTRY, do hereby pledge to promote and defend at all times said Constitution and Magna Carta and their ideals to the best of my ability and within my power and capacity.
 
@@ -381,7 +382,8 @@ SO HELP ME GOD.`;
               <p>For brotherhood we work and serve,</p>
               <p>Peace, Equality and Unity,</p>
               <p>Emblazed with zeal of human care,</p>
-              <p>We will share our lives to keep our liberty.</p>
+              <p>We will share our lives to all humanity</p>
+              <p>to keep our Liberty</p>
             </div>
           </div>
         </div>

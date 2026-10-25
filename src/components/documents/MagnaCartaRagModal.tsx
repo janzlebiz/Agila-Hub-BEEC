@@ -98,13 +98,14 @@ export function MagnaCartaRagModal({
         {/* Modal Top Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-white/10 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="relative h-12 w-12 rounded-2xl bg-slate-900 border border-amber-400 p-1 shadow-md flex items-center justify-center shrink-0">
+            <div className="relative h-12 w-12 rounded-2xl bg-white border border-slate-200 dark:border-white/20 p-1 shadow-md flex items-center justify-center shrink-0">
               <Image
-                src="/assets/BEEC_official_crest.jpg"
-                alt="TFOE-PE Seal"
+                src="/assets/TFOE-PE_LGO.png"
+                alt="TFOE-PE Official Logo"
                 width={44}
                 height={44}
                 className="object-contain"
+                priority
                 unoptimized
               />
             </div>

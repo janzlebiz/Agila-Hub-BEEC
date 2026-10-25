@@ -58,13 +58,17 @@ export function MobileNavBar({ activeTab, onTabChange }: MobileNavBarProps) {
     },
   ];
 
+  // Requirement 4.1: Remove Home button on functional screens (Assemblies, Finance, Directory, Vault)
+  // Retain appropriate navigation between the four functional screens.
+  const displayedTabs = activeTab === "home" ? tabs : tabs.filter((t) => t.id !== "home");
+
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-slate-200/80 dark:border-white/10 bg-white/95 dark:bg-canvas-dark/95 backdrop-blur-deep px-2 pb-safe-offset transition-colors">
-      <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
-        {tabs.map((tab) => {
+      <div className={`flex items-center justify-around h-16 max-w-lg mx-auto ${activeTab !== "home" ? "grid grid-cols-4 w-full" : ""}`}>
+        {displayedTabs.map((tab) => {
           const isActive = activeTab === tab.id;
 
-          // Center Action Button: TFOE-PE Official Logo Emblem, NO text label below
+          // Center Action Button: TFOE-PE Official Logo Emblem, white background matching app theme
           if (tab.isCenter) {
             return (
               <button
@@ -76,7 +80,7 @@ export function MobileNavBar({ activeTab, onTabChange }: MobileNavBarProps) {
                 aria-label="Home Dashboard"
               >
                 <div
-                  className={`h-14 w-14 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-300 p-1.5 bg-black border-2 transition ${
+                  className={`h-14 w-14 rounded-2xl flex items-center justify-center shadow-xl transition-all duration-300 p-1.5 bg-white border-2 transition ${
                     isActive
                       ? "border-amber-400 scale-110 shadow-amber-500/40 ring-2 ring-amber-400"
                       : "border-slate-300 dark:border-white/20 shadow-md hover:scale-105"

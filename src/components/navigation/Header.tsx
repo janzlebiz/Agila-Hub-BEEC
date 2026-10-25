@@ -78,14 +78,14 @@ export function Header({
 
         {/* Center / Right Section */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Quick Role Switcher Pill (Presentation Preview) */}
-          {onRoleChange && (
+          {/* Quick Role Switcher Pill - Strictly disabled in production builds (Requirement 3.2) */}
+          {process.env.NODE_ENV === "development" && onRoleChange && (
             <div
               className="hidden md:flex items-center bg-slate-100 dark:bg-white/[0.06] rounded-xl p-1 border border-slate-200 dark:border-white/10 text-xs font-semibold"
-              title="UI Role Simulator"
+              title="UI Role Simulator (Development Only)"
             >
               <span className="px-2 text-slate-500 dark:text-slate-400 text-[11px] flex items-center gap-1 font-bold">
-                <Shield className="h-3 w-3 text-bumblebee-yellow" /> View:
+                <Shield className="h-3 w-3 text-bumblebee-yellow" /> View (Dev):
               </span>
               {(["admin", "officer", "member"] as const).map((r) => (
                 <button

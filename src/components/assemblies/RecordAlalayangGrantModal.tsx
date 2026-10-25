@@ -32,6 +32,7 @@ interface RecordAlalayangGrantModalProps {
   isOpen: boolean;
   onClose: () => void;
   onGrantRecorded: (grant: AlalayangGrantRecord) => void;
+  onSaveGrant?: (grant: AlalayangGrantRecord) => Promise<{ success: boolean; error?: string }>;
   currentRole: "admin" | "officer" | "member";
 }
 
@@ -39,6 +40,7 @@ export function RecordAlalayangGrantModal({
   isOpen,
   onClose,
   onGrantRecorded,
+  onSaveGrant,
   currentRole,
 }: RecordAlalayangGrantModalProps) {
   const [recipientName, setRecipientName] = useState("");
@@ -62,7 +64,7 @@ export function RecordAlalayangGrantModal({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -97,12 +99,26 @@ export function RecordAlalayangGrantModal({
       status: "disbursed",
     };
 
-    onGrantRecorded(newGrant);
-    setSuccess(true);
-    setTimeout(() => {
-      setSuccess(false);
-      onClose();
-    }, 1200);
+    try {
+      if (onSaveGrant) {
+        const res = await onSaveGrant(newGrant);
+        if (!res.success) {
+          setError(res.error || "Failed to persist Alalayang Agila grant transaction to backend database.");
+          setSubmitting(false);
+          return;
+        }
+      }
+      onGrantRecorded(newGrant);
+      setSuccess(true);
+      setTimeout(() => {
+        setSuccess(false);
+        onClose();
+      }, 1200);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error saving grant record.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

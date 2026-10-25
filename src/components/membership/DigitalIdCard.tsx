@@ -302,7 +302,7 @@ export function DigitalIdCard({
                       clubLogoInputRef.current.click();
                     }
                   }}
-                  className={`relative h-12 w-12 rounded-xl bg-slate-900 p-1 shadow-md border border-amber-400/60 shrink-0 overflow-hidden flex items-center justify-center ${
+                  className={`relative h-12 w-12 rounded-xl bg-white p-1 shadow-md border border-slate-200 dark:border-white/20 shrink-0 overflow-hidden flex items-center justify-center ${
                     role === "admin" ? "cursor-pointer hover:ring-2 hover:ring-amber-400" : ""
                   }`}
                   title={role === "admin" ? "Click to change Club Logo" : clubName}
@@ -312,7 +312,7 @@ export function DigitalIdCard({
                     alt="Club Crest"
                     width={44}
                     height={44}
-                    className="object-contain scale-105"
+                    className="object-contain"
                     priority
                     unoptimized
                   />

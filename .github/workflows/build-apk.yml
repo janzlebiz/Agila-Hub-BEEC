@@ -105,12 +105,19 @@ jobs:
 
       - name: Build Android Debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          ./gradlew assembleDebug --stacktrace
+          mkdir -p ../dist-apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../dist-apk/agila-hub.apk
+          sha256sum ../dist-apk/agila-hub.apk > ../dist-apk/agila-hub.apk.sha256
+          cat ../dist-apk/agila-hub.apk.sha256
 
-      - name: Upload Debug APK Artifact
+      - name: Upload Deliverable APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: agila-hub-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            dist-apk/agila-hub.apk
+            dist-apk/agila-hub.apk.sha256
           if-no-files-found: error
           retention-days: 30

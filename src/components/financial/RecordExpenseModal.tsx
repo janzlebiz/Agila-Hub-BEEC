@@ -32,6 +32,7 @@ interface RecordExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
   onExpenseRecorded: (expense: ExpenseRecord) => void;
+  onSaveExpense?: (expense: ExpenseRecord) => Promise<{ success: boolean; error?: string }>;
   currentRole: "admin" | "officer" | "member";
 }
 
@@ -39,6 +40,7 @@ export function RecordExpenseModal({
   isOpen,
   onClose,
   onExpenseRecorded,
+  onSaveExpense,
   currentRole,
 }: RecordExpenseModalProps) {
   const [title, setTitle] = useState("");
@@ -58,7 +60,7 @@ export function RecordExpenseModal({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -92,12 +94,26 @@ export function RecordExpenseModal({
       created_at: new Date().toISOString(),
     };
 
-    onExpenseRecorded(newExpense);
-    setSuccess(true);
-    setTimeout(() => {
-      setSuccess(false);
-      onClose();
-    }, 1200);
+    try {
+      if (onSaveExpense) {
+        const res = await onSaveExpense(newExpense);
+        if (!res.success) {
+          setError(res.error || "Failed to persist expense transaction to backend database.");
+          setSubmitting(false);
+          return;
+        }
+      }
+      onExpenseRecorded(newExpense);
+      setSuccess(true);
+      setTimeout(() => {
+        setSuccess(false);
+        onClose();
+      }, 1200);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error saving expense record.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
