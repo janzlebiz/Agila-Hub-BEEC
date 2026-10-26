@@ -41,6 +41,7 @@ import {
   Radio,
   ArrowLeft,
   Home,
+  User,
   UserPlus,
   Lock,
   Mail,
@@ -1038,10 +1039,28 @@ export default function HomePage() {
         return;
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: emailToUse.trim(),
+      let resolvedEmail = emailToUse.trim();
+      if (!resolvedEmail.includes("@")) {
+        // Member ID as username (e.g. 019528 -> 019528@agilahub.ph)
+        resolvedEmail = `${resolvedEmail.toLowerCase()}@agilahub.ph`;
+      }
+
+      let { data, error } = await supabase.auth.signInWithPassword({
+        email: resolvedEmail,
         password: passToUse,
       });
+
+      if (error && passToUse !== passToUse.toLowerCase()) {
+        const fallbackRes = await supabase.auth.signInWithPassword({
+          email: resolvedEmail,
+          password: passToUse.toLowerCase(),
+        });
+        if (!fallbackRes.error) {
+          data = fallbackRes.data;
+          error = null;
+        }
+      }
+
       if (error) {
         setAuthError(error.message);
         return;
@@ -1763,16 +1782,16 @@ export default function HomePage() {
             <form onSubmit={(e) => handleDirectLogin(e)} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Fraternal Email Address
+                  Member ID or Fraternal Email
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <User className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="eagle@agilahub.ph"
+                    placeholder="e.g. 019528 or member@agilahub.ph"
                     className="w-full pl-9 pr-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-eagle-blue font-medium"
                   />
                 </div>
