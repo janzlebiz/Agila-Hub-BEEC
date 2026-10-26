@@ -31,7 +31,7 @@ export function OfficialIdScannerModal({
   isOpen,
   onClose,
   memberId,
-  memberName = "Kuya/Ate Member",
+  memberName = "Kuya Member",
   currentIdUrl,
   onIdUpdated,
 }: OfficialIdScannerModalProps) {
@@ -130,7 +130,7 @@ export function OfficialIdScannerModal({
 
   // Use Official Preset (e.g. Bantayog Elite Official Crest / ID)
   const handleUsePreset = () => {
-    const officialSealUrl = "/assets/BEEC_official_crest.jpg";
+    const officialSealUrl = "/assets/BEEC_vector.png_whitebg.jpg";
     setCapturedFront(officialSealUrl);
     setSuccessMsg("Official Bantayog Elite Crest selected as Physical Credential!");
   };
@@ -479,9 +479,9 @@ export function OfficialIdScannerModal({
           <div className="space-y-4 py-2 text-center">
             <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-canvas-dark dark:to-[#1a233a] border border-amber-300/80 dark:border-amber-400/30 text-left">
               <div className="flex items-center gap-3 mb-3">
-                <div className="relative h-14 w-14 rounded-2xl bg-slate-900 border border-amber-400 p-1 shrink-0 shadow flex items-center justify-center">
+                <div className="relative h-14 w-14 rounded-2xl bg-white dark:bg-slate-900 border border-amber-400 p-1 shrink-0 shadow flex items-center justify-center">
                   <Image
-                    src="/assets/BEEC_official_crest.jpg"
+                    src="/assets/BEEC_vector.png_whitebg.jpg"
                     alt="Official Bantayog Elite Crest"
                     width={52}
                     height={52}

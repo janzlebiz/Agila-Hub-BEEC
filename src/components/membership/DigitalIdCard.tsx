@@ -34,6 +34,7 @@ interface DigitalIdCardProps {
   officialIdUrl?: string | null;
   idCardBackUrl?: string | null;
   onOpenScanModal?: () => void;
+  onRemoveOfficialId?: () => void;
   onUploadSelfieClick?: () => void;
 }
 
@@ -54,6 +55,7 @@ export function DigitalIdCard({
   officialIdUrl,
   idCardBackUrl,
   onOpenScanModal,
+  onRemoveOfficialId,
   onUploadSelfieClick,
 }: DigitalIdCardProps) {
   const [copied, setCopied] = useState(false);
@@ -246,6 +248,18 @@ export function DigitalIdCard({
                 >
                   Replace Scan
                 </button>
+                {onRemoveOfficialId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onRemoveOfficialId();
+                      setViewMode("digital");
+                    }}
+                    className="text-[11px] text-rose-600 dark:text-rose-400 hover:underline font-bold"
+                  >
+                    Remove Scan
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowQrModal(true)}
@@ -269,7 +283,7 @@ export function DigitalIdCard({
             {/* Top Header: AGILA Hub Logo + Titles + Club Logo */}
             <div className="relative z-10 flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-white/10">
               <div className="flex items-center gap-2.5">
-                <div className="relative h-11 w-11 rounded-xl bg-slate-50 dark:bg-white/5 p-1 shadow-sm flex items-center justify-center shrink-0 border border-slate-200 dark:border-white/10">
+                <div className="relative h-11 w-11 rounded-xl bg-slate-50 dark:bg-slate-900 p-1 shadow-sm flex items-center justify-center shrink-0 border border-slate-200 dark:border-white/10">
                   <Image
                     src="/assets/AGILA Hub.png"
                     alt="AGILA Hub"
@@ -302,7 +316,7 @@ export function DigitalIdCard({
                       clubLogoInputRef.current.click();
                     }
                   }}
-                  className={`relative h-12 w-12 rounded-xl bg-white p-1 shadow-md border border-slate-200 dark:border-white/20 shrink-0 overflow-hidden flex items-center justify-center ${
+                  className={`relative h-12 w-12 rounded-xl bg-white dark:bg-slate-900 p-1 shadow-md border border-slate-200 dark:border-white/20 shrink-0 overflow-hidden flex items-center justify-center ${
                     role === "admin" ? "cursor-pointer hover:ring-2 hover:ring-amber-400" : ""
                   }`}
                   title={role === "admin" ? "Click to change Club Logo" : clubName}

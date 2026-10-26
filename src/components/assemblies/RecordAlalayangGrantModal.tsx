@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/Button";
 export interface AlalayangGrantRecord {
   id: string;
   recipientName: string;
-  recipientRelationship: "Member (Kuya/Ate)" | "Spouse" | "Child" | "Parent" | "Community Family";
+  recipientRelationship: "Member (Kuya)" | "Spouse" | "Child" | "Parent" | "Community Family";
   chapterOrAffiliation: string;
   contactNumber?: string;
   reason: string;
@@ -45,7 +45,7 @@ export function RecordAlalayangGrantModal({
 }: RecordAlalayangGrantModalProps) {
   const [recipientName, setRecipientName] = useState("");
   const [recipientRelationship, setRecipientRelationship] = useState<AlalayangGrantRecord["recipientRelationship"]>(
-    "Member (Kuya/Ate)"
+    "Member (Kuya)"
   );
   const [chapterOrAffiliation, setChapterOrAffiliation] = useState("Bantayog Elite Eagles Club");
   const [contactNumber, setContactNumber] = useState("");
@@ -189,7 +189,7 @@ export function RecordAlalayangGrantModal({
                 onChange={(e) => setRecipientRelationship(e.target.value as AlalayangGrantRecord["recipientRelationship"])}
                 className="w-full h-10 px-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 text-xs font-bold text-slate-900 dark:text-white focus:outline-none"
               >
-                <option value="Member (Kuya/Ate)">Member (Kuya/Ate)</option>
+                <option value="Member (Kuya)">Member (Kuya)</option>
                 <option value="Spouse">Spouse</option>
                 <option value="Child">Child</option>
                 <option value="Parent">Parent</option>

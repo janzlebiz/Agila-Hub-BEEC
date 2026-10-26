@@ -151,7 +151,7 @@ export function MemberDetailModal({
             id="member-modal-title"
             className="font-display font-black text-lg text-slate-900 dark:text-white"
           >
-            Kuya/Ate {member.first_name} {member.last_name}
+            Kuya {member.first_name} {member.last_name}
           </h3>
           <p className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400 mt-0.5">
             {member.member_number || "Not Assigned"}

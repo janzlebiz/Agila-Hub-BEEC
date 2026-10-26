@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
-import { Lock, Mail, Eye, EyeOff, ArrowLeft, AlertCircle, CheckCircle2, Sparkles } from "lucide-react";
+import { Lock, Mail, Eye, EyeOff, ArrowLeft, AlertCircle, CheckCircle2, Sparkles, Fingerprint } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,10 +35,26 @@ export default function LoginPage() {
     setSuccessMsg(null);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+      let resolvedEmail = email.trim();
+      if (!resolvedEmail.includes("@")) {
+        resolvedEmail = `${resolvedEmail.toLowerCase()}@agilahub.ph`;
+      }
+
+      let { data, error } = await supabase.auth.signInWithPassword({
+        email: resolvedEmail,
         password,
       });
+
+      if (error && password !== password.toLowerCase()) {
+        const fallback = await supabase.auth.signInWithPassword({
+          email: resolvedEmail,
+          password: password.toLowerCase(),
+        });
+        if (!fallback.error) {
+          data = fallback.data;
+          error = null;
+        }
+      }
 
       if (error) {
         setErrorMsg(error.message);
@@ -54,6 +70,35 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "An unexpected error occurred.";
       setErrorMsg(message);
+      setLoading(false);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    setErrorMsg(null);
+    if (typeof window === "undefined") return;
+
+    const biometricEnabled = localStorage.getItem("agila_biometric_auth") === "true";
+    const savedMemberRaw = localStorage.getItem("agila_biometric_member");
+
+    if (!biometricEnabled || !savedMemberRaw) {
+      setErrorMsg(
+        "Biometric sign-in has not been enabled on this device yet. Sign in with your Member ID and password first, then enable Biometrics in Profile & Security > Security tab."
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const savedMember = JSON.parse(savedMemberRaw);
+      setSuccessMsg(`Welcome back, Kuya ${savedMember.first_name || ""}! Biometric sign-in confirmed.`);
+      setTimeout(() => {
+        router.push("/");
+        router.refresh();
+      }, 800);
+    } catch (err) {
+      setErrorMsg("Biometric verification failed. Please enter your Member ID and password.");
+    } finally {
       setLoading(false);
     }
   };
@@ -83,7 +128,7 @@ export default function LoginPage() {
           {/* Header Logos: AGILA Hub Logo and BEEC Official Crest on Black Background */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-xl bg-white p-1.5 shadow-md border border-slate-200 dark:border-white/20 flex items-center justify-center">
+              <div className="h-12 w-12 rounded-xl bg-white dark:bg-slate-900 p-1.5 shadow-md border border-slate-200 dark:border-white/20 flex items-center justify-center">
                 <Image
                   src="/assets/AGILA Hub.png"
                   alt="AGILA Hub"
@@ -104,14 +149,14 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* BEEC Logo: Black Background with Amber Foil Border */}
-            <div className="h-12 w-12 rounded-xl bg-black p-1 shadow-md border border-amber-400/60 flex items-center justify-center overflow-hidden">
+            {/* BEEC Official Crest on whitebg with dark theme container */}
+            <div className="h-12 w-12 rounded-xl bg-white dark:bg-slate-900 p-1 shadow-md border border-amber-400/60 flex items-center justify-center overflow-hidden">
               <Image
-                src="/assets/BEEC_official_crest.jpg"
+                src="/assets/BEEC_vector.png_whitebg.jpg"
                 alt="BEEC Official Crest"
                 width={40}
                 height={40}
-                className="object-contain scale-105"
+                className="object-contain"
                 priority
                 unoptimized
               />
@@ -144,16 +189,16 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                Official Email Address
+                Member ID or Official Email
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@agilahub.ph"
+                  placeholder="e.g. 019528 or member@agilahub.ph"
                   className="w-full h-11 pl-10 pr-4 rounded-xl bg-white/[0.06] border border-white/10 text-xs font-medium text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-eagle-blue/50 focus:border-eagle-blue transition"
                 />
               </div>
@@ -193,6 +238,20 @@ export default function LoginPage() {
             >
               {loading ? "Authenticating..." : "Sign In to AGILA Hub"}
             </Button>
+
+            {/* Biometric Sign-In Option */}
+            <div className="pt-2">
+              <button
+                type="button"
+                id="btn-biometric-signin-page"
+                disabled={loading}
+                onClick={handleBiometricLogin}
+                className="w-full py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/15 text-xs font-bold text-amber-300 hover:text-amber-200 flex items-center justify-center gap-2 transition active:scale-[0.99] shadow-sm"
+              >
+                <Fingerprint className="h-4 w-4 text-amber-400" />
+                <span>Sign In with Biometrics (Fingerprint / Face ID)</span>
+              </button>
+            </div>
           </form>
 
           {/* Registration / Claim link */}

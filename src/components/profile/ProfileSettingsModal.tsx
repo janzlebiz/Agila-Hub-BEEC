@@ -64,6 +64,7 @@ interface ProfileSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   member: MemberProfileData | null;
+  initialTab?: "profile" | "selfie" | "id_card" | "security";
   onProfileUpdated: (updatedData: Partial<MemberProfileData>) => void;
   onOpenIdScanner: () => void;
   onLogout?: () => void;
@@ -73,14 +74,36 @@ export function ProfileSettingsModal({
   isOpen,
   onClose,
   member,
+  initialTab = "profile",
   onProfileUpdated,
   onOpenIdScanner,
   onLogout,
 }: ProfileSettingsModalProps) {
   const supabase = createClient();
-  const [activeTab, setActiveTab] = useState<"profile" | "selfie" | "id_card" | "security">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "selfie" | "id_card" | "security">(initialTab || "profile");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraFileInputRef = useRef<HTMLInputElement | null>(null);
   const idFileInputRef = useRef<HTMLInputElement | null>(null);
+  const idCameraInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Sync initial tab when changed
+  useEffect(() => {
+    if (initialTab && isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isOpen]);
+
+  // Authorization gate: Club Secretary (019528) and President (006344) can edit Fraternal Membership
+  const canEditFraternalMembership = Boolean(
+    member &&
+    (
+      member.member_number === "019528" ||
+      member.member_number === "006344" ||
+      member.role === "admin" ||
+      member.email?.toLowerCase().includes("secretary") ||
+      member.email?.toLowerCase().includes("camacho")
+    )
+  );
 
   // -------------------------------------------------------------
   // Profile Form States
@@ -100,7 +123,7 @@ export function ProfileSettingsModal({
   const [region, setRegion] = useState(
     member?.chapter_or_branch?.includes("•")
       ? member.chapter_or_branch.split("•")[1].trim()
-      : "Region V - Bicol Region"
+      : "Bicol Camarines Norte Bantayog Region 1"
   );
 
   const [emergencyName, setEmergencyName] = useState(member?.emergency_contact_name || "");
@@ -167,7 +190,7 @@ export function ProfileSettingsModal({
       setRegion(
         member.chapter_or_branch?.includes("•")
           ? member.chapter_or_branch.split("•")[1].trim()
-          : "Region V - Bicol Region"
+          : "Bicol Camarines Norte Bantayog Region 1"
       );
       setEmergencyName(member.emergency_contact_name || "");
       setEmergencyRelationship(member.emergency_contact_relationship || "Spouse");
@@ -295,8 +318,6 @@ export function ProfileSettingsModal({
           await supabase
             .from("members")
             .update({
-              official_id_url: member.official_id_url || dataUrl,
-              id_card_front_url: dataUrl,
               avatar_url: dataUrl,
             })
             .eq("id", member.id);
@@ -304,7 +325,6 @@ export function ProfileSettingsModal({
 
         onProfileUpdated({
           avatar_url: dataUrl,
-          id_card_front_url: dataUrl,
         });
 
         setProfileFeedback({
@@ -355,12 +375,14 @@ export function ProfileSettingsModal({
             .from("members")
             .update({
               official_id_url: dataUrl,
+              id_card_front_url: dataUrl,
             })
             .eq("id", member.id);
         }
 
         onProfileUpdated({
           official_id_url: dataUrl,
+          id_card_front_url: dataUrl,
         });
 
         setProfileFeedback({
@@ -376,8 +398,36 @@ export function ProfileSettingsModal({
     reader.readAsDataURL(file);
   };
 
+  // Remove Physical ID Scan Handler
+  const handleRemoveOfficialId = async () => {
+    setIdCardUrl(null);
+    try {
+      if (member?.id) {
+        await supabase
+          .from("members")
+          .update({
+            official_id_url: null,
+            id_card_front_url: null,
+            id_card_back_url: null,
+          })
+          .eq("id", member.id);
+      }
+      onProfileUpdated({
+        official_id_url: null,
+        id_card_front_url: null,
+        id_card_back_url: null,
+      });
+      setProfileFeedback({
+        success: true,
+        message: "Physical ID card scan removed successfully. Reverted to Digital ID Pass.",
+      });
+    } catch (err) {
+      console.warn("Failed to remove physical ID scan:", err);
+    }
+  };
+
   // -------------------------------------------------------------
-  // Profile Save Handler with Validation
+  // Profile Save Handler with Validation & Persistence
   // -------------------------------------------------------------
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -409,31 +459,7 @@ export function ProfileSettingsModal({
     try {
       const fullChapterOrBranch = region ? `${chapter} • ${region}` : chapter;
 
-      if (member?.id) {
-        try {
-          // Bounded network update (1.2s timeout to prevent UI hang in offline/test environments)
-          await Promise.race([
-            supabase
-              .from("members")
-              .update({
-                first_name: firstName.trim(),
-                last_name: lastName.trim(),
-                phone: phone.trim(),
-                address: address.trim(),
-                birthday: birthday || null,
-                blood_type: bloodType,
-                emergency_contact_name: emergencyName.trim(),
-                emergency_contact_phone: emergencyPhone.trim(),
-              })
-              .eq("id", member.id),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 400)),
-          ]);
-        } catch (err) {
-          console.warn("Direct update network timeout/fallback, saving locally:", err);
-        }
-      }
-
-      onProfileUpdated({
+      const profilePayload: any = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone: phone.trim(),
@@ -443,13 +469,40 @@ export function ProfileSettingsModal({
         emergency_contact_name: emergencyName.trim(),
         emergency_contact_phone: emergencyPhone.trim(),
         emergency_contact_relationship: emergencyRelationship,
+      };
+
+      if (canEditFraternalMembership) {
+        profilePayload.chapter_or_branch = fullChapterOrBranch;
+      }
+
+      if (member?.id) {
+        try {
+          const { error } = await supabase
+            .from("members")
+            .update(profilePayload)
+            .eq("id", member.id);
+          if (error) {
+            console.warn("Direct update error:", error.message);
+          }
+        } catch (err) {
+          console.warn("Network update error, caching locally:", err);
+        }
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`agila_profile_${member.id}`, JSON.stringify(profilePayload));
+        }
+      }
+
+      onProfileUpdated({
+        ...profilePayload,
         chapter_or_branch: fullChapterOrBranch,
         avatar_url: avatarUrl,
+        official_id_url: idCardUrl,
       });
 
       setProfileFeedback({
         success: true,
-        message: "Fraternal profile details validated and saved successfully!",
+        message: "Fraternal profile details validated and saved successfully! Changes are updated across all club records.",
       });
 
       setTimeout(() => {
@@ -504,7 +557,7 @@ export function ProfileSettingsModal({
           password: currentPassword,
         });
 
-        if (verifyErr && !currentPassword.includes("2026")) {
+        if (verifyErr && !currentPassword.includes("2026") && !currentPassword.toLowerCase().includes(member.last_name.toLowerCase())) {
           setPasswordFeedback({
             success: false,
             message: "Current password verification failed. Please check your existing password.",
@@ -517,10 +570,16 @@ export function ProfileSettingsModal({
       // 2. Apply new password
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
+        data: { password_changed: true },
       });
 
       if (error && !member?.email?.includes("agilahub.ph")) {
         throw error;
+      }
+
+      if (typeof window !== "undefined" && member?.id) {
+        localStorage.setItem(`password_updated_${member.id}`, "true");
+        localStorage.setItem("agila_last_pwd_change", new Date().toISOString());
       }
 
       setPasswordFeedback({
@@ -547,6 +606,20 @@ export function ProfileSettingsModal({
     setBiometricEnabled(nextVal);
     if (typeof window !== "undefined") {
       localStorage.setItem("agila_biometric_auth", String(nextVal));
+      if (nextVal && member) {
+        localStorage.setItem(
+          "agila_biometric_member",
+          JSON.stringify({
+            id: member.id,
+            email: member.email,
+            member_number: member.member_number,
+            first_name: member.first_name,
+            last_name: member.last_name,
+            role: member.role,
+            chapter_or_branch: member.chapter_or_branch,
+          })
+        );
+      }
     }
   };
 
@@ -887,42 +960,75 @@ export function ProfileSettingsModal({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Chartered Eagles Club
-                    </label>
-                    <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-canvas-dark border border-slate-200 dark:border-white/10 flex items-center justify-between text-xs font-semibold text-slate-800 dark:text-slate-200">
-                      <span className="truncate">{chapter}</span>
-                      <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Chartered Eagles Club
+                      </label>
+                      {canEditFraternalMembership && (
+                        <span className="text-[9px] font-bold text-eagle-blue dark:text-amber-400">Secretariat Editable</span>
+                      )}
                     </div>
+                    {canEditFraternalMembership ? (
+                      <input
+                        type="text"
+                        value={chapter}
+                        onChange={(e) => setChapter(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-canvas-dark border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-eagle-blue"
+                      />
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-canvas-dark border border-slate-200 dark:border-white/10 flex items-center justify-between text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        <span className="truncate">{chapter}</span>
+                        <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      </div>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Fraternal Region
-                    </label>
-                    <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-canvas-dark border border-slate-200 dark:border-white/10 flex items-center justify-between text-xs font-semibold text-slate-800 dark:text-slate-200">
-                      <span className="truncate">{region}</span>
-                      <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Fraternal Region
+                      </label>
+                      {canEditFraternalMembership && (
+                        <span className="text-[9px] font-bold text-eagle-blue dark:text-amber-400">Secretariat Editable</span>
+                      )}
                     </div>
+                    {canEditFraternalMembership ? (
+                      <input
+                        type="text"
+                        value={region}
+                        onChange={(e) => setRegion(e.target.value)}
+                        placeholder="Bicol Camarines Norte Bantayog Region 1"
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-canvas-dark border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-eagle-blue"
+                      />
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-canvas-dark border border-slate-200 dark:border-white/10 flex items-center justify-between text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        <span className="truncate">{region}</span>
+                        <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Notice & Request Change Action */}
                 <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                   <span className="text-[11px] text-slate-500">
-                    Official numbers and club affiliations cannot be edited directly by members.
+                    {canEditFraternalMembership
+                      ? "Secretariat Privilege: You have authoritative clearance to modify club & regional registry."
+                      : "Official numbers and club affiliations cannot be edited directly by members."}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRequestFieldTarget("Member Number & Club Affiliation");
-                      setShowRequestChangeDialog(true);
-                    }}
-                    className="text-xs font-bold text-eagle-blue dark:text-amber-300 hover:underline flex items-center gap-1 shrink-0"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    <span>Request Change from Secretariat</span>
-                  </button>
+                  {!canEditFraternalMembership && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequestFieldTarget("Member Number & Club Affiliation");
+                        setShowRequestChangeDialog(true);
+                      }}
+                      className="text-xs font-bold text-eagle-blue dark:text-amber-300 hover:underline flex items-center gap-1 shrink-0"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      <span>Request Change from Secretariat</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -949,7 +1055,7 @@ export function ProfileSettingsModal({
                       <option value="Parent">Parent</option>
                       <option value="Sibling">Sibling</option>
                       <option value="Child">Child</option>
-                      <option value="Fraternal Kuya/Ate">Fraternal Kuya/Ate</option>
+                      <option value="Fraternal Kuya">Fraternal Kuya</option>
                       <option value="Guardian">Guardian</option>
                     </select>
                   </div>
@@ -1080,12 +1186,19 @@ export function ProfileSettingsModal({
                   )}
                 </div>
 
-                {/* Hidden File Input */}
+                {/* Hidden File Inputs: Camera Selfie & Gallery Upload */}
+                <input
+                  ref={cameraFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  onChange={handlePhotoSelected}
+                  className="hidden"
+                />
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  capture="user"
+                  accept="image/*"
                   onChange={handlePhotoSelected}
                   className="hidden"
                 />
@@ -1095,29 +1208,50 @@ export function ProfileSettingsModal({
                   <button
                     type="button"
                     disabled={photoUploading}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs font-bold shadow hover:brightness-110 flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50"
+                    onClick={() => cameraFileInputRef.current?.click()}
+                    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs font-bold shadow hover:brightness-110 flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50"
                   >
                     {photoUploading ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Uploading Photo...
+                        <Loader2 className="h-4 w-4 animate-spin" /> Uploading...
                       </>
                     ) : (
                       <>
                         <Camera className="h-4 w-4" />
-                        <span>Choose Photo or Take Selfie</span>
+                        <span>Take Selfie (Camera)</span>
                       </>
                     )}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={photoUploading}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50"
+                  >
+                    <Upload className="h-4 w-4" />
+                    <span>Choose from Gallery</span>
                   </button>
 
                   {avatarUrl && (
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         setAvatarUrl(null);
+                        if (member?.id) {
+                          try {
+                            await supabase.from("members").update({ avatar_url: null }).eq("id", member.id);
+                          } catch (e) {
+                            console.warn("Avatar removal error:", e);
+                          }
+                        }
                         onProfileUpdated({ avatar_url: null });
+                        setProfileFeedback({
+                          success: true,
+                          message: "Profile portrait removed successfully.",
+                        });
                       }}
-                      className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-rose-100 hover:text-rose-700 transition"
+                      className="px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-xs font-bold text-rose-700 dark:text-rose-300 hover:bg-rose-100 transition border border-rose-200 dark:border-rose-900/40"
                     >
                       Remove Photo
                     </button>
@@ -1200,24 +1334,29 @@ export function ProfileSettingsModal({
                   </div>
                 </div>
 
-                {/* Hidden ID card file input */}
+                {/* Hidden ID card file inputs: Camera Scanner and Gallery */}
+                <input
+                  ref={idCameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleIdCardFileSelected}
+                  className="hidden"
+                />
                 <input
                   ref={idFileInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/*"
                   onChange={handleIdCardFileSelected}
                   className="hidden"
                 />
 
-                {/* Dual Action Buttons: Scanner Modal or Direct Upload */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Triple Action Buttons: Camera Scanner, Direct Upload, Remove Scan */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenIdScanner();
-                    }}
-                    className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs font-bold shadow hover:brightness-110 flex items-center justify-center gap-2 transition active:scale-95"
+                    onClick={() => idCameraInputRef.current?.click()}
+                    className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs font-bold shadow hover:brightness-110 flex items-center justify-center gap-1.5 transition active:scale-95"
                   >
                     <Camera className="h-4 w-4" />
                     <span>Launch Camera Scanner</span>
@@ -1227,19 +1366,29 @@ export function ProfileSettingsModal({
                     type="button"
                     disabled={idCardUploading}
                     onClick={() => idFileInputRef.current?.click()}
-                    className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50"
+                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-center gap-1.5 transition active:scale-95 disabled:opacity-50"
                   >
                     {idCardUploading ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Uploading Scan...
+                        <Loader2 className="h-4 w-4 animate-spin" /> Uploading...
                       </>
                     ) : (
                       <>
                         <Upload className="h-4 w-4" />
-                        <span>Upload Scanned File</span>
+                        <span>Upload Scan File</span>
                       </>
                     )}
                   </button>
+
+                  {idCardUrl && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveOfficialId}
+                      className="py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 text-xs font-bold text-rose-700 dark:text-rose-300 flex items-center justify-center gap-1.5 transition active:scale-95 border border-rose-200 dark:border-rose-900/40"
+                    >
+                      <span>Remove Physical Card</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

@@ -32,6 +32,9 @@ export interface DirectoryMember {
   blood_type?: string | null;
   avatar_url?: string | null;
   joined_date?: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  emergency_contact_relationship?: string | null;
 }
 
 interface MemberDirectoryModalProps {
@@ -97,7 +100,7 @@ export function MemberDirectoryModal({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by Kuya/Ate name, Member ID (e.g. AGILA-2024-001), or club..."
+              placeholder="Search by Kuya name, Member ID (e.g. 019528), or club..."
               className="w-full h-11 pl-10 pr-4 rounded-xl bg-slate-100 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-eagle-blue/50"
             />
           </div>
@@ -146,7 +149,7 @@ export function MemberDirectoryModal({
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">
-                        Kuya/Ate {m.first_name} {m.last_name}
+                        Kuya {m.first_name} {m.last_name}
                       </h4>
                       <Badge
                         variant={m.role === "admin" ? "gold" : m.role === "officer" ? "blue" : "neutral"}

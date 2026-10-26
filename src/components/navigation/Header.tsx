@@ -53,7 +53,7 @@ export function Header({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Brand Logo & Name */}
         <Link href="/" className="flex items-center gap-2.5 sm:gap-3 group">
-          <div className="relative h-10 w-10 rounded-xl bg-white p-1 shadow-md flex items-center justify-center shrink-0 border border-slate-200 dark:border-white/30 group-hover:scale-105 transition">
+          <div className="relative h-10 w-10 rounded-xl bg-white dark:bg-slate-900 p-1 shadow-md flex items-center justify-center shrink-0 border border-slate-200 dark:border-white/20 group-hover:scale-105 transition">
             <Image
               src="/assets/AGILA Hub.png"
               alt="AGILA Hub"

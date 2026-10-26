@@ -129,7 +129,8 @@ def main():
         "p_title": "Forged Dues Submission",
         "p_category": "Monthly Dues",
         "p_amount": 1000.00,
-        "p_payment_method": "Cash"
+        "p_payment_method": "Cash",
+        "p_transaction_type": "inflow"
     })
     print(f"Member calling officer_submit_contribution_for_member: HTTP {code} - {res.get('message', res)}")
     assert code in (400, 403), f"Expected 400 or 403, got {code}"
