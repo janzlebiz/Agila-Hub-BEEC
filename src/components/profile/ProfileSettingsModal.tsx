@@ -603,8 +603,8 @@ export function ProfileSettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-xl rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/15 p-5 sm:p-6 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-900 dark:text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 pb-safe bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-xl rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/15 p-4 sm:p-6 shadow-2xl flex flex-col max-h-[88vh] sm:max-h-[90vh] overflow-hidden text-slate-900 dark:text-white">
         
         {/* ============================================================== */}
         {/* MODAL HEADER                                                   */}
@@ -719,8 +719,8 @@ export function ProfileSettingsModal({
           </button>
         </div>
 
-        {/* Scrollable Container with safe bottom clearance */}
-        <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+        {/* Scrollable Container with safe bottom clearance and no horizontal overflow */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1 pb-10 space-y-4">
           
           {/* ============================================================== */}
           {/* TAB 1: FRATERNAL PROFILE (ORGANIZED IN 3 SECTIONS)              */}
@@ -1005,23 +1005,25 @@ export function ProfileSettingsModal({
                 </div>
               )}
 
-              {/* Save Button */}
-              <button
-                type="submit"
-                id="btn-save-profile"
-                disabled={savingProfile}
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white text-xs font-bold shadow-lg hover:brightness-110 flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50"
-              >
-                {savingProfile ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Saving Validated Changes...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" /> Save Validated Profile
-                  </>
-                )}
-              </button>
+              {/* Save Button with generous bottom clearance */}
+              <div className="pt-3 pb-6">
+                <button
+                  type="submit"
+                  id="btn-save-profile"
+                  disabled={savingProfile}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-eagle-blue to-eagle-blue-dark text-white text-xs font-bold shadow-lg hover:brightness-110 flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50 touch-manipulation cursor-pointer"
+                >
+                  {savingProfile ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Saving Validated Changes...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" /> Save Validated Profile
+                    </>
+                  )}
+                </button>
+              </div>
             </form>
           )}
 
@@ -1481,13 +1483,13 @@ export function ProfileSettingsModal({
                 </button>
               </div>
 
-              {/* Logout Action */}
-              <div className="pt-2">
+              {/* Logout Action with generous bottom clearance */}
+              <div className="pt-3 pb-8">
                 <button
                   type="button"
                   onClick={handleLogout}
                   disabled={loggingOut}
-                  className="w-full py-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-300/80 dark:border-rose-500/30 text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95"
+                  className="w-full py-3 px-4 rounded-2xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-300/80 dark:border-rose-500/30 text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 touch-manipulation cursor-pointer"
                 >
                   {loggingOut ? (
                     <Loader2 className="h-4 w-4 animate-spin" />

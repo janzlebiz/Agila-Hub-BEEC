@@ -128,7 +128,7 @@ const OFFICER_ROSTER_2026: OfficerPositionGroup[] = [
     position: "Protocol Officers",
     category: "Protocol & Information",
     officers: [
-      { name: "RANDY B. DELFINALDO", category: "Protocol & Information" },
+      { name: "RANDY B. DELFINADO", category: "Protocol & Information" },
       { name: "STEWARD J. GARDOSE", category: "Protocol & Information" },
     ],
   },
@@ -196,6 +196,12 @@ const OFFICER_ROSTER_2026: OfficerPositionGroup[] = [
     category: "Committees",
     officers: [
       { name: "GENMIL M. RAIT", category: "Committees" },
+    ],
+  },
+  {
+    position: "Community Service Member",
+    category: "Committees",
+    officers: [
       { name: "JOENATHAN L. TALENTO", category: "Committees" },
     ],
   },
@@ -204,6 +210,12 @@ const OFFICER_ROSTER_2026: OfficerPositionGroup[] = [
     category: "Committees",
     officers: [
       { name: "GENMIL M. RAIT", category: "Committees" },
+    ],
+  },
+  {
+    position: "Membership Member",
+    category: "Committees",
+    officers: [
       { name: "ROLDAN B. ROJAS", category: "Committees" },
     ],
   },
@@ -422,116 +434,12 @@ export default function HomePage() {
   const [pendingRateProposal, setPendingRateProposal] = useState<RateProposal | null>(null);
   const [isRateModalOpen, setIsRateModalOpen] = useState(false);
 
-  // Chapter Expenses Tracking
-  const [expenses, setExpenses] = useState<ExpenseRecord[]>([
-    {
-      id: "exp-001",
-      title: "TFOE-PE National Secretariat Membership Renewal Remittance (Q3/Q4)",
-      category: "Membership Renewal",
-      amount: 12000,
-      disbursedTo: "The Fraternal Order of Eagles National Directorate",
-      disbursementDate: "2026-10-02",
-      voucherNumber: "EXP-2026-081",
-      approvedBy: "President Juan Dela Cruz",
-      status: "released",
-      notes: "Annual membership renewal assessment for 30 active club members.",
-    },
-    {
-      id: "exp-002",
-      title: "Cardiac Surgery Aid - Kuya Juan Santos",
-      category: "Alalayang Agila",
-      amount: 15000,
-      disbursedTo: "Kuya Juan Santos (Beneficiary)",
-      disbursementDate: "2026-10-12",
-      voucherNumber: "EXP-2026-088",
-      approvedBy: "President Juan Dela Cruz",
-      status: "released",
-      notes: "Emergency medical benevolence grant approved under Alalayang Agila program.",
-    },
-    {
-      id: "exp-003",
-      title: "Sierra Madre Reforestation Hardwood Saplings & Seedlings",
-      category: "Community Service",
-      amount: 18500,
-      disbursedTo: "Provincial Environment & Forest Nursery",
-      disbursementDate: "2026-10-08",
-      voucherNumber: "EXP-2026-084",
-      approvedBy: "Treasurer Maria Santos",
-      status: "released",
-      notes: "Procurement of 1,000 native hardwood saplings for community watershed planting.",
-    },
-    {
-      id: "exp-004",
-      title: "Bereavement Memorial Fund - Late Kuya Ramon Cruz",
-      category: "Alalayang Agila",
-      amount: 20000,
-      disbursedTo: "Cruz Family Estate",
-      disbursementDate: "2026-09-28",
-      voucherNumber: "EXP-2026-079",
-      approvedBy: "President Juan Dela Cruz",
-      status: "released",
-      notes: "Fraternal bereavement grant and memorial tribute assistance.",
-    },
-    {
-      id: "exp-005",
-      title: "Community Dental & Medical Supplies Procurement",
-      category: "Community Service",
-      amount: 8500,
-      disbursedTo: "Barangay Health Center Outreach Depot",
-      disbursementDate: "2026-09-15",
-      voucherNumber: "EXP-2026-075",
-      approvedBy: "Treasurer Maria Santos",
-      status: "released",
-      notes: "Medicines and hygiene kits for 500+ barangay beneficiaries.",
-    },
-  ]);
+  // Chapter Expenses Tracking (Production: empty initial state, hydrated from authoritative backend)
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [isRecordExpenseOpen, setIsRecordExpenseOpen] = useState(false);
 
-  // Alalayang Agila Welfare Grants
-  const [alalayangGrants, setAlalayangGrants] = useState<AlalayangGrantRecord[]>([
-    {
-      id: "aa-001",
-      recipientName: "Kuya Juan Santos",
-      recipientRelationship: "Member (Kuya/Ate)",
-      chapterOrAffiliation: "Bantayog Elite Eagles Club",
-      contactNumber: "+63 917 555 0192",
-      category: "Medical & Hospitalization",
-      reason: "Hospitalization and medical surgery assistance for acute cardiac procedure at provincial hospital.",
-      amount: 15000,
-      grantDate: "2026-10-12",
-      voucherNumber: "AA-GRANT-2026-101",
-      approvedBy: "President Juan Dela Cruz & Alalayang Agila Committee",
-      status: "disbursed",
-    },
-    {
-      id: "aa-002",
-      recipientName: "Family of Late Kuya Ramon Cruz",
-      recipientRelationship: "Spouse",
-      chapterOrAffiliation: "Bantayog Elite Eagles Club",
-      contactNumber: "+63 920 444 8831",
-      category: "Bereavement & Memorial",
-      reason: "Solemn fraternal bereavement grant and memorial assistance for the bereaved family.",
-      amount: 20000,
-      grantDate: "2026-09-28",
-      voucherNumber: "AA-GRANT-2026-094",
-      approvedBy: "President Juan Dela Cruz & Alalayang Agila Committee",
-      status: "disbursed",
-    },
-    {
-      id: "aa-003",
-      recipientName: "Kuya Carlos Mendoza",
-      recipientRelationship: "Member (Kuya/Ate)",
-      chapterOrAffiliation: "Bantayog Elite Eagles Club",
-      contactNumber: "+63 919 777 2209",
-      category: "Calamity & Disaster Relief",
-      reason: "Emergency calamity relief and home reconstruction grant following Typhoon Kristine flooding.",
-      amount: 10000,
-      grantDate: "2026-10-04",
-      voucherNumber: "AA-GRANT-2026-099",
-      approvedBy: "Club Directorate",
-      status: "disbursed",
-    },
-  ]);
+  // Alalayang Agila Welfare Grants (Production: empty initial state, hydrated from authoritative backend)
+  const [alalayangGrants, setAlalayangGrants] = useState<AlalayangGrantRecord[]>([]);
   const [isRecordGrantOpen, setIsRecordGrantOpen] = useState(false);
 
   // Live Database States
@@ -539,118 +447,8 @@ export default function HomePage() {
   const [authMember, setAuthMember] = useState<MemberRecord | null>(null);
   const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
   const [events, setEvents] = useState<EventRecord[]>([]);
-  const [contributions, setContributions] = useState<ContributionRecord[]>([
-    {
-      id: "cont-001",
-      member_id: "m-04",
-      title: "Monthly Fraternal Contribution & Advance Dues (October 2026)",
-      category: "Monthly Dues",
-      amount: 1500,
-      payment_method: "GCash",
-      reference_number: "GC-2026-10492",
-      status: "verified",
-      contribution_date: "2026-10-02",
-    },
-    {
-      id: "cont-002",
-      member_id: "m-04",
-      title: "Monthly Fraternal Contribution (September 2026)",
-      category: "Monthly Dues",
-      amount: 400,
-      payment_method: "GCash",
-      reference_number: "GC-2026-09114",
-      status: "verified",
-      contribution_date: "2026-09-03",
-    },
-    {
-      id: "cont-003",
-      member_id: "m-01",
-      title: "Alalayang Agila Emergency Hospitalization Benevolence Gift",
-      category: "Donation",
-      amount: 15000,
-      payment_method: "Bank Transfer",
-      reference_number: "BDO-DON-8841",
-      status: "verified",
-      contribution_date: "2026-10-05",
-    },
-    {
-      id: "cont-004",
-      member_id: "m-02",
-      title: "Community Outreach Dental & Feeding Mission Support Donation",
-      category: "Donation",
-      amount: 10000,
-      payment_method: "GCash",
-      reference_number: "GC-DON-99231",
-      status: "verified",
-      contribution_date: "2026-09-20",
-    },
-    {
-      id: "cont-005",
-      member_id: "m-01",
-      title: "Monthly Fraternal Contribution (October 2026)",
-      category: "Monthly Dues",
-      amount: 400,
-      payment_method: "Bank Transfer",
-      reference_number: "BDO-2026-1002",
-      status: "verified",
-      contribution_date: "2026-10-01",
-    },
-    {
-      id: "cont-006",
-      member_id: "m-02",
-      title: "Monthly Fraternal Contribution (October 2026)",
-      category: "Monthly Dues",
-      amount: 400,
-      payment_method: "GCash",
-      reference_number: "GC-2026-1003",
-      status: "verified",
-      contribution_date: "2026-10-01",
-    },
-    {
-      id: "cont-007",
-      member_id: "m-03",
-      title: "Monthly Fraternal Contribution (October 2026)",
-      category: "Monthly Dues",
-      amount: 400,
-      payment_method: "GCash",
-      reference_number: "GC-2026-1004",
-      status: "verified",
-      contribution_date: "2026-10-01",
-    },
-    {
-      id: "cont-008",
-      member_id: "m-03",
-      title: "Special Typhoon Kristine Calamity Relief Pledge",
-      category: "Donation",
-      amount: 5000,
-      payment_method: "GCash",
-      reference_number: "GC-DON-11094",
-      status: "verified",
-      contribution_date: "2026-10-08",
-    },
-    {
-      id: "cont-009",
-      member_id: "m-01",
-      title: "Pooled Club Member Dues (Q1-Q3 2026 Remittance)",
-      category: "Monthly Dues",
-      amount: 64000,
-      payment_method: "Treasury Vault",
-      reference_number: "BEEC-TR-2026-Q3",
-      status: "verified",
-      contribution_date: "2026-09-30",
-    },
-    {
-      id: "cont-010",
-      member_id: "m-04",
-      title: "Community Outreach Feeding Mission Pledge",
-      category: "Donation",
-      amount: 1500,
-      payment_method: "Bank Transfer",
-      reference_number: "BDO-PLG-445566",
-      status: "pending",
-      contribution_date: "2026-10-25",
-    },
-  ]);
+  // Contributions and Dues (Production: empty initial state, hydrated from authoritative backend)
+  const [contributions, setContributions] = useState<ContributionRecord[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>(DEFAULT_DOCUMENTS);
   const [vaultCategoryFilter, setVaultCategoryFilter] = useState<
     "all" | "Constitution" | "By-Laws" | "Election Rules" | "Executive Memoranda" | "Fraternal Principles"
@@ -681,33 +479,10 @@ export default function HomePage() {
   const [officerCategoryFilter, setOfficerCategoryFilter] = useState<string>("all");
   const [rosterTab, setRosterTab] = useState<"officers" | "members">("officers");
   const [treasuryCardSelection, setTreasuryCardSelection] = useState<"reserves" | "dues" | "donations" | "expenses">("reserves");
-  const [clubLogoUrl, setClubLogoUrl] = useState<string | null>(null);
+  const [clubLogoUrl, setClubLogoUrl] = useState<string | null>("/assets/BEEC_vector.png_whitebg.jpg");
 
-  // Community Services state
-  const [communityServices, setCommunityServices] = useState<CommunityServiceItem[]>([
-    {
-      id: "cs-001",
-      title: "Sierra Madre Watershed Reforestation Project",
-      mission: "Active Community Mission",
-      description: "Annual environmental sustainability and humanitarian outreach organized by Bantayog Elite Eagles Club in partnership with regional local government units and environmental committees.",
-      targetBeneficiaries: "1,000 Hardwood Saplings",
-      leadCommittee: "Humanitarian & Ecology",
-      status: "Mobilizing Volunteers",
-      projectDate: "2026-11-15",
-      location: "Sierra Madre Watershed Sector",
-    },
-    {
-      id: "cs-002",
-      title: "Free Medical & Dental Mission",
-      mission: "Scheduled Outreach",
-      description: "Community health services providing medical consultations, vitamins, and dental checkups for underprivileged families in local barangays.",
-      targetBeneficiaries: "500+ Barangay Residents",
-      leadCommittee: "Health & Community Welfare",
-      status: "Scheduled Outreach",
-      projectDate: "2026-11-28",
-      location: "Barangay Health Center Outreach Depot",
-    },
-  ]);
+  // Community Services state (Production: empty initial state, hydrated from authoritative backend)
+  const [communityServices, setCommunityServices] = useState<CommunityServiceItem[]>([]);
 
   // Profile & Official ID States
   const [isOfficialIdScannerOpen, setIsOfficialIdScannerOpen] = useState(false);
@@ -1032,74 +807,8 @@ export default function HomePage() {
       if (allMemData && allMemData.length > 0) {
         setAllMembers(allMemData as DirectoryMember[]);
       } else {
-        // Pre-seed demo directory if empty (Preserve both Antonio Luna affiliations)
-        setAllMembers([
-          {
-            id: "m-01",
-            first_name: "Juan",
-            last_name: "Dela Cruz",
-            email: "president@agilahub.ph",
-            phone: "+639171234567",
-            member_number: "BEEC-2024-001",
-            role: "admin",
-            membership_status: "active",
-            chapter_or_branch: "Bantayog Elite Eagles Club",
-            blood_type: "O+",
-            joined_date: "2024-01-15",
-          },
-          {
-            id: "m-02",
-            first_name: "Maria",
-            last_name: "Santos",
-            email: "treasurer@agilahub.ph",
-            phone: "+639182223344",
-            member_number: "BEEC-2024-002",
-            role: "officer",
-            membership_status: "active",
-            chapter_or_branch: "Bantayog Elite Eagles Club",
-            blood_type: "A+",
-            joined_date: "2024-02-01",
-          },
-          {
-            id: "m-03",
-            first_name: "Ricardo",
-            last_name: "Reyes",
-            email: "secretary@agilahub.ph",
-            phone: "+639193334455",
-            member_number: "BEEC-2024-003",
-            role: "officer",
-            membership_status: "active",
-            chapter_or_branch: "Bantayog Elite Eagles Club",
-            blood_type: "B+",
-            joined_date: "2024-03-10",
-          },
-          {
-            id: "m-04",
-            first_name: "Antonio",
-            last_name: "Luna",
-            email: "member@agilahub.ph",
-            phone: "+639204445566",
-            member_number: "BEEC-2025-101",
-            role: "member",
-            membership_status: "active",
-            chapter_or_branch: "Bantayog Elite Eagles Club",
-            blood_type: "O+",
-            joined_date: "2025-01-10",
-          },
-          {
-            id: "m-05",
-            first_name: "Antonio",
-            last_name: "Luna",
-            email: "antonio.luna@eagles.org.ph",
-            phone: "+639204445566",
-            member_number: "AGILA-2025-101",
-            role: "member",
-            membership_status: "active",
-            chapter_or_branch: "Metro Manila Chapter",
-            blood_type: "O+",
-            joined_date: "2025-02-20",
-          },
-        ]);
+        // Production: display only genuine member records returned by the authorized backend (Req 6)
+        setAllMembers([]);
       }
 
       // 8. Fetch Assembly Headcount & Verify Authenticated Member Check-in
@@ -1725,11 +1434,23 @@ export default function HomePage() {
       });
   }, [allMembers, directorySearch]);
 
-  // Financial persistence handlers (Req 3.1 & 3.3)
+  // Financial persistence handlers (Req 5.2 & 5.3)
   const handleSaveExpense = async (newExp: ExpenseRecord): Promise<{ success: boolean; error?: string }> => {
     if (!authMember) {
       return { success: false, error: "Authentication required to disburse financial expenses." };
     }
+    if (!canManageFinance) {
+      return { success: false, error: "Unauthorized: Only the Treasurer or Secretary can record chapter expenditures." };
+    }
+    // Prevent duplicate voucher submissions
+    const isDuplicateVoucher = newExp.voucherNumber && (
+      expenses.some((e) => e.voucherNumber === newExp.voucherNumber) ||
+      contributions.some((c) => c.reference_number === newExp.voucherNumber)
+    );
+    if (isDuplicateVoucher) {
+      return { success: false, error: `Duplicate transaction rejected: Voucher ${newExp.voucherNumber} already recorded.` };
+    }
+
     const { error } = await supabase.from("contributions").insert({
       member_id: authMember.id,
       title: `[EXPENSE] ${newExp.title}`,
@@ -1738,10 +1459,11 @@ export default function HomePage() {
       payment_method: "Voucher Disbursement",
       reference_number: newExp.voucherNumber,
       status: "verified",
+      transaction_type: "outflow",
       contribution_date: newExp.disbursementDate || new Date().toISOString().split("T")[0],
       verified_by: authMember.id,
       verified_at: new Date().toISOString(),
-    });
+    } as any);
 
     if (error) {
       console.error("Failed to save expense to backend:", error);
@@ -1755,6 +1477,18 @@ export default function HomePage() {
     if (!authMember) {
       return { success: false, error: "Authentication required to record Alalayang Agila grants." };
     }
+    if (!canManageFinance) {
+      return { success: false, error: "Unauthorized: Only the Treasurer or Secretary can record Alalayang Agila grants." };
+    }
+    // Prevent duplicate grant voucher submissions
+    const isDuplicateGrant = newGrant.voucherNumber && (
+      alalayangGrants.some((g) => g.voucherNumber === newGrant.voucherNumber) ||
+      contributions.some((c) => c.reference_number === newGrant.voucherNumber)
+    );
+    if (isDuplicateGrant) {
+      return { success: false, error: `Duplicate transaction rejected: Grant voucher ${newGrant.voucherNumber} already recorded.` };
+    }
+
     const { error } = await supabase.from("contributions").insert({
       member_id: authMember.id,
       title: `[GRANT] ${newGrant.recipientName} - ${newGrant.category}`,
@@ -1763,10 +1497,11 @@ export default function HomePage() {
       payment_method: "Direct Welfare Transfer",
       reference_number: newGrant.voucherNumber,
       status: "verified",
+      transaction_type: "outflow",
       contribution_date: newGrant.grantDate || new Date().toISOString().split("T")[0],
       verified_by: authMember.id,
       verified_at: new Date().toISOString(),
-    });
+    } as any);
 
     if (error) {
       console.error("Failed to save grant to backend:", error);
@@ -2083,43 +1818,6 @@ export default function HomePage() {
                 )}
               </Button>
             </form>
-
-            {/* Quick Test Persona Access for Evaluators / Officers */}
-            <div className="pt-2 border-t border-white/10 space-y-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block text-center">
-                Quick Test Persona Sign-In
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  data-persona="president"
-                  disabled={authSubmitting}
-                  onClick={() => handleDirectLogin(undefined, "president@agilahub.ph", "AgilaPresident2026!")}
-                  className="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/30 text-[11px] font-bold text-amber-300 flex items-center justify-center gap-1.5 transition active:scale-95"
-                >
-                  <Shield className="h-3.5 w-3.5" /> President
-                </button>
-                <button
-                  type="button"
-                  data-persona="member"
-                  disabled={authSubmitting}
-                  onClick={() => handleDirectLogin(undefined, "member@agilahub.ph", "AgilaMember2026!")}
-                  className="px-2.5 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-400/30 text-[11px] font-bold text-blue-300 flex items-center justify-center gap-1.5 transition active:scale-95"
-                >
-                  <Users className="h-3.5 w-3.5" /> Member
-                </button>
-              </div>
-            </div>
-
-            {/* Registration Link */}
-            <div className="pt-2 text-center">
-              <a
-                href="/auth/register"
-                className="text-xs text-amber-400 hover:text-amber-300 font-bold hover:underline"
-              >
-                New Aspirant / Candidate? Apply for Membership
-              </a>
-            </div>
           </div>
         </div>
       </div>
@@ -2521,18 +2219,9 @@ export default function HomePage() {
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-safe pt-6 space-y-6 animate-fadeIn">
           {/* Focused Tab Header */}
           <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setActiveTab("home")}
-                className="h-9 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
-              >
-                <ArrowLeft className="h-4 w-4" /> Home
-              </button>
-              <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
-                Assemblies & Outreach
-              </h2>
-            </div>
+            <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
+              Assemblies & Outreach
+            </h2>
           </div>
 
           {/* Sub-tab pills for Meetings, Community Service & Alalayang Agila */}
@@ -3130,22 +2819,13 @@ export default function HomePage() {
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-safe pt-6 space-y-6 animate-fadeIn">
           {/* Focused Tab Header (Item 6: Removed Net Reserve, Inflow, and Release text) */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10 gap-3">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setActiveTab("home")}
-                className="h-9 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
-              >
-                <ArrowLeft className="h-4 w-4" /> Home
-              </button>
-              <div>
-                <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
-                  Fraternal Treasury & Finance
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  Official Club Financial Dashboard & Audited Accounts
-                </p>
-              </div>
+            <div>
+              <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
+                Fraternal Treasury & Finance
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Official Club Financial Dashboard & Audited Accounts
+              </p>
             </div>
 
             {/* Action Buttons - Available only to Treasurer and Secretary (Req 4.4) */}
@@ -3578,7 +3258,16 @@ export default function HomePage() {
                   </div>
                 )}
 
-                {displayedContributions.map((c) => {
+                {displayedContributions.length === 0 ? (
+                  <div className="p-8 text-center rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 space-y-2">
+                    <Receipt className="h-8 w-8 mx-auto text-slate-400" />
+                    <h4 className="font-bold text-sm text-slate-800 dark:text-white">No Transactions Recorded</h4>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                      There are no verified or pending contribution records found in the authoritative ledger.
+                    </p>
+                  </div>
+                ) : (
+                  displayedContributions.map((c) => {
                   const contributor = allMembers.find((m) => isSameMemberId(m.id, c.member_id));
                   const contributorName = contributor
                     ? `Kuya/Ate ${contributor.first_name} ${contributor.last_name}`
@@ -3650,10 +3339,11 @@ export default function HomePage() {
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                })
+              )}
             </div>
-          )}
+          </div>
+        )}
 
           {/* OPTION 3: Donations & Pledges Full Details */}
           {treasuryCardSelection === "donations" && (
@@ -3805,46 +3495,56 @@ export default function HomePage() {
                   )}
                 </div>
 
-                {expenses.map((exp) => (
-                  <div
-                    key={exp.id}
-                    className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-slate-900 dark:text-white">
-                          {exp.title}
-                        </span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20">
-                          {exp.category}
-                        </span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                          Released
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-slate-500 block">
-                        Disbursed to: <span className="font-semibold text-slate-700 dark:text-slate-300">{exp.disbursedTo}</span> • Voucher: <span className="font-mono">{exp.voucherNumber}</span>
-                      </span>
-                      {exp.notes && (
-                        <p className="text-[11px] text-slate-400 italic">
-                          &ldquo;{exp.notes}&rdquo;
-                        </p>
-                      )}
-                      <div className="text-[10px] text-slate-400 flex items-center gap-3 pt-0.5">
-                        <span>📅 {new Date(exp.disbursementDate).toLocaleDateString()}</span>
-                        <span>•</span>
-                        <span>Authorized by: {exp.approvedBy}</span>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0 flex items-center sm:flex-col sm:items-end justify-between gap-1 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-white/5">
-                      <span className="font-mono font-black text-base text-rose-600 dark:text-rose-400">
-                        -₱{exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-400">DISBURSED</span>
-                    </div>
+                {expenses.length === 0 ? (
+                  <div className="p-8 text-center rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 space-y-2">
+                    <Receipt className="h-8 w-8 mx-auto text-slate-400" />
+                    <h4 className="font-bold text-sm text-slate-800 dark:text-white">No Expense Disbursements</h4>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                      No chapter expenditures or disbursement vouchers recorded in the ledger.
+                    </p>
                   </div>
-                ))}
+                ) : (
+                  expenses.map((exp) => (
+                    <div
+                      key={exp.id}
+                      className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-slate-900 dark:text-white">
+                            {exp.title}
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20">
+                            {exp.category}
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                            Released
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500 block">
+                          Disbursed to: <span className="font-semibold text-slate-700 dark:text-slate-300">{exp.disbursedTo}</span> • Voucher: <span className="font-mono">{exp.voucherNumber}</span>
+                        </span>
+                        {exp.notes && (
+                          <p className="text-[11px] text-slate-400 italic">
+                            &ldquo;{exp.notes}&rdquo;
+                          </p>
+                        )}
+                        <div className="text-[10px] text-slate-400 flex items-center gap-3 pt-0.5">
+                          <span>📅 {new Date(exp.disbursementDate).toLocaleDateString()}</span>
+                          <span>•</span>
+                          <span>Authorized by: {exp.approvedBy}</span>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center sm:flex-col sm:items-end justify-between gap-1 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-white/5">
+                        <span className="font-mono font-black text-base text-rose-600 dark:text-rose-400">
+                          -₱{exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">DISBURSED</span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -3857,24 +3557,15 @@ export default function HomePage() {
       {activeTab === "directory" && (
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-safe pt-6 space-y-6 animate-fadeIn">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setActiveTab("home")}
-                className="h-9 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
-              >
-                <ArrowLeft className="h-4 w-4" /> Home
-              </button>
-              <div>
-                <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
-                  Membership Directory
-                </h2>
-                <span className="text-xs text-slate-500 font-medium">
-                  {rosterTab === "officers"
-                    ? `${filteredOfficerGroups.length} of ${OFFICER_ROSTER_2026.length} Club Officers`
-                    : `${filteredDirectoryMembers.length} of ${allMembers.length} Club Members`}
-                </span>
-              </div>
+            <div>
+              <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
+                Membership Directory
+              </h2>
+              <span className="text-xs text-slate-500 font-medium">
+                {rosterTab === "officers"
+                  ? `${filteredOfficerGroups.length} of ${OFFICER_ROSTER_2026.length} Club Officers`
+                  : `${filteredDirectoryMembers.length} of ${allMembers.length} Club Members`}
+              </span>
             </div>
 
             {/* Register Member Trigger (Only for Admin & Officers) */}
@@ -4186,22 +3877,13 @@ export default function HomePage() {
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-safe pt-6 space-y-6 animate-fadeIn pb-24">
           {/* Vault Top Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-white/10">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setActiveTab("home")}
-                className="h-9 px-3 rounded-xl bg-white hover:bg-slate-50 dark:bg-white/10 dark:hover:bg-white/20 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
-              >
-                <ArrowLeft className="h-4 w-4" /> Home
-              </button>
-              <div>
-                <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
-                  Document Vault
-                </h2>
-                <span className="text-xs text-slate-500 font-medium block">
-                  Authorized Constitutional Instruments & Fraternal Law
-                </span>
-              </div>
+            <div>
+              <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
+                Document Vault
+              </h2>
+              <span className="text-xs text-slate-500 font-medium block">
+                Authorized Constitutional Instruments & Fraternal Law
+              </span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -4627,6 +4309,122 @@ export default function HomePage() {
                 </div>
               );
             })()}
+          </div>
+
+          {/* ================================================================= */}
+          {/* OFFICIAL LOGOS COLLECTION (Req 8.2)                               */}
+          {/* ================================================================= */}
+          <div className="rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10 gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center font-bold">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display font-black text-base text-slate-900 dark:text-white">
+                    Official Logos Collection
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Official fraternal crests, club insignia and branding assets available for authorized download
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 w-fit">
+                3 Verified High-Res Assets
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 1. TFOE-PE, Inc Logo */}
+              <div className="flex flex-col items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 text-center space-y-3">
+                <div className="h-32 w-32 relative flex items-center justify-center rounded-2xl bg-white p-2 border border-slate-200 dark:border-white/10 shadow-sm">
+                  <Image
+                    src="/assets/TFOE-PE_LGO.png"
+                    alt="TFOE-PE, Inc Logo"
+                    fill
+                    className="object-contain p-2"
+                    unoptimized
+                  />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                    TFOE-PE, Inc Logo
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                    TFOE-PE_LGO.png
+                  </p>
+                </div>
+                <a
+                  href="/assets/TFOE-PE_LGO.png"
+                  download="TFOE-PE_LGO.png"
+                  className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95"
+                  aria-label="Download TFOE-PE, Inc Logo"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download</span>
+                </a>
+              </div>
+
+              {/* 2. Bantayog Elite Eagles Club Logo */}
+              <div className="flex flex-col items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 text-center space-y-3">
+                <div className="h-32 w-32 relative flex items-center justify-center rounded-2xl bg-white p-2 border border-slate-200 dark:border-white/10 shadow-sm">
+                  <Image
+                    src="/assets/BEEC_vector.png_whitebg.jpg"
+                    alt="Bantayog Elite Eagles Club Logo"
+                    fill
+                    className="object-contain p-2"
+                    unoptimized
+                  />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                    Bantayog Elite Eagles Club Logo
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                    BEEC_vector.png_whitebg.jpg
+                  </p>
+                </div>
+                <a
+                  href="/assets/BEEC_vector.png_whitebg.jpg"
+                  download="BEEC_vector.png_whitebg.jpg"
+                  className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95"
+                  aria-label="Download Bantayog Elite Eagles Club Logo"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download</span>
+                </a>
+              </div>
+
+              {/* 3. AGILA Hub Logo */}
+              <div className="flex flex-col items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/10 text-center space-y-3">
+                <div className="h-32 w-32 relative flex items-center justify-center rounded-2xl bg-white p-2 border border-slate-200 dark:border-white/10 shadow-sm">
+                  <Image
+                    src="/assets/AGILA Hub.png"
+                    alt="AGILA Hub Logo"
+                    fill
+                    className="object-contain p-2"
+                    unoptimized
+                  />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                    AGILA Hub Logo
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                    AGILA Hub.png
+                  </p>
+                </div>
+                <a
+                  href="/assets/AGILA Hub.png"
+                  download="AGILA Hub.png"
+                  className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95"
+                  aria-label="Download AGILA Hub Logo"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download</span>
+                </a>
+              </div>
+            </div>
           </div>
         </main>
       )}

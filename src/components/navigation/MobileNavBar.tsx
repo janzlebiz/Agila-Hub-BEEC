@@ -58,13 +58,13 @@ export function MobileNavBar({ activeTab, onTabChange }: MobileNavBarProps) {
     },
   ];
 
-  // Requirement 4.1: Remove Home button on functional screens (Assemblies, Finance, Directory, Vault)
-  // Retain appropriate navigation between the four functional screens.
-  const displayedTabs = activeTab === "home" ? tabs : tabs.filter((t) => t.id !== "home");
+  // Requirement 2.1: Restore Home button on all functional screens (Assemblies, Finance, Directory, Vault)
+  // All 5 tabs are visible and usable on every screen, with Home in the center returning to the main dashboard.
+  const displayedTabs = tabs;
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-slate-200/80 dark:border-white/10 bg-white/95 dark:bg-canvas-dark/95 backdrop-blur-deep px-2 pb-safe-offset transition-colors">
-      <div className={`flex items-center justify-around h-16 max-w-lg mx-auto ${activeTab !== "home" ? "grid grid-cols-4 w-full" : ""}`}>
+    <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-slate-200/80 dark:border-white/10 bg-white/95 dark:bg-canvas-dark/95 backdrop-blur-deep px-1 pb-safe-offset transition-colors">
+      <div className="grid grid-cols-5 items-center h-16 max-w-lg mx-auto w-full">
         {displayedTabs.map((tab) => {
           const isActive = activeTab === tab.id;
 

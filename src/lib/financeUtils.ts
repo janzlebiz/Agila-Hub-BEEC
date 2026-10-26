@@ -16,6 +16,7 @@ export interface ContributionRecordLike {
   status: string;
   contribution_date: string;
   reference_number?: string | null;
+  transaction_type?: "inflow" | "outflow";
 }
 
 export interface ExpenseRecordLike {
@@ -412,22 +413,74 @@ export function calculateTreasuryReconciliation({
   expenses: ExpenseRecordLike[];
   reportedVaultReserves?: number;
 }): BalanceSheetReconciliationResult {
+  // Helper to identify outflows/disbursements (expenses and grants)
+  const isOutflowRecord = (c: ContributionRecordLike) => {
+    if (c.transaction_type === "outflow") return true;
+    if (c.title?.startsWith("[EXPENSE]") || c.title?.startsWith("[GRANT]")) return true;
+    if (c.category?.startsWith("Expense - ") || c.category === "Alalayang Agila") return true;
+    return false;
+  };
+
   // Deduplicate verified receipts by id and reference_number to prevent double-counting
   const seenIds = new Set<string>();
   const seenRefs = new Set<string>();
   const verifiedContributions = contributions.filter((c) => {
     const isVerified = c.status === "verified" || c.status === "approved";
     if (!isVerified) return false;
+    // Strict accounting remediation: Outflows/grants/expenses MUST NOT be counted as inflows
+    if (isOutflowRecord(c)) return false;
     if (c.id && seenIds.has(c.id)) return false;
     if (c.reference_number && seenRefs.has(c.reference_number)) return false;
     if (c.id) seenIds.add(c.id);
     if (c.reference_number) seenRefs.add(c.reference_number);
     return true;
   });
-  const pendingContributions = contributions.filter((c) => c.status === "pending");
+  const pendingContributions = contributions.filter(
+    (c) => c.status === "pending" && !isOutflowRecord(c)
+  );
 
-  // Released expense vouchers only count as disbursements
-  const releasedExpenses = expenses.filter((e) => e.status === "released");
+  // Released expense vouchers and grants count strictly as disbursements
+  const seenExpenseIds = new Set<string>();
+  const seenExpenseRefs = new Set<string>();
+  const allDisbursements: ExpenseRecordLike[] = [];
+
+  // 1. From expenses array
+  for (const e of expenses) {
+    if (e.status === "released") {
+      if (e.id && seenExpenseIds.has(e.id)) continue;
+      if (e.voucherNumber && seenExpenseRefs.has(e.voucherNumber)) continue;
+      if (e.id) seenExpenseIds.add(e.id);
+      if (e.voucherNumber) seenExpenseRefs.add(e.voucherNumber);
+      allDisbursements.push(e);
+    }
+  }
+
+  // 2. From contributions table where transaction_type === 'outflow' or startsWith [EXPENSE]/[GRANT]
+  for (const c of contributions) {
+    if (
+      isOutflowRecord(c) &&
+      (c.status === "verified" || c.status === "approved" || c.status === "released")
+    ) {
+      const ref = c.reference_number || "";
+      if (c.id && seenExpenseIds.has(c.id)) continue;
+      if (ref && seenExpenseRefs.has(ref)) continue;
+      if (c.id) seenExpenseIds.add(c.id);
+      if (ref) seenExpenseRefs.add(ref);
+      allDisbursements.push({
+        id: c.id,
+        title: c.title,
+        category: c.category,
+        amount: Number(c.amount),
+        disbursedTo: "Beneficiary / Payee",
+        disbursementDate: c.contribution_date,
+        voucherNumber: ref,
+        approvedBy: "Treasurer / Directorate",
+        status: "released",
+      });
+    }
+  }
+
+  const releasedExpenses = allDisbursements;
 
   // 1. Total Verified Dues Inflow
   const verifiedDuesCents = verifiedContributions

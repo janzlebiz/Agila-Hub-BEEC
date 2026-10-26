@@ -308,8 +308,8 @@ export function DigitalIdCard({
                   title={role === "admin" ? "Click to change Club Logo" : clubName}
                 >
                   <Image
-                    src={clubLogoUrl || "/assets/BEEC_official_crest.jpg"}
-                    alt="Club Crest"
+                    src={clubLogoUrl || "/assets/BEEC_vector.png_whitebg.jpg"}
+                    alt="Bantayog Elite Eagles Club Official Crest"
                     width={44}
                     height={44}
                     className="object-contain"

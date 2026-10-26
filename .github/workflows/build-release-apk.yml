@@ -1,4 +1,4 @@
-name: Build and Certify Release APK
+name: Build and Certify Production Release APK
 
 on:
   workflow_dispatch:
@@ -8,12 +8,20 @@ on:
 
 jobs:
   build-release:
-    name: Build Production Signed Agila Hub APK
+    name: Build & Verify Production Signed agila-hub.apk
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Record Build Metadata & Commit SHA
+        id: meta
+        run: |
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_ENV
+          echo "Build Commit SHA: $COMMIT_SHA"
+          echo "Git Branch/Tag: ${{ github.ref }}"
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
@@ -27,11 +35,19 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Setup Android SDK Tools
+        uses: android-actions/setup-android@v3
+
       - name: Setup Gradle Cache
         uses: gradle/actions/setup-gradle@v3
 
       - name: Install Node Dependencies
         run: npm ci
+
+      - name: Run Automated Release Integrity & Reconciliation Tests
+        run: |
+          echo "Executing financial reconciliation and accounting acceptance tests..."
+          npx tsx tests/test_financial_reconciliation_gate.ts
 
       - name: Build Next.js Static Web Application
         env:
@@ -51,54 +67,115 @@ jobs:
       - name: Grant Execute Permission to Gradlew
         run: chmod +x android/gradlew
 
-      - name: Setup Keystore from Secret
-        if: ${{ env.RELEASE_KEYSTORE_BASE64 != '' }}
+      - name: Validate Release Signing Secrets (Fail-Closed)
         env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-        run: |
-          echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
-          echo "Keystore successfully decoded to android/app/release.keystore"
-
-      - name: Build Android Release APK
-        working-directory: android
-        env:
-          KEYSTORE_PATH: ${{ secrets.RELEASE_KEYSTORE_BASE64 && 'release.keystore' || '' }}
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_PATH" ] && [ -f "app/$KEYSTORE_PATH" ]; then
-            echo "Building production-signed release APK..."
-            ./gradlew assembleRelease --stacktrace
-            APK_SRC="app/build/outputs/apk/release/app-release.apk"
-          else
-            echo "WARNING: Release keystore secrets not provided. Building unsigned release APK for staging inspection..."
-            ./gradlew assembleRelease --stacktrace
-            APK_SRC="app/build/outputs/apk/release/app-release-unsigned.apk"
+          echo "Validating mandatory production release signing secrets..."
+          MISSING=0
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::RELEASE_KEYSTORE_BASE64 secret is missing. Cannot produce production release."
+            MISSING=1
           fi
-          
-          # Preserve exact final deliverable filename as agila-hub.apk
-          mkdir -p ../dist-apk
-          cp "$APK_SRC" ../dist-apk/agila-hub.apk
-          
-          echo "Generating SHA-256 Checksum..."
-          sha256sum ../dist-apk/agila-hub.apk > ../dist-apk/agila-hub.apk.sha256
-          cat ../dist-apk/agila-hub.apk.sha256
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::RELEASE_KEYSTORE_PASSWORD secret is missing."
+            MISSING=1
+          fi
+          if [ -z "$KEY_ALIAS" ]; then
+            echo "::error::RELEASE_KEY_ALIAS secret is missing."
+            MISSING=1
+          fi
+          if [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::RELEASE_KEY_PASSWORD secret is missing."
+            MISSING=1
+          fi
 
-      - name: Verify APK Signature & Identity
+          if [ "$MISSING" -eq 1 ]; then
+            echo "CRITICAL: Release workflow failed closed. Production releases MUST be cryptographically signed."
+            exit 1
+          fi
+          echo "All mandatory release signing secrets present. Decoding keystore..."
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+          if [ ! -s "android/app/release.keystore" ]; then
+            echo "::error::Decoded release.keystore is empty or corrupted."
+            exit 1
+          fi
+          echo "Production keystore successfully staged to android/app/release.keystore."
+
+      - name: Build Production Signed Release APK
+        working-directory: android
+        env:
+          KEYSTORE_PATH: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          echo "Inspecting agila-hub.apk details..."
-          ls -lh dist-apk/agila-hub.apk
-          if command -v apksigner >/dev/null 2>&1; then
-            apksigner verify --verbose dist-apk/agila-hub.apk || true
+          echo "Compiling and signing release APK with Gradle..."
+          ./gradlew assembleRelease --stacktrace
+
+          APK_SRC="app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK_SRC" ]; then
+            echo "::error::Expected release APK not found at $APK_SRC"
+            exit 1
           fi
 
-      - name: Upload Deliverable Artifact
+          mkdir -p ../dist-apk
+          # Exact mandated deliverable filename
+          cp "$APK_SRC" ../dist-apk/agila-hub.apk
+          echo "Production APK staged as ../dist-apk/agila-hub.apk"
+
+      - name: Cryptographic Signature Verification (Fail Closed)
+        run: |
+          echo "Verifying APK signature using apksigner..."
+          if ! command -v apksigner >/dev/null 2>&1; then
+            echo "Locating apksigner in Android build-tools..."
+            APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner | sort -V | tail -n 1)
+          else
+            APKSIGNER=apksigner
+          fi
+
+          if [ -z "$APKSIGNER" ] || [ ! -x "$APKSIGNER" ]; then
+            echo "::error::apksigner tool not found in environment."
+            exit 1
+          fi
+
+          echo "Running strict apksigner verify..."
+          "$APKSIGNER" verify --verbose --print-certs dist-apk/agila-hub.apk > dist-apk/signature_verification.txt
+          cat dist-apk/signature_verification.txt
+
+          echo "Recording Certificate Fingerprints..."
+          grep -E "Signer #|SHA-256|Subject:" dist-apk/signature_verification.txt > dist-apk/cert_fingerprint.txt || true
+          cat dist-apk/cert_fingerprint.txt
+
+      - name: Generate Checksum & Manifest Metadata
+        run: |
+          cd dist-apk
+          sha256sum agila-hub.apk > agila-hub.apk.sha256
+          echo "=== ARTIFACT CHECKSUM ==="
+          cat agila-hub.apk.sha256
+
+          cat <<EOF > release_manifest.json
+          {
+            "artifact": "agila-hub.apk",
+            "commit_sha": "${{ env.COMMIT_SHA }}",
+            "branch": "${{ github.ref }}",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "sha256": "$(awk '{print $1}' agila-hub.apk.sha256)"
+          }
+          EOF
+          cat release_manifest.json
+
+      - name: Upload Verified Release Deliverables
         uses: actions/upload-artifact@v4
         with:
-          name: agila-hub-apk
+          name: agila-hub-production-release
           path: |
             dist-apk/agila-hub.apk
             dist-apk/agila-hub.apk.sha256
+            dist-apk/signature_verification.txt
+            dist-apk/release_manifest.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 60
