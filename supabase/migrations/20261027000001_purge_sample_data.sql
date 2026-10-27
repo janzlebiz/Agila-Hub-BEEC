@@ -49,7 +49,8 @@ WHERE id IN ('30000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-00
 
 DELETE FROM public.documents 
 WHERE title LIKE '[SEED]%' 
-   OR id LIKE 'doc-tfoe-%';
+   OR id::text LIKE 'doc-tfoe-%'
+   OR file_url ILIKE '%seed%';
 
 -- 4. Delete sample members (preserve the 13 canonical BEEC members)
 DELETE FROM public.members 
