@@ -19,39 +19,77 @@ SET
     id_card_front_url = NULL
 WHERE id_card_front_url = avatar_url AND avatar_url IS NOT NULL;
 
--- 3. Delete all seed and dummy sample events, attendance, announcements, and contributions
-DELETE FROM public.audit_logs 
-WHERE details->>'seed' = 'true' 
-   OR details::text ILIKE '%seed%';
+-- 3. Delete all documents (Fulfills production requirement: purge all items in "All Documents" and unblocks documents_uploaded_by_fkey)
+DELETE FROM public.documents;
 
+-- 4. Delete all seed and dummy sample events, attendance, announcements, and contributions
 DELETE FROM public.attendance 
 WHERE notes = 'Seed record' 
    OR notes ILIKE '%seed%'
-   OR event_id IN ('20000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002');
+   OR event_id IN ('20000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002')
+   OR member_id IN (
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000002',
+      '00000000-0000-0000-0000-000000000003',
+      '00000000-0000-0000-0000-000000000004',
+      '00000000-0000-0000-0000-000000000005'
+   )
+   OR member_id IN (SELECT id FROM public.members WHERE email LIKE '%@agilahub.example');
 
 DELETE FROM public.events 
 WHERE id IN ('20000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002')
    OR title LIKE '[SEED]%'
    OR title ILIKE '%Monthly General Membership Meeting%'
-   OR title ILIKE '%Community Tree Planting%';
+   OR title ILIKE '%Community Tree Planting%'
+   OR created_by IN (
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000002',
+      '00000000-0000-0000-0000-000000000003',
+      '00000000-0000-0000-0000-000000000004',
+      '00000000-0000-0000-0000-000000000005'
+   )
+   OR created_by IN (SELECT id FROM public.members WHERE email LIKE '%@agilahub.example');
 
 DELETE FROM public.announcements 
 WHERE id IN ('10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002')
    OR title LIKE '[SEED]%'
    OR title ILIKE '%Annual National Assembly%'
-   OR title ILIKE '%Q3 Dues Remittance%';
+   OR title ILIKE '%Q3 Dues Remittance%'
+   OR author_id IN (
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000002',
+      '00000000-0000-0000-0000-000000000003',
+      '00000000-0000-0000-0000-000000000004',
+      '00000000-0000-0000-0000-000000000005'
+   )
+   OR author_id IN (SELECT id FROM public.members WHERE email LIKE '%@agilahub.example');
 
 DELETE FROM public.contributions 
 WHERE id IN ('30000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000003')
    OR title LIKE '[SEED]%'
-   OR reference_number IN ('GC-2026-10492', 'GC-2026-09114', 'BDO-REF-445566');
+   OR reference_number IN ('GC-2026-10492', 'GC-2026-09114', 'BDO-REF-445566')
+   OR member_id IN (
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000002',
+      '00000000-0000-0000-0000-000000000003',
+      '00000000-0000-0000-0000-000000000004',
+      '00000000-0000-0000-0000-000000000005'
+   )
+   OR member_id IN (SELECT id FROM public.members WHERE email LIKE '%@agilahub.example');
 
-DELETE FROM public.documents 
-WHERE title LIKE '[SEED]%' 
-   OR id::text LIKE 'doc-tfoe-%'
-   OR file_url ILIKE '%seed%';
+DELETE FROM public.audit_logs 
+WHERE details->>'seed' = 'true' 
+   OR details::text ILIKE '%seed%'
+   OR actor_id IN (
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000002',
+      '00000000-0000-0000-0000-000000000003',
+      '00000000-0000-0000-0000-000000000004',
+      '00000000-0000-0000-0000-000000000005'
+   )
+   OR actor_id IN (SELECT id FROM public.members WHERE email LIKE '%@agilahub.example');
 
--- 4. Delete sample members (preserve the 13 canonical BEEC members)
+-- 5. Delete sample members (preserve the 13 canonical BEEC members)
 DELETE FROM public.members 
 WHERE email LIKE '%@agilahub.example' 
    OR id IN (
