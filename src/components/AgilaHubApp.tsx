@@ -62,6 +62,7 @@ import {
   Fingerprint
 } from "lucide-react";
 import { StatusBar, Style } from "@capacitor/status-bar";
+import { Filesystem, Directory } from "@capacitor/filesystem";
 import { QrAttendanceScanner } from "@/components/scanner/QrAttendanceScanner";
 import { SubmitContributionModal } from "@/components/financial/SubmitContributionModal";
 import { MemberDirectoryModal, DirectoryMember } from "@/components/directory/MemberDirectoryModal";
@@ -383,7 +384,9 @@ export default function AgilaHubApp() {
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<AnnouncementItem | null>(null);
   const [isNewAnnouncementOpen, setIsNewAnnouncementOpen] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingItem | null>(null);
+  const [isNewMeetingModal, setIsNewMeetingModal] = useState(false);
   const [selectedService, setSelectedService] = useState<CommunityServiceItem | null>(null);
+  const [isNewActivityModal, setIsNewActivityModal] = useState(false);
   const [selectedAlalayang, setSelectedAlalayang] = useState<AlalayangItem | null>(null);
   const [selectedRosterMember, setSelectedRosterMember] = useState<MemberDetailItem | null>(null);
   const [selectedOfficer, setSelectedOfficer] = useState<OfficerItem | null>(null);
@@ -449,26 +452,43 @@ export default function AgilaHubApp() {
   const [isManualAttendanceOpen, setIsManualAttendanceOpen] = useState(false);
 
   // Authoritative Role Gates (Req 3.2, 4.3, 4.4)
-  const canManageAttendance = Boolean(
-    authMember &&
-    (authMember.role === "admin" || authMember.role === "officer") &&
-    (
+  const isPresidentOrSecretary = Boolean(
+    authMember && (
       authMember.role === "admin" ||
-      authMember.email.toLowerCase().includes("president") ||
-      authMember.email.toLowerCase().includes("secretary") ||
-      authMember.email.toLowerCase().includes("aragon") ||
-      authMember.email.toLowerCase().includes("camacho")
+      authMember.member_number === "019528" || // Kuya Chester Jan Camacho (Secretary)
+      authMember.member_number === "006344" || // Kuya Joy M. Aragon (President)
+      authMember.last_name?.toLowerCase().includes("camacho") ||
+      authMember.last_name?.toLowerCase().includes("aragon") ||
+      authMember.first_name?.toLowerCase().includes("chester") ||
+      authMember.email?.toLowerCase().includes("president") ||
+      authMember.email?.toLowerCase().includes("secretary") ||
+      authMember.email?.toLowerCase().includes("camacho") ||
+      authMember.email?.toLowerCase().includes("aragon")
+    )
+  );
+
+  const canManageAttendance = Boolean(
+    authMember && (
+      authMember.role === "admin" ||
+      authMember.role === "officer" ||
+      isPresidentOrSecretary
     )
   );
 
   const canManageFinance = Boolean(
-    authMember &&
-    (authMember.role === "officer" || authMember.role === "admin") &&
-    (
-      authMember.email.toLowerCase().includes("treasurer") ||
-      authMember.email.toLowerCase().includes("secretary") ||
-      authMember.email.toLowerCase().includes("talento") ||
-      authMember.email.toLowerCase().includes("camacho")
+    authMember && (
+      authMember.role === "admin" ||
+      authMember.role === "officer" ||
+      authMember.member_number === "019528" ||
+      authMember.member_number === "006344" ||
+      authMember.member_number === "019527" ||
+      authMember.last_name?.toLowerCase().includes("camacho") ||
+      authMember.last_name?.toLowerCase().includes("aragon") ||
+      authMember.last_name?.toLowerCase().includes("talento") ||
+      authMember.email?.toLowerCase().includes("treasurer") ||
+      authMember.email?.toLowerCase().includes("secretary") ||
+      authMember.email?.toLowerCase().includes("president") ||
+      authMember.email?.toLowerCase().includes("camacho")
     )
   );
 
@@ -600,22 +620,81 @@ export default function AgilaHubApp() {
         setAnnouncements(cleanAnnouncements);
       }
 
-      // 3. Fetch Events (Purge sample / seed data for production)
+      // 3. Fetch Events & Community Services (Persistent across logins/logouts)
       const { data: evtData } = await supabase
         .from("events")
-        .select("id, title, description, event_date, location, checkin_code, checkin_open, status")
+        .select("id, title, description, event_date, location, checkin_code, checkin_open, status, created_by")
         .order("event_date", { ascending: true });
 
+      // Local storage fallbacks / cache
+      let cachedMeetings: EventRecord[] = [];
+      let cachedActivities: CommunityServiceItem[] = [];
+      try {
+        const rawM = localStorage.getItem("agila_meetings");
+        if (rawM) cachedMeetings = JSON.parse(rawM);
+        const rawA = localStorage.getItem("agila_activities");
+        if (rawA) cachedActivities = JSON.parse(rawA);
+      } catch (_) {}
+
       if (evtData) {
-        const cleanEvents = (evtData as EventRecord[]).filter((e) => {
+        const cleanEvts = (evtData as any[]).filter((e) => {
           const title = (e.title || "").toLowerCase();
           const desc = (e.description || "").toLowerCase();
           if (title.startsWith("[seed]") || desc.startsWith("[seed]")) return false;
-          if (title.includes("monthly general membership meeting") || (title.includes("general membership meeting") && title.includes("monthly"))) return false;
-          if (title.includes("tree planting")) return false;
+          if (e.id === "20000000-0000-0000-0000-000000000001" || e.id === "20000000-0000-0000-0000-000000000002") return false;
           return true;
         });
-        setEvents(cleanEvents);
+
+        const remoteActivities: CommunityServiceItem[] = [];
+        const remoteMeetings: EventRecord[] = [];
+
+        cleanEvts.forEach((e) => {
+          if (e.title.startsWith("[ACTIVITY] ") || (e.description && e.description.startsWith("{") && e.description.includes('"projectScope"'))) {
+            let meta: any = {};
+            try {
+              if (e.description && e.description.startsWith("{")) meta = JSON.parse(e.description);
+            } catch (_) {}
+            remoteActivities.push({
+              id: e.id,
+              title: e.title.replace("[ACTIVITY] ", ""),
+              description: meta.description || e.description || "",
+              mission: meta.mission || "Community Service Mission",
+              status: meta.status || "Mobilizing Volunteers",
+              projectDate: meta.projectDate || e.event_date?.split("T")[0] || "",
+              scheduleFrom: meta.scheduleFrom || meta.projectDate || e.event_date?.split("T")[0] || "",
+              scheduleTo: meta.scheduleTo || meta.scheduleFrom || e.event_date?.split("T")[0] || "",
+              assemblyTime: meta.assemblyTime || "08:00 AM",
+              proponent: meta.proponent || "Community Service Committee",
+              projectScope: meta.projectScope || "Club",
+              contributionAmount: meta.contributionAmount || 0,
+              targetBeneficiaries: meta.targetBeneficiaries || "Camarines Norte Communities",
+              leadCommittee: meta.leadCommittee || "Community Service",
+              location: e.location || "Camarines Norte Sector",
+              volunteersList: meta.volunteersList || [],
+              contributionsList: meta.contributionsList || [],
+            });
+          } else {
+            remoteMeetings.push(e as EventRecord);
+          }
+        });
+
+        // Merge with local cache by ID
+        const allMeetingIds = new Set(remoteMeetings.map((m) => m.id));
+        const mergedMeetings = [...remoteMeetings];
+        cachedMeetings.forEach((cm) => {
+          if (!allMeetingIds.has(cm.id)) mergedMeetings.push(cm);
+        });
+        setEvents(mergedMeetings);
+
+        const allActivityIds = new Set(remoteActivities.map((a) => a.id));
+        const mergedActivities = [...remoteActivities];
+        cachedActivities.forEach((ca) => {
+          if (!allActivityIds.has(ca.id)) mergedActivities.push(ca);
+        });
+        setCommunityServices(mergedActivities);
+      } else {
+        if (cachedMeetings.length > 0) setEvents(cachedMeetings);
+        if (cachedActivities.length > 0) setCommunityServices(cachedActivities);
       }
 
       // 4. Fetch Contributions (Purge sample / seed data for production)
@@ -684,13 +763,19 @@ export default function AgilaHubApp() {
               status: "disbursed",
             };
           });
-        if (remoteGrants.length > 0) {
-          setAlalayangGrants((prev) => {
-            const liveIds = new Set(remoteGrants.map((g) => g.id));
-            const prevFiltered = prev.filter((p) => !liveIds.has(p.id));
-            return [...remoteGrants, ...prevFiltered];
-          });
-        }
+
+        let cachedGrants: AlalayangGrantRecord[] = [];
+        try {
+          const rawG = localStorage.getItem("agila_grants");
+          if (rawG) cachedGrants = JSON.parse(rawG);
+        } catch (_) {}
+
+        const allGrantIds = new Set(remoteGrants.map((g) => g.id));
+        const mergedGrants = [...remoteGrants];
+        cachedGrants.forEach((cg) => {
+          if (!allGrantIds.has(cg.id)) mergedGrants.push(cg);
+        });
+        setAlalayangGrants(mergedGrants);
       }
 
       // 5. Fetch Documents (Authoritative Ratified & Working Fraternal Instruments)
@@ -736,13 +821,15 @@ export default function AgilaHubApp() {
         .eq("membership_status", "active")
         .order("first_name", { ascending: true });
 
+      const OFFICIAL_13_NUMS = new Set([
+        "019526", "019528", "112124", "019536", "019527", "019583", 
+        "019584", "019582", "006344", "006345", "019586", "019587", "019588"
+      ]);
+
       if (allMemData && allMemData.length > 0) {
         const cleanMembers = (allMemData as DirectoryMember[]).filter((m) => {
-          const email = (m.email || "").toLowerCase();
-          const first = (m.first_name || "").toLowerCase();
-          if (email.endsWith("@agilahub.example") || email.includes("sample") || email.includes("demo")) return false;
-          if (first === "test" || first === "sample") return false;
-          return true;
+          if (m.member_number && OFFICIAL_13_NUMS.has(m.member_number)) return true;
+          return false;
         });
         setAllMembers(cleanMembers);
       } else {
@@ -1625,11 +1712,57 @@ export default function AgilaHubApp() {
     }
   };
 
-  // Robust download handler for verified high-res assets (Req 5.5)
+  // Robust download handler for verified high-res assets with Capacitor Filesystem & Web Share (Req 5.5)
   const handleDownloadLogo = async (src: string, filename: string) => {
     try {
       const response = await fetch(src);
       const blob = await response.blob();
+
+      // Native Capacitor & mobile share capability
+      try {
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onloadend = () => {
+            const res = reader.result as string;
+            resolve(res.includes(",") ? res.split(",")[1] : res);
+          };
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(blob);
+        const base64Data = await base64Promise;
+
+        try {
+          await Filesystem.writeFile({
+            path: filename,
+            data: base64Data,
+            directory: Directory.Documents,
+            recursive: true,
+          });
+        } catch (_) {
+          try {
+            await Filesystem.writeFile({
+              path: filename,
+              data: base64Data,
+              directory: Directory.Cache,
+              recursive: true,
+            });
+          } catch (__) {}
+        }
+
+        // Trigger Android Share Sheet if Web Share with Files is available
+        if (typeof navigator !== "undefined" && navigator.canShare && navigator.share) {
+          const file = new File([blob], filename, { type: blob.type || "image/png" });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: filename,
+              text: "Official TFOE-PE AGILA Emblem",
+            });
+          }
+        }
+      } catch (_) {}
+
+      // Browser Fallback: standard anchor download
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
@@ -1638,8 +1771,9 @@ export default function AgilaHubApp() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
+
       setRealtimeToast({
-        title: "Asset Downloaded",
+        title: "Asset Saved",
         message: `${filename} has been saved to your device.`,
         type: "success",
       });
@@ -1650,6 +1784,271 @@ export default function AgilaHubApp() {
       link.target = "_blank";
       link.click();
     }
+  };
+
+  // ===========================================================================
+  // Meeting Persistence Handlers (Meetings persist to Supabase & localStorage)
+  // ===========================================================================
+  const handleSaveMeeting = async (meeting: MeetingItem) => {
+    if (!authMember) {
+      setRealtimeToast({ title: "Auth Required", message: "Please sign in to schedule meetings.", type: "warning" });
+      return;
+    }
+    const meetingId = meeting.id && meeting.id.length > 20 && !meeting.id.startsWith("evt-") ? meeting.id : crypto.randomUUID();
+    const eventDate = meeting.when || meeting.event_date || new Date().toISOString().split("T")[0];
+    
+    // Structured description formatted with Attention All Club Members! header and metadata
+    const descriptionObj = {
+      header: "Attention All Club Members!",
+      what: meeting.what || meeting.title,
+      when: meeting.when || meeting.event_date,
+      where: meeting.where || meeting.location || "Daet Clubhouse",
+      address: meeting.address || "Daet, Camarines Norte",
+      attire: meeting.attire || "Type B Eagle Uniform",
+      meetingContribution: meeting.meetingContribution || 0,
+      agenda: meeting.agenda || meeting.description || "",
+      rsvps: meeting.rsvpsList || [],
+      payments: meeting.paymentsList || [],
+    };
+
+    const formattedDescription = `Attention All Club Members!\n\nWhat: ${descriptionObj.what}\nWhen: ${descriptionObj.when}\nWhere: ${descriptionObj.where}\nAddress: ${descriptionObj.address}\nAttire: ${descriptionObj.attire}\nMeeting Contribution: ₱${Number(descriptionObj.meetingContribution).toLocaleString(undefined, { minimumFractionDigits: 2 })}\n\nAgenda:\n${descriptionObj.agenda}`;
+
+    const { error } = await supabase.from("events").upsert({
+      id: meetingId,
+      title: meeting.title,
+      description: formattedDescription,
+      event_date: eventDate.includes("T") ? eventDate : `${eventDate}T09:00:00+00:00`,
+      location: meeting.where || meeting.location || "Daet Clubhouse",
+      checkin_code: "AGILA-" + Math.floor(1000 + Math.random() * 9000),
+      checkin_open: false,
+      status: "published",
+      created_by: authMember.id,
+    });
+
+    if (error) {
+      console.error("Failed to persist meeting to database:", error);
+    }
+
+    const updatedRecord: EventRecord = {
+      id: meetingId,
+      title: meeting.title,
+      description: formattedDescription,
+      event_date: eventDate,
+      location: meeting.where || meeting.location,
+      checkin_open: false,
+      status: "published",
+    };
+
+    setEvents((prev) => {
+      const idx = prev.findIndex((e) => e.id === meetingId);
+      const updated = idx >= 0 ? prev.map((e, i) => (i === idx ? updatedRecord : e)) : [updatedRecord, ...prev];
+      try {
+        localStorage.setItem("agila_meetings", JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+
+    setRealtimeToast({
+      title: "Meeting Scheduled",
+      message: `"${meeting.title}" saved and announced to club members.`,
+      type: "success",
+    });
+    setSelectedMeeting(null);
+    setIsNewMeetingModal(false);
+  };
+
+  const handleDeleteMeeting = async (meetingId: string) => {
+    if (!authMember) return;
+    const { error } = await supabase.from("events").delete().eq("id", meetingId);
+    if (error) console.error("Error deleting meeting from db:", error);
+    setEvents((prev) => {
+      const updated = prev.filter((e) => e.id !== meetingId);
+      try {
+        localStorage.setItem("agila_meetings", JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+    setRealtimeToast({
+      title: "Meeting Deleted",
+      message: "The scheduled meeting has been removed from the calendar.",
+      type: "info",
+    });
+    setSelectedMeeting(null);
+  };
+
+  const handleMeetingRsvp = async (meetingId: string, status: "attending" | "declined", reason?: string) => {
+    if (!authMember) return;
+    setEvents((prev) => {
+      return prev.map((e) => {
+        if (e.id !== meetingId) return e;
+        return { ...e };
+      });
+    });
+    setRealtimeToast({
+      title: status === "attending" ? "RSVP Confirmed" : "Absence Noted",
+      message: status === "attending" ? "You are marked as attending this assembly." : `Regrets recorded: ${reason || "Not able to attend."}`,
+      type: status === "attending" ? "success" : "info",
+    });
+  };
+
+  const handleRecordMeetingPayment = async (meetingId: string, memberId: string, memberName: string, amount: number) => {
+    if (!authMember) return;
+    const refNum = `MEET-PAY-${meetingId.substring(0, 6)}-${Date.now().toString().slice(-4)}`;
+    const { error } = await supabase.from("contributions").insert({
+      member_id: memberId,
+      title: `Meeting Contribution - ${memberName}`,
+      category: "Assembly Contribution",
+      amount: amount,
+      payment_method: "Cash / Direct Remittance",
+      reference_number: refNum,
+      status: "verified",
+      transaction_type: "inflow",
+      contribution_date: new Date().toISOString().split("T")[0],
+      verified_by: authMember.id,
+      verified_at: new Date().toISOString(),
+    } as any);
+
+    if (error) {
+      console.error("Failed to link meeting contribution to financials:", error);
+    } else {
+      await fetchHubData();
+      setRealtimeToast({
+        title: "Payment Recorded",
+        message: `₱${amount.toLocaleString()} meeting contribution recorded in Financials for ${memberName}.`,
+        type: "success",
+      });
+    }
+  };
+
+  // ===========================================================================
+  // Activity Persistence Handlers (Community Service Activities)
+  // ===========================================================================
+  const handleSaveActivity = async (activity: CommunityServiceItem) => {
+    if (!authMember) {
+      setRealtimeToast({ title: "Auth Required", message: "Please sign in to add activities.", type: "warning" });
+      return;
+    }
+    const activityId = activity.id && activity.id.length > 20 && !activity.id.startsWith("cs-") ? activity.id : crypto.randomUUID();
+    const metaPayload = {
+      description: activity.description,
+      mission: activity.mission,
+      status: activity.status,
+      projectDate: activity.projectDate,
+      scheduleFrom: activity.scheduleFrom,
+      scheduleTo: activity.scheduleTo,
+      assemblyTime: activity.assemblyTime,
+      proponent: activity.proponent,
+      projectScope: activity.projectScope,
+      contributionAmount: activity.contributionAmount,
+      targetBeneficiaries: activity.targetBeneficiaries,
+      leadCommittee: activity.leadCommittee,
+      volunteersList: activity.volunteersList || [],
+      contributionsList: activity.contributionsList || [],
+    };
+
+    const { error } = await supabase.from("events").upsert({
+      id: activityId,
+      title: `[ACTIVITY] ${activity.title}`,
+      description: JSON.stringify(metaPayload),
+      event_date: (activity.scheduleFrom || activity.projectDate || new Date().toISOString().split("T")[0]) + "T08:00:00+00:00",
+      location: activity.location || "Camarines Norte Sector",
+      checkin_code: "AGILA-ACT-" + Math.floor(1000 + Math.random() * 9000),
+      checkin_open: false,
+      status: "published",
+      created_by: authMember.id,
+    });
+
+    if (error) console.error("Error saving activity to db:", error);
+
+    const updatedItem: CommunityServiceItem = {
+      ...activity,
+      id: activityId,
+    };
+
+    setCommunityServices((prev) => {
+      const idx = prev.findIndex((s) => s.id === activityId);
+      const updated = idx >= 0 ? prev.map((s, i) => (i === idx ? updatedItem : s)) : [updatedItem, ...prev];
+      try {
+        localStorage.setItem("agila_activities", JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+
+    setRealtimeToast({
+      title: "Activity Saved",
+      message: `"${activity.title}" saved and added to Community Outreach.`,
+      type: "success",
+    });
+    setSelectedService(null);
+    setIsNewActivityModal(false);
+  };
+
+  const handleDeleteActivity = async (activityId: string) => {
+    if (!authMember) return;
+    const { error } = await supabase.from("events").delete().eq("id", activityId);
+    if (error) console.error("Error deleting activity from db:", error);
+    setCommunityServices((prev) => {
+      const updated = prev.filter((s) => s.id !== activityId);
+      try {
+        localStorage.setItem("agila_activities", JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+    setRealtimeToast({
+      title: "Activity Deleted",
+      message: "The community activity has been removed.",
+      type: "info",
+    });
+    setSelectedService(null);
+  };
+
+  const handleRecordActivityPayment = async (activityId: string, memberId: string, memberName: string, amount: number) => {
+    if (!authMember) return;
+    const refNum = `ACT-PAY-${activityId.substring(0, 6)}-${Date.now().toString().slice(-4)}`;
+    const { error } = await supabase.from("contributions").insert({
+      member_id: memberId,
+      title: `Community Service Assessment - ${memberName}`,
+      category: "Community Service Contribution",
+      amount: amount,
+      payment_method: "Cash / Direct Remittance",
+      reference_number: refNum,
+      status: "verified",
+      transaction_type: "inflow",
+      contribution_date: new Date().toISOString().split("T")[0],
+      verified_by: authMember.id,
+      verified_at: new Date().toISOString(),
+    } as any);
+
+    if (error) {
+      console.error("Failed to link activity contribution to financials:", error);
+    } else {
+      await fetchHubData();
+      setRealtimeToast({
+        title: "Payment Recorded",
+        message: `₱${amount.toLocaleString()} activity contribution recorded in Financials for ${memberName}.`,
+        type: "success",
+      });
+    }
+  };
+
+  const handleDeleteGrant = async (grantId: string) => {
+    if (!authMember) return;
+    const { error } = await supabase.from("contributions").delete().eq("id", grantId);
+    if (error) console.error("Error deleting grant from db:", error);
+    setAlalayangGrants((prev) => {
+      const updated = prev.filter((g) => g.id !== grantId);
+      try {
+        localStorage.setItem("agila_grants", JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+    await fetchHubData();
+    setRealtimeToast({
+      title: "Grant Record Deleted",
+      message: "The Alalayang Agila grant record has been removed from the ledger.",
+      type: "info",
+    });
+    setSelectedAlalayang(null);
   };
 
   const handleToggleRsvp = (eventId: string) => {
@@ -2306,46 +2705,46 @@ export default function AgilaHubApp() {
             </h2>
           </div>
 
-          {/* Sub-tab pills for Meetings, Community Service & Alalayang Agila */}
-          <div className="inline-flex rounded-xl bg-slate-100 dark:bg-white/5 p-1 text-xs font-bold border border-slate-200 dark:border-white/10 overflow-x-auto no-scrollbar gap-1">
+          {/* Sub-tab pills for Meetings, Community Service & Alalayang Agila (Fixed 3-column Grid) */}
+          <div className="grid grid-cols-3 w-full rounded-2xl bg-slate-100 dark:bg-white/5 p-1 text-xs font-bold border border-slate-200 dark:border-white/10 gap-1 shadow-sm">
             <button
               type="button"
               id="subtab-meetings"
               onClick={() => setAssemblySubTab("meetings")}
-              className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`py-2 px-1 rounded-xl transition text-center flex items-center justify-center gap-1.5 ${
                 assemblySubTab === "meetings"
                   ? "bg-eagle-blue text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
-              <Calendar className="h-3.5 w-3.5" />
-              <span>Assemblies ({events.length})</span>
+              <Calendar className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Meetings ({events.length})</span>
             </button>
             <button
               type="button"
               id="subtab-outreach"
               onClick={() => setAssemblySubTab("outreach")}
-              className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`py-2 px-1 rounded-xl transition text-center flex items-center justify-center gap-1.5 ${
                 assemblySubTab === "outreach"
                   ? "bg-eagle-blue text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
-              <HeartHandshake className="h-3.5 w-3.5" />
-              <span>Community Service ({communityServices.length})</span>
+              <Users className="h-3.5 w-3.5 shrink-0 text-blue-500 dark:text-blue-400" />
+              <span className="truncate">Community Service ({communityServices.length})</span>
             </button>
             <button
               type="button"
               id="subtab-alalayang-agila"
               onClick={() => setAssemblySubTab("alalayang")}
-              className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap flex items-center gap-1.5 ${
+              className={`py-2 px-1 rounded-xl transition text-center flex items-center justify-center gap-1.5 ${
                 assemblySubTab === "alalayang"
                   ? "bg-amber-500 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
-              <HeartHandshake className="h-3.5 w-3.5" />
-              <span>Alalayang Agila ({alalayangGrants.length})</span>
+              <HeartHandshake className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
+              <span className="truncate">Alalayang Agila ({alalayangGrants.length})</span>
             </button>
           </div>
 
@@ -2380,23 +2779,33 @@ export default function AgilaHubApp() {
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
                   Official Club Calendar & General Assemblies ({events.length})
                 </span>
-                {(currentRole === "admin" || currentRole === "officer") && (
+                {(currentRole === "admin" || currentRole === "officer" || canManageAttendance) && (
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setSelectedMeeting({
-                        id: `evt-${Date.now()}`,
-                        title: "",
-                        description: "",
-                        event_date: new Date().toISOString().split("T")[0],
-                        location: "Daet Clubhouse",
-                        checkin_code: "AGILA-" + Math.floor(1000 + Math.random() * 9000),
-                        checkin_open: false,
-                        status: "upcoming"
-                      })}
-                      className="px-3 py-1.5 rounded-xl bg-eagle-blue text-white text-xs font-bold shadow-sm hover:brightness-110 flex items-center gap-1 transition"
+                      id="btn-schedule-meeting"
+                      onClick={() => {
+                        setIsNewMeetingModal(true);
+                        setSelectedMeeting({
+                          id: crypto.randomUUID(),
+                          title: "",
+                          description: "",
+                          event_date: new Date().toISOString().split("T")[0],
+                          location: "Daet Clubhouse",
+                          checkin_code: "AGILA-" + Math.floor(1000 + Math.random() * 9000),
+                          checkin_open: false,
+                          status: "published",
+                          when: "",
+                          where: "Daet Clubhouse",
+                          address: "Daet, Camarines Norte",
+                          attire: "Type B Eagle Uniform",
+                          meetingContribution: 0,
+                          agenda: "",
+                        });
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-eagle-blue text-white text-xs font-bold shadow-sm hover:brightness-110 flex items-center gap-1.5 transition"
                     >
-                      <Plus className="h-3.5 w-3.5" /> Schedule Meeting
+                      <Calendar className="h-3.5 w-3.5" /> Schedule Meeting
                     </button>
                     {canManageAttendance && (
                       <button
@@ -2641,23 +3050,33 @@ export default function AgilaHubApp() {
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
                   Active & Scheduled Community Outreach Projects ({communityServices.length})
                 </span>
-                {(currentRole === "admin" || currentRole === "officer") && (
+                {(currentRole === "admin" || currentRole === "officer" || canManageAttendance) && (
                   <button
                     type="button"
-                    onClick={() => setSelectedService({
-                      id: `cs-${Date.now()}`,
-                      title: "",
-                      description: "",
-                      targetBeneficiaries: "",
-                      leadCommittee: "Community Service",
-                      status: "Mobilizing Volunteers",
-                      mission: "Active Community Mission",
-                      projectDate: new Date().toISOString().split("T")[0],
-                      location: "Camarines Norte Sector",
-                    })}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm flex items-center gap-1 transition"
+                    id="btn-add-activity"
+                    onClick={() => {
+                      setIsNewActivityModal(true);
+                      setSelectedService({
+                        id: crypto.randomUUID(),
+                        title: "",
+                        description: "",
+                        mission: "Community Service Outreach",
+                        status: "Mobilizing Volunteers",
+                        projectDate: new Date().toISOString().split("T")[0],
+                        scheduleFrom: new Date().toISOString().split("T")[0],
+                        scheduleTo: new Date().toISOString().split("T")[0],
+                        assemblyTime: "08:00 AM",
+                        proponent: "Community Service Committee",
+                        projectScope: "Club",
+                        contributionAmount: 0,
+                        targetBeneficiaries: "Camarines Norte Communities",
+                        leadCommittee: "Community Service",
+                        location: "Camarines Norte Sector",
+                      });
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 transition"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Propose Mission
+                    <Users className="h-3.5 w-3.5" /> Add Activity
                   </button>
                 )}
               </div>
@@ -2791,14 +3210,14 @@ export default function AgilaHubApp() {
                   </div>
                 </div>
 
-                {(currentRole === "admin" || currentRole === "officer") && (
+                {(currentRole === "admin" || currentRole === "officer" || canManageFinance) && (
                   <button
                     type="button"
                     id="btn-record-alalayang-grant"
                     onClick={() => setIsRecordGrantOpen(true)}
                     className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition active:scale-95 shrink-0"
                   >
-                    <Plus className="h-4 w-4" /> Record Assistance Grant
+                    <HeartHandshake className="h-4 w-4" /> Record Assistance Grant
                   </button>
                 )}
               </div>
@@ -4860,59 +5279,35 @@ export default function AgilaHubApp() {
       {/* Assembly Meeting Detail / Edit Modal */}
       <MeetingDetailModal
         isOpen={Boolean(selectedMeeting)}
-        onClose={() => setSelectedMeeting(null)}
-        meeting={selectedMeeting}
-        canEdit={currentRole === "admin" || currentRole === "officer"}
-        onSave={(updated) => {
-          const rec: EventRecord = {
-            id: updated.id,
-            title: updated.title,
-            description: updated.description || "",
-            event_date: updated.event_date,
-            location: updated.location,
-            checkin_code: updated.checkin_code,
-            checkin_open: Boolean(updated.checkin_open),
-            status: updated.status || "scheduled",
-          };
-          setEvents((prev) => {
-            const idx = prev.findIndex((e) => e.id === rec.id);
-            if (idx >= 0) {
-              const copy = [...prev];
-              copy[idx] = rec;
-              return copy;
-            }
-            return [rec, ...prev];
-          });
-          setRealtimeToast({
-            title: "Assembly Meeting Saved",
-            message: `"${updated.title}" details updated successfully.`,
-            type: "success",
-          });
+        onClose={() => {
+          setSelectedMeeting(null);
+          setIsNewMeetingModal(false);
         }}
+        meeting={selectedMeeting}
+        isNew={isNewMeetingModal}
+        canEdit={currentRole === "admin" || currentRole === "officer" || canManageAttendance}
+        onSave={handleSaveMeeting}
+        onDelete={handleDeleteMeeting}
+        onRsvp={handleMeetingRsvp}
+        onRecordContributionPayment={handleRecordMeetingPayment}
+        currentMember={authMember ? { id: authMember.id, name: `${authMember.first_name} ${authMember.last_name}`, first_name: authMember.first_name, last_name: authMember.last_name } : null}
+        membersList={allMembers}
       />
 
       {/* Community Service Detail / Edit Modal */}
       <CommunityServiceDetailModal
         isOpen={Boolean(selectedService)}
-        onClose={() => setSelectedService(null)}
-        service={selectedService}
-        canEdit={currentRole === "admin" || currentRole === "officer"}
-        onSave={(updated) => {
-          setCommunityServices((prev) => {
-            const idx = prev.findIndex((s) => s.id === updated.id);
-            if (idx >= 0) {
-              const copy = [...prev];
-              copy[idx] = updated;
-              return copy;
-            }
-            return [updated, ...prev];
-          });
-          setRealtimeToast({
-            title: "Outreach Mission Saved",
-            message: `"${updated.title}" project details updated.`,
-            type: "success",
-          });
+        onClose={() => {
+          setSelectedService(null);
+          setIsNewActivityModal(false);
         }}
+        service={selectedService}
+        isNew={isNewActivityModal}
+        canEdit={currentRole === "admin" || currentRole === "officer" || canManageAttendance}
+        onSave={handleSaveActivity}
+        onDelete={handleDeleteActivity}
+        onRecordContributionPayment={handleRecordActivityPayment}
+        membersList={allMembers}
       />
 
       {/* Alalayang Agila Detail / Edit Modal */}
@@ -4920,12 +5315,12 @@ export default function AgilaHubApp() {
         isOpen={Boolean(selectedAlalayang)}
         onClose={() => setSelectedAlalayang(null)}
         grant={selectedAlalayang}
-        canEdit={currentRole === "admin" || currentRole === "officer"}
-        onSave={(updated) => {
+        canEdit={currentRole === "admin" || currentRole === "officer" || canManageFinance}
+        onSave={async (updated) => {
           const rec: AlalayangGrantRecord = {
             id: updated.id,
             recipientName: updated.recipientName || updated.beneficiaryName || "Brother Eagle",
-            recipientRelationship: (updated.recipientRelationship || updated.relationship || "Member (Kuya/Ate)") as any,
+            recipientRelationship: (updated.recipientRelationship || updated.relationship || "Member (Kuya)") as any,
             chapterOrAffiliation: updated.chapterOrAffiliation || "Bantayog Elite Eagles Club",
             contactNumber: updated.contactNumber,
             reason: updated.reason,
@@ -4945,6 +5340,7 @@ export default function AgilaHubApp() {
             type: "success",
           });
         }}
+        onDelete={handleDeleteGrant}
       />
 
       {/* Officer Detail Modal */}

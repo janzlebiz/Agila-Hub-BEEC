@@ -20,7 +20,7 @@ export interface AlalayangGrantRecord {
   chapterOrAffiliation: string;
   contactNumber?: string;
   reason: string;
-  category: "Medical & Hospitalization" | "Bereavement & Memorial" | "Calamity & Disaster Relief" | "Family & Livelihood Aid";
+  category: "Medical & Hospitalization" | "Bereavement & Memorial" | "Calamity & Disaster Relief" | "Family & Livelihood Aid" | "Others" | string;
   amount: number;
   grantDate: string;
   voucherNumber: string;
@@ -49,7 +49,8 @@ export function RecordAlalayangGrantModal({
   );
   const [chapterOrAffiliation, setChapterOrAffiliation] = useState("Bantayog Elite Eagles Club");
   const [contactNumber, setContactNumber] = useState("");
-  const [category, setCategory] = useState<AlalayangGrantRecord["category"]>("Medical & Hospitalization");
+  const [category, setCategory] = useState<string>("Medical & Hospitalization");
+  const [otherCategory, setOtherCategory] = useState("");
   const [reason, setReason] = useState("");
   const [amount, setAmount] = useState<string>("10000");
   const [grantDate, setGrantDate] = useState<string>(
@@ -82,7 +83,14 @@ export function RecordAlalayangGrantModal({
       return;
     }
 
+    if (category === "Others" && !otherCategory.trim()) {
+      setError("Please specify the assistance category under Others.");
+      return;
+    }
+
     setSubmitting(true);
+
+    const resolvedCategory = category === "Others" ? (otherCategory.trim() || "Others") : category;
 
     const newGrant: AlalayangGrantRecord = {
       id: `grant-${Date.now()}`,
@@ -90,12 +98,12 @@ export function RecordAlalayangGrantModal({
       recipientRelationship,
       chapterOrAffiliation: chapterOrAffiliation.trim() || "Bantayog Elite Eagles Club",
       contactNumber: contactNumber.trim() || undefined,
-      category,
+      category: resolvedCategory,
       reason: reason.trim(),
       amount: parsedAmount,
       grantDate,
       voucherNumber: voucherNumber.trim(),
-      approvedBy: currentRole === "admin" ? "President Juan Dela Cruz & Alalayang Agila Committee" : "Club Directorate",
+      approvedBy: "President Joy M. Aragon & Directorate",
       status: "disbursed",
     };
 
@@ -235,13 +243,14 @@ export function RecordAlalayangGrantModal({
               </label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as AlalayangGrantRecord["category"])}
+                onChange={(e) => setCategory(e.target.value)}
                 className="w-full h-10 px-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 text-xs font-bold text-slate-900 dark:text-white focus:outline-none"
               >
                 <option value="Medical & Hospitalization">Medical & Hospitalization</option>
                 <option value="Bereavement & Memorial">Bereavement & Memorial</option>
                 <option value="Calamity & Disaster Relief">Calamity & Disaster Relief</option>
                 <option value="Family & Livelihood Aid">Family & Livelihood Aid</option>
+                <option value="Others">Others</option>
               </select>
             </div>
 
@@ -265,6 +274,23 @@ export function RecordAlalayangGrantModal({
               </div>
             </div>
           </div>
+
+          {/* Conditional Free Text Box for Others Category */}
+          {category === "Others" && (
+            <div>
+              <label className="text-xs font-bold text-amber-600 dark:text-amber-400 block mb-1">
+                Specify Other Assistance Category / Type *
+              </label>
+              <input
+                type="text"
+                value={otherCategory}
+                onChange={(e) => setOtherCategory(e.target.value)}
+                placeholder="e.g. Educational Assistance, Urgent Housing Aid"
+                required
+                className="w-full h-10 px-3 rounded-xl bg-slate-100 dark:bg-white/[0.08] border border-amber-400/50 dark:border-amber-400/30 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+          )}
 
           {/* Reason / Circumstances */}
           <div>

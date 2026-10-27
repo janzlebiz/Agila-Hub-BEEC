@@ -15,6 +15,7 @@
   "dependencies": {
     "@capacitor/android": "^7.6.9",
     "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.1.9",
     "@capacitor/status-bar": "^7.0.6",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.1",
