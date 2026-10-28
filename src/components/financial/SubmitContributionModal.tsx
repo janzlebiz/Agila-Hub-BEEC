@@ -252,30 +252,84 @@ export function SubmitContributionModal({
 
       if (isOfficerRecording) {
         // Direct verified insertion by authorized finance officer (Treasurer or Secretary)
-        const ref = referenceNumber.trim() || `VER-${Date.now().toString().slice(-6)}`;
-        const { error } = await supabase.from("contributions").insert({
-          member_id: effectiveMemberId,
-          title: finalTitle,
-          category: isOutside ? "Outside Contribution" : category,
-          amount: Number(amount),
-          payment_method: paymentMethod,
-          reference_number: ref,
-          proof_receipt_url: receiptStoragePath,
-          status: "verified",
-          transaction_type: "inflow",
-          contribution_date: contributionDate,
-          verified_by: memberId,
-          verified_at: new Date().toISOString(),
-        } as any);
+        if (category === "Monthly Dues" && Number(amount) > monthlyRateConfig.totalAmount) {
+          // Multi-month automatic spillover: record exact assessment per month, spilling remaining to consecutive upcoming months
+          let remainingAmount = Number(amount);
+          const assessment = monthlyRateConfig.totalAmount;
+          const [selMonthName, selYearStr] = selectedMonth.split(" ");
+          let curMonthIdx = MONTH_OPTIONS.indexOf(selMonthName);
+          if (curMonthIdx < 0) curMonthIdx = new Date().getMonth();
+          let curYear = parseInt(selYearStr, 10) || currentYear;
 
-        if (error) {
-          throw new Error(error.message || "Failed to record verified contribution in ledger.");
+          const recordsToInsert = [];
+          const baseRef = referenceNumber.trim() || `VER-${Date.now().toString().slice(-6)}`;
+          let partIndex = 1;
+
+          while (remainingAmount > 0) {
+            const chunkAmount = Math.min(assessment, remainingAmount);
+            const mName = MONTH_OPTIONS[curMonthIdx];
+            const titleForMonth = `Monthly Dues - ${mName} ${curYear}`;
+            const refForMonth = partIndex === 1 ? baseRef : `${baseRef}-${mName.substring(0, 3).toUpperCase()}`;
+
+            recordsToInsert.push({
+              member_id: effectiveMemberId,
+              title: titleForMonth,
+              category: "Monthly Dues",
+              amount: chunkAmount,
+              payment_method: paymentMethod,
+              reference_number: refForMonth,
+              proof_receipt_url: receiptStoragePath,
+              status: "verified",
+              transaction_type: "inflow",
+              contribution_date: contributionDate,
+              verified_by: memberId,
+              verified_at: new Date().toISOString(),
+            });
+
+            remainingAmount -= chunkAmount;
+            curMonthIdx++;
+            if (curMonthIdx >= 12) {
+              curMonthIdx = 0;
+              curYear++;
+            }
+            partIndex++;
+          }
+
+          const { error } = await supabase.from("contributions").insert(recordsToInsert as any);
+          if (error) {
+            throw new Error(error.message || "Failed to record multi-month verified contributions.");
+          }
+
+          setFeedback({
+            success: true,
+            message: `Successfully allocated ₱${Number(amount).toLocaleString()} across ${recordsToInsert.length} month(s) starting from ${selectedMonth}!`,
+          });
+        } else {
+          const ref = referenceNumber.trim() || `VER-${Date.now().toString().slice(-6)}`;
+          const { error } = await supabase.from("contributions").insert({
+            member_id: effectiveMemberId,
+            title: finalTitle,
+            category: isOutside ? "Outside Contribution" : category,
+            amount: Number(amount),
+            payment_method: paymentMethod,
+            reference_number: ref,
+            proof_receipt_url: receiptStoragePath,
+            status: "verified",
+            transaction_type: "inflow",
+            contribution_date: contributionDate,
+            verified_by: memberId,
+            verified_at: new Date().toISOString(),
+          } as any);
+
+          if (error) {
+            throw new Error(error.message || "Failed to record verified contribution in ledger.");
+          }
+
+          setFeedback({
+            success: true,
+            message: `Successfully recorded and verified ₱${Number(amount).toLocaleString()} in Financials!`,
+          });
         }
-
-        setFeedback({
-          success: true,
-          message: `Successfully recorded and verified ₱${Number(amount).toLocaleString()} in Financials!`,
-        });
       } else {
         // Regular member self-service: submit through secure RPC for officer verification
         const { data, error } = await supabase.rpc("submit_self_contribution", {

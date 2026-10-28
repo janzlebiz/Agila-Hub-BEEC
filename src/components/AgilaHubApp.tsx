@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Image from "next/image";
 import { Header } from "@/components/navigation/Header";
 import { MobileNavBar } from "@/components/navigation/MobileNavBar";
@@ -86,6 +86,10 @@ import {
   RecordExpenseModal, 
   ExpenseRecord 
 } from "@/components/financial/RecordExpenseModal";
+import {
+  MonthlyDuesDetailModal,
+  MonthDuesRowData,
+} from "@/components/financial/MonthlyDuesDetailModal";
 import { 
   RecordAlalayangGrantModal, 
   AlalayangGrantRecord 
@@ -99,6 +103,19 @@ import { OfficerDetailModal, OfficerItem } from "@/components/directory/OfficerD
 import { ManualAttendanceModal } from "@/components/assemblies/ManualAttendanceModal";
 import { AnnualContributionsTable } from "@/components/financial/AnnualContributionsTable";
 import { calculateTreasuryReconciliation, formatPeso, isSameMemberId } from "@/lib/financeUtils";
+
+export interface UnifiedDisbursementItem {
+  id: string;
+  title: string;
+  category: string;
+  amount: number;
+  disbursedTo: string;
+  voucherNumber: string;
+  disbursementDate: string;
+  approvedBy: string;
+  notes?: string;
+  source: "expense" | "grant" | "outflow";
+}
 
 interface OfficerPositionGroup {
   position: string;
@@ -495,6 +512,7 @@ export default function AgilaHubApp() {
   const [submitModalInitialCategory, setSubmitModalInitialCategory] = useState<string>("Monthly Dues");
   const [submitModalTargetMember, setSubmitModalTargetMember] = useState<string | undefined>(undefined);
   const [submitModalInitialMonth, setSubmitModalInitialMonth] = useState<string | undefined>(undefined);
+  const [inspectingDuesMonth, setInspectingDuesMonth] = useState<MonthDuesRowData | null>(null);
   const [clubLogoUrl, setClubLogoUrl] = useState<string | null>("/assets/BEEC_vector.png_whitebg.jpg");
 
   // Community Services state (Production: empty initial state, hydrated from authoritative backend)
@@ -1547,20 +1565,124 @@ export default function AgilaHubApp() {
   // Total Verified Inflow (Liquid Receipts)
   const totalVerifiedDues = treasuryReconciliation.totalVerifiedInflow;
 
+  // Unified Disbursement Records combining General Expenses, Alalayang Grants, and Outflow Records
+  const unifiedDisbursements: UnifiedDisbursementItem[] = useMemo(() => {
+    const items: UnifiedDisbursementItem[] = [];
+    const seenIds = new Set<string>();
+    const seenVouchers = new Set<string>();
+
+    for (const exp of expenses) {
+      items.push({
+        id: exp.id,
+        title: exp.title,
+        category: exp.category,
+        amount: Number(exp.amount),
+        disbursedTo: exp.disbursedTo || "Authorized Payee",
+        voucherNumber: exp.voucherNumber || `EXP-${exp.id.substring(0, 8)}`,
+        disbursementDate: exp.disbursementDate,
+        approvedBy: exp.approvedBy || "Directorate",
+        notes: exp.notes,
+        source: "expense",
+      });
+      seenIds.add(exp.id);
+      if (exp.voucherNumber) seenVouchers.add(exp.voucherNumber);
+    }
+
+    for (const grant of alalayangGrants) {
+      if (!seenIds.has(grant.id) && (!grant.voucherNumber || !seenVouchers.has(grant.voucherNumber))) {
+        items.push({
+          id: grant.id,
+          title: `[GRANT] ${grant.recipientName} - ${grant.category}`,
+          category: "Alalayang Agila",
+          amount: Number(grant.amount),
+          disbursedTo: grant.recipientName,
+          voucherNumber: grant.voucherNumber || `AA-${grant.id.substring(0, 8)}`,
+          disbursementDate: grant.grantDate,
+          approvedBy: grant.approvedBy || "Alalayang Agila Committee",
+          notes: grant.reason,
+          source: "grant",
+        });
+        seenIds.add(grant.id);
+        if (grant.voucherNumber) seenVouchers.add(grant.voucherNumber);
+      }
+    }
+
+    for (const c of contributions) {
+      const isOutflow = (c as any).transaction_type === "outflow" || c.title?.startsWith("[GRANT]") || c.title?.startsWith("[EXPENSE]");
+      if (isOutflow && !seenIds.has(c.id) && (!c.reference_number || !seenVouchers.has(c.reference_number))) {
+        const isGrant = c.title?.startsWith("[GRANT]") || c.category === "Alalayang Agila";
+        items.push({
+          id: c.id,
+          title: c.title,
+          category: isGrant ? "Alalayang Agila" : (c.category || "General Expense"),
+          amount: Number(c.amount),
+          disbursedTo: isGrant ? "Beneficiary (Kuya)" : "Disbursed via Voucher",
+          voucherNumber: c.reference_number || `VOUCH-${c.id.substring(0, 8)}`,
+          disbursementDate: c.contribution_date || new Date().toISOString().split("T")[0],
+          approvedBy: "Treasurer & Directorate",
+          notes: c.title,
+          source: "outflow",
+        });
+        seenIds.add(c.id);
+        if (c.reference_number) seenVouchers.add(c.reference_number);
+      }
+    }
+
+    return items.sort((a, b) => new Date(b.disbursementDate).getTime() - new Date(a.disbursementDate).getTime());
+  }, [expenses, alalayangGrants, contributions]);
+
   // Chapter Expenses & Alalayang calculations
   const totalExpenses = treasuryReconciliation.totalAuditedDisbursements;
   const netTreasuryReserve = treasuryReconciliation.calculatedReserves;
   const totalAlalayangDisbursed = alalayangGrants.reduce((acc, g) => acc + Number(g.amount), 0);
 
-  const renewalExpensesTotal = expenses
-    .filter((e) => e.category === "Membership Renewal")
-    .reduce((acc, e) => acc + Number(e.amount), 0);
-  const serviceExpensesTotal = expenses
-    .filter((e) => e.category === "Community Service")
-    .reduce((acc, e) => acc + Number(e.amount), 0);
-  const alalayangExpensesTotal = expenses
-    .filter((e) => e.category === "Alalayang Agila")
-    .reduce((acc, e) => acc + Number(e.amount), 0);
+  const renewalExpensesTotal = unifiedDisbursements
+    .filter((e: UnifiedDisbursementItem) => e.category.toLowerCase().includes("renewal"))
+    .reduce((acc: number, e: UnifiedDisbursementItem) => acc + e.amount, 0);
+
+  const alalayangExpensesTotal = unifiedDisbursements
+    .filter((e: UnifiedDisbursementItem) => e.category.toLowerCase().includes("alalayang"))
+    .reduce((acc: number, e: UnifiedDisbursementItem) => acc + e.amount, 0);
+
+  const serviceExpensesTotal = unifiedDisbursements
+    .filter((e: UnifiedDisbursementItem) => e.category.toLowerCase().includes("community") || e.category.toLowerCase().includes("service"))
+    .reduce((acc: number, e: UnifiedDisbursementItem) => acc + e.amount, 0);
+
+  // Uncollected Funds Calculation across all 13 club members for elapsed months of duesSummaryYear (strictly excluding upcoming)
+  const currentCalendarMonth = new Date().getMonth(); // 0-indexed (9 for October)
+  const currentCalendarYear = new Date().getFullYear();
+  const elapsedMonthsCount = duesSummaryYear < currentCalendarYear
+    ? 12
+    : duesSummaryYear === currentCalendarYear
+    ? currentCalendarMonth + 1
+    : 0;
+
+  const totalUncollectedFunds = useMemo(() => {
+    if (elapsedMonthsCount === 0 || cleanMembers.length === 0) return 0;
+    const monthlyRate = monthlyRateConfig.totalAmount;
+    let totalUncollected = 0;
+
+    for (const member of cleanMembers) {
+      // Find all verified dues records for this member in this year
+      const memberDuesRecords = contributions.filter((c) => {
+        if (!isSameMemberId(c.member_id, member.id)) return false;
+        if (c.status !== "verified") return false;
+        const cat = (c.category || "").toLowerCase();
+        const tit = (c.title || "").toLowerCase();
+        const isDues = cat.includes("due") || tit.includes("due") || cat.includes("monthly") || cat.includes("renewal");
+        if (!isDues) return false;
+        const date = c.contribution_date || "";
+        return date.startsWith(String(duesSummaryYear));
+      });
+
+      const memberPaidTotal = memberDuesRecords.reduce((sum, r) => sum + Number(r.amount), 0);
+      const memberRequiredToDate = elapsedMonthsCount * monthlyRate;
+      const memberUnpaid = Math.max(0, memberRequiredToDate - memberPaidTotal);
+      totalUncollected += memberUnpaid;
+    }
+
+    return totalUncollected;
+  }, [cleanMembers, contributions, duesSummaryYear, elapsedMonthsCount, monthlyRateConfig.totalAmount]);
 
   // Personal vs All Contributions
   // Members can only see their own contributions / dues; summary can be viewed by all
@@ -1621,6 +1743,110 @@ export default function AgilaHubApp() {
       console.error("Error verifying contribution:", err);
     } finally {
       setVerifyingContribId(null);
+    }
+  };
+
+  // Handle Updating Monthly Dues / Contribution Record (Treasurer & Secretary)
+  const handleUpdateContribution = async (
+    id: string,
+    updates: {
+      amount?: number;
+      reference_number?: string;
+      payment_method?: string;
+      contribution_date?: string;
+    }
+  ) => {
+    if (!canManageFinance) return;
+    try {
+      const { error } = await supabase
+        .from("contributions")
+        .update(updates)
+        .eq("id", id);
+
+      if (error) {
+        console.error("Error updating contribution:", error);
+        setRealtimeToast({
+          title: "Update Failed",
+          message: error.message || "Could not update contribution record.",
+          type: "warning",
+        });
+        return;
+      }
+
+      setContributions((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
+      );
+
+      if (inspectingDuesMonth) {
+        setInspectingDuesMonth((prev) => {
+          if (!prev) return null;
+          const updatedRecords = prev.matchingRecords.map((r) =>
+            r.id === id ? { ...r, ...updates } : r
+          );
+          const newPaid = updatedRecords.reduce((sum, r) => sum + Number(r.amount), 0);
+          return {
+            ...prev,
+            matchingRecords: updatedRecords,
+            amountPaid: newPaid,
+            status: newPaid >= prev.assessment ? "paid" : newPaid > 0 ? "partial" : "unpaid",
+          };
+        });
+      }
+
+      setRealtimeToast({
+        title: "Record Updated",
+        message: "Monthly dues payment record updated successfully.",
+        type: "success",
+      });
+      fetchHubData();
+    } catch (err: any) {
+      console.error("Update error:", err);
+    }
+  };
+
+  // Handle Deleting Contribution Record (Treasurer & Secretary)
+  const handleDeleteContribution = async (id: string) => {
+    if (!canManageFinance) return;
+    try {
+      const { error } = await supabase
+        .from("contributions")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        console.error("Error deleting contribution:", error);
+        setRealtimeToast({
+          title: "Delete Failed",
+          message: error.message || "Could not delete contribution record.",
+          type: "warning",
+        });
+        return;
+      }
+
+      setContributions((prev) => prev.filter((c) => c.id !== id));
+
+      if (inspectingDuesMonth) {
+        setInspectingDuesMonth((prev) => {
+          if (!prev) return null;
+          const updatedRecords = prev.matchingRecords.filter((r) => r.id !== id);
+          const newPaid = updatedRecords.reduce((sum, r) => sum + Number(r.amount), 0);
+          return {
+            ...prev,
+            matchingRecords: updatedRecords,
+            amountPaid: newPaid,
+            status: newPaid >= prev.assessment ? "paid" : newPaid > 0 ? "partial" : "unpaid",
+          };
+        });
+      }
+
+      setRealtimeToast({
+        title: "Record Deleted",
+        message: "Monthly dues payment record has been removed.",
+        type: "info",
+      });
+      fetchHubData();
+    } catch (err: any) {
+      console.error("Delete error:", err);
     }
   };
 
@@ -3664,32 +3890,9 @@ export default function AgilaHubApp() {
                 Official Club Financial Dashboard & Audited Accounts
               </p>
             </div>
-
-            {/* Action Buttons - Available only to Treasurer and Secretary (Req 4.4) */}
-            {canManageFinance && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  id="btn-submit-dues"
-                  size="sm"
-                  variant="primary"
-                  onClick={() => setIsSubmitContribOpen(true)}
-                  className="text-xs font-bold flex items-center gap-1.5 h-9 px-3.5 shadow-sm"
-                >
-                  <CreditCard className="h-3.5 w-3.5" /> Submit Dues
-                </Button>
-                <button
-                  type="button"
-                  id="btn-open-record-expense"
-                  onClick={() => setIsRecordExpenseOpen(true)}
-                  className="h-9 px-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-500/30 text-xs font-bold flex items-center gap-1.5 transition active:scale-95"
-                >
-                  <ArrowUpRight className="h-3.5 w-3.5" /> Record Expense
-                </button>
-              </div>
-            )}
           </div>
 
-          {/* 1. Treasury Overview Cards */}
+          {/* 1. Treasury Overview Cards (2-Layer Layout: Net Treasury/Uncollected Funds & Contribution/Expenses) */}
           <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm text-slate-900 dark:text-white space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-white/10 pb-3 gap-2">
               <div className="flex items-center gap-2.5">
@@ -3699,7 +3902,7 @@ export default function AgilaHubApp() {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h4 className="font-display font-black text-sm tracking-wide text-slate-900 dark:text-white">
-                      Chapter Treasury & Financial Reserves Summary
+                      Club Treasury & Financial Reserves Summary
                     </h4>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
                       Fraternal Transparency Active
@@ -3712,73 +3915,124 @@ export default function AgilaHubApp() {
               </div>
             </div>
 
-            {/* Main 3 Metric Cards Grid - Interactive click toggles full details */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* 1. Net Treasury Reserves */}
-              <button
-                type="button"
-                id="subtab-reserves"
-                onClick={() => setTreasuryCardSelection("reserves")}
-                className={`p-3.5 rounded-2xl border text-left transition-all ${
-                  treasuryCardSelection === "reserves"
-                    ? "bg-emerald-500/10 border-emerald-500/50 ring-2 ring-emerald-500/30 shadow-md"
-                    : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-emerald-500/30"
-                }`}
-              >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                  Net Treasury Reserves
-                </span>
-                <span className="font-mono font-black text-xl text-emerald-600 dark:text-emerald-400 block mt-1">
-                  ₱{netTreasuryReserve.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                  Available club funds
-                </span>
-              </button>
+            {/* 2-Layer Cards Grid */}
+            <div className="space-y-3">
+              {/* Layer 1: Net Treasury Reserves & Uncollected Funds */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 1. Net Treasury Reserves */}
+                <button
+                  type="button"
+                  id="subtab-reserves"
+                  onClick={() => setTreasuryCardSelection("reserves")}
+                  className={`p-3.5 rounded-2xl border text-left transition-all ${
+                    treasuryCardSelection === "reserves"
+                      ? "bg-emerald-500/10 border-emerald-500/50 ring-2 ring-emerald-500/30 shadow-md"
+                      : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-emerald-500/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                      Net Treasury Reserves
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      Vault
+                    </span>
+                  </div>
+                  <span className="font-mono font-black text-xl text-emerald-600 dark:text-emerald-400 block mt-1">
+                    ₱{netTreasuryReserve.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                    Available club funds
+                  </span>
+                </button>
 
-              {/* 2. Contribution & Dues (Total of contributions and dues from all members) */}
-              <button
-                type="button"
-                id="subtab-contributions"
-                onClick={() => setTreasuryCardSelection("dues")}
-                className={`p-3.5 rounded-2xl border text-left transition-all ${
-                  treasuryCardSelection === "dues"
-                    ? "bg-blue-500/10 border-blue-500/50 ring-2 ring-blue-500/30 shadow-md"
-                    : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-blue-500/30"
-                }`}
-              >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-eagle-blue dark:text-blue-400 block">
-                  Contribution & Dues
-                </span>
-                <span className="font-mono font-black text-xl text-slate-900 dark:text-white block mt-1">
-                  ₱{totalVerifiedDues.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                  Total all members collections
-                </span>
-              </button>
+                {/* 2. Uncollected Funds (Excluding upcoming status) */}
+                <button
+                  type="button"
+                  id="subtab-uncollected"
+                  onClick={() => {
+                    setTreasuryCardSelection("dues");
+                    setPersonalRecordsTab("monthly_dues");
+                  }}
+                  className={`p-3.5 rounded-2xl border text-left transition-all ${
+                    treasuryCardSelection === "dues" && personalRecordsTab === "monthly_dues"
+                      ? "bg-amber-500/10 border-amber-500/50 ring-2 ring-amber-500/30 shadow-md"
+                      : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-amber-500/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">
+                      Uncollected Funds
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                      Dues to Date
+                    </span>
+                  </div>
+                  <span className="font-mono font-black text-xl text-amber-600 dark:text-amber-400 block mt-1">
+                    ₱{totalUncollectedFunds.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                    Total unpaid monthly dues to date (excludes upcoming)
+                  </span>
+                </button>
+              </div>
 
-              {/* 3. Total Released Expenses */}
-              <button
-                type="button"
-                id="subtab-expenses"
-                onClick={() => setTreasuryCardSelection("expenses")}
-                className={`p-3.5 rounded-2xl border text-left transition-all ${
-                  treasuryCardSelection === "expenses"
-                    ? "bg-rose-500/10 border-rose-500/50 ring-2 ring-rose-500/30 shadow-md"
-                    : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-rose-500/30"
-                }`}
-              >
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block">
-                  Total Released Expenses
-                </span>
-                <span className="font-mono font-black text-xl text-rose-600 dark:text-rose-400 block mt-1">
-                  ₱{totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                  Disbursed vouchers
-                </span>
-              </button>
+              {/* Layer 2: Contribution & Dues and Total Released Expenses */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 3. Contribution & Dues */}
+                <button
+                  type="button"
+                  id="subtab-contributions"
+                  onClick={() => setTreasuryCardSelection("dues")}
+                  className={`p-3.5 rounded-2xl border text-left transition-all ${
+                    treasuryCardSelection === "dues" && personalRecordsTab !== "monthly_dues"
+                      ? "bg-blue-500/10 border-blue-500/50 ring-2 ring-blue-500/30 shadow-md"
+                      : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-blue-500/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-eagle-blue dark:text-blue-400 block">
+                      Contribution & Dues
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                      Inflow
+                    </span>
+                  </div>
+                  <span className="font-mono font-black text-xl text-slate-900 dark:text-white block mt-1">
+                    ₱{totalVerifiedDues.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                    Total all members collections
+                  </span>
+                </button>
+
+                {/* 4. Total Released Expenses */}
+                <button
+                  type="button"
+                  id="subtab-expenses"
+                  onClick={() => setTreasuryCardSelection("expenses")}
+                  className={`p-3.5 rounded-2xl border text-left transition-all ${
+                    treasuryCardSelection === "expenses"
+                      ? "bg-rose-500/10 border-rose-500/50 ring-2 ring-rose-500/30 shadow-md"
+                      : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 hover:border-rose-500/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block">
+                      Total Released Expenses
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                      Outflow
+                    </span>
+                  </div>
+                  <span className="font-mono font-black text-xl text-rose-600 dark:text-rose-400 block mt-1">
+                    ₱{totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                    Disbursed vouchers
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3973,24 +4227,28 @@ export default function AgilaHubApp() {
           {/* OPTION 2: Contribution & Dues Full Details */}
           {treasuryCardSelection === "dues" && (() => {
             // Target member determination
-            const targetMemberId = (officerDuesFilter === "mine" || currentRole === "member")
+            const targetMemberId = (currentRole === "member" || !canManageFinance)
               ? authMember?.id
               : (selectedMemberForDues === "self" ? authMember?.id : selectedMemberForDues);
 
             const targetMember = allMembers.find((m) => isSameMemberId(m.id, targetMemberId)) || authMember;
             const targetMemberLabel = targetMember
               ? `Kuya ${targetMember.first_name} ${targetMember.last_name} (${targetMember.member_number || "BEEC"})`
-              : "My Personal Records";
+              : "Club Member Records";
 
             // Filter member's records
             const memberContributions = contributions.filter((c) => isSameMemberId(c.member_id, targetMemberId));
 
-            // Tab 1: Special Contributions (Meeting contributions, Special donations, Alalayang Agila donations, Community service support, Others)
-            const specialContributions = (officerDuesFilter === "all" ? contributions : memberContributions).filter((c) => {
+            // Tab 1: Special Contributions (Meeting contributions, Special donations, Alalayang Agila support donations, Community service support, Others)
+            // Strictly excludes outflows, grants, and expense vouchers (Req 4)
+            const specialContributions = memberContributions.filter((c) => {
+              if ((c as any).transaction_type === "outflow") return false;
+              if (c.title?.startsWith("[GRANT]") || c.title?.startsWith("[EXPENSE]")) return false;
+              if (c.category?.startsWith("Expense - ")) return false;
               const cat = (c.category || "").toLowerCase();
               const tit = (c.title || "").toLowerCase();
               if (cat === "outside contribution" || cat.includes("outside") || tit.includes("[outside]")) return false;
-              // Must be non-recurring-dues or specifically tagged
+              // Must be non-recurring-dues or specifically tagged:
               const isMeeting = cat.includes("meeting") || cat.includes("assembly") || tit.includes("[meeting]") || tit.includes("meeting contribution");
               const isDonation = cat.includes("donation") || tit.includes("donation") || cat.includes("pledge") || tit.includes("pledge");
               const isAlalayang = cat.includes("alalayang") || tit.includes("alalayang");
@@ -3999,7 +4257,7 @@ export default function AgilaHubApp() {
               return isMeeting || isDonation || isAlalayang || isService || isOther;
             });
 
-            // Tab 2: Monthly Dues 12-month summary calculation for year (e.g. 2026)
+            // Tab 2: Monthly Dues 12-month summary calculation with multi-month spillover (Req 6)
             const targetDuesRecords = memberContributions.filter((c) => {
               if (c.status !== "verified") return false;
               const cat = (c.category || "").toLowerCase();
@@ -4012,9 +4270,11 @@ export default function AgilaHubApp() {
               "July", "August", "September", "October", "November", "December"
             ];
 
-            const currentCalMonth = new Date().getMonth(); // 0-indexed
+            const currentCalMonth = new Date().getMonth(); // 0-indexed (9 for October)
             const currentCalYear = new Date().getFullYear();
 
+            // Spillover algorithm: excess payment (e.g. ₱800) rolls forward to consecutive months
+            let rolloverCredit = 0;
             const monthlyDuesSchedule = MONTH_NAMES_LIST.map((mName, idx) => {
               const monthNumStr = String(idx + 1).padStart(2, "0");
               const matchingRecords = targetDuesRecords.filter((c) => {
@@ -4025,30 +4285,42 @@ export default function AgilaHubApp() {
                 return isDateMatch || isTitleMatch;
               });
 
-              const amountPaid = matchingRecords.reduce((sum, r) => sum + Number(r.amount), 0);
+              const directPaid = matchingRecords.reduce((sum, r) => sum + Number(r.amount), 0);
+              const totalAvailable = directPaid + rolloverCredit;
               const assessment = monthlyRateConfig.totalAmount;
               const isElapsed = duesSummaryYear < currentCalYear || (duesSummaryYear === currentCalYear && idx <= currentCalMonth);
 
+              let amountPaid = 0;
               let status: "paid" | "partial" | "unpaid" | "upcoming" = "upcoming";
-              if (amountPaid >= assessment) {
-                status = "paid";
-              } else if (amountPaid > 0) {
-                status = "partial";
-              } else if (isElapsed) {
-                status = "unpaid";
-              } else {
-                status = "upcoming";
-              }
 
-              const primaryRecord = matchingRecords[0];
+              if (totalAvailable >= assessment) {
+                amountPaid = assessment;
+                rolloverCredit = totalAvailable - assessment;
+                status = "paid";
+              } else if (totalAvailable > 0) {
+                amountPaid = totalAvailable;
+                rolloverCredit = 0;
+                status = "partial";
+              } else {
+                amountPaid = 0;
+                rolloverCredit = 0;
+                status = isElapsed ? "unpaid" : "upcoming";
+              }
 
               return {
                 monthIndex: idx + 1,
                 monthName: mName,
+                year: duesSummaryYear,
                 assessment,
                 amountPaid,
                 status,
-                primaryRecord,
+                matchingRecords,
+                member: targetMember ? {
+                  id: targetMember.id,
+                  first_name: targetMember.first_name,
+                  last_name: targetMember.last_name,
+                  member_number: targetMember.member_number,
+                } : null,
               };
             });
 
@@ -4078,82 +4350,63 @@ export default function AgilaHubApp() {
             return (
               <div className="space-y-6 animate-fadeIn">
                 
-                {/* Personal Records Card */}
+                {/* Clean Contribution & Dues Card (Removed "My Personal Records" title & "All Chapter" toggle - Req 4) */}
                 <div className="p-5 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-4">
                   
-                  {/* Top Bar: Title & Member Selector */}
+                  {/* Top Bar: Target Member Scope & Action Controls */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10 gap-3">
                     <div>
-                      <h4 className="font-display font-black text-base text-slate-900 dark:text-white">
-                        My Personal Records
-                      </h4>
-                      <span className="text-xs text-slate-500 font-medium">
-                        {officerDuesFilter === "all" ? "Showing all chapter records" : targetMemberLabel}
+                      <span className="text-[11px] uppercase tracking-wider text-slate-400 font-bold block">
+                        Member Account Ledger
                       </span>
+                      <h4 className="font-display font-black text-base text-slate-900 dark:text-white">
+                        {targetMemberLabel}
+                      </h4>
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                      {/* Officer Chapter Toggle */}
-                      {(currentRole === "admin" || currentRole === "officer") && (
-                        <div className="inline-flex rounded-xl bg-slate-100 dark:bg-white/10 p-1 border border-slate-200 dark:border-white/10 text-xs font-bold">
-                          <button
-                            type="button"
-                            onClick={() => setOfficerDuesFilter("mine")}
-                            className={`px-3 py-1 rounded-lg transition text-xs ${
-                              officerDuesFilter === "mine"
-                                ? "bg-eagle-blue text-white shadow-sm"
-                                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                            }`}
+                      {/* Officer Member Selector (Only for Treasurer & Secretary) */}
+                      {canManageFinance && cleanMembers.length > 0 && (
+                        <div className="flex items-center gap-1.5">
+                          <label htmlFor="select-dues-member" className="text-xs text-slate-500 font-medium hidden sm:inline">
+                            Member:
+                          </label>
+                          <select
+                            id="select-dues-member"
+                            value={selectedMemberForDues}
+                            onChange={(e) => setSelectedMemberForDues(e.target.value)}
+                            className="h-9 px-3 rounded-xl bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/15 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none shadow-sm"
                           >
-                            My Personal Records
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setOfficerDuesFilter("all")}
-                            className={`px-3 py-1 rounded-lg transition text-xs ${
-                              officerDuesFilter === "all"
-                                ? "bg-eagle-blue text-white shadow-sm"
-                                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                            }`}
-                          >
-                            All Chapter
-                          </button>
+                            <option value="self">Myself ({activeProfile.name})</option>
+                            {cleanMembers.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                Kuya {m.first_name} {m.last_name} ({m.member_number})
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       )}
 
-                      {/* If officer views specific member */}
-                      {canManageFinance && officerDuesFilter === "mine" && cleanMembers.length > 0 && (
-                        <select
-                          value={selectedMemberForDues}
-                          onChange={(e) => setSelectedMemberForDues(e.target.value)}
-                          className="h-8 px-2.5 rounded-xl bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/15 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none"
+                      {/* Submit Dues Button: Strictly available only to Treasurer and Secretary (Req 1 & Req 2) */}
+                      {canManageFinance && (
+                        <Button
+                          id="btn-tab-submit-dues"
+                          size="sm"
+                          variant="primary"
+                          onClick={() => {
+                            setSubmitModalInitialCategory(personalRecordsTab === "monthly_dues" ? "Monthly Dues" : "Special Donation");
+                            setSubmitModalTargetMember(selectedMemberForDues === "self" ? authMember?.id : selectedMemberForDues);
+                            setIsSubmitContribOpen(true);
+                          }}
+                          className="text-xs font-bold h-9 px-3.5 shadow-sm flex items-center gap-1.5"
                         >
-                          <option value="self">Myself ({activeProfile.name})</option>
-                          {cleanMembers.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              Kuya {m.first_name} {m.last_name} ({m.member_number})
-                            </option>
-                          ))}
-                        </select>
+                          <CreditCard className="h-3.5 w-3.5" /> Submit Dues
+                        </Button>
                       )}
-
-                      {/* Action to submit or record */}
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={() => {
-                          setSubmitModalInitialCategory(personalRecordsTab === "monthly_dues" ? "Monthly Dues" : "Special Donation");
-                          setSubmitModalTargetMember(selectedMemberForDues === "self" ? authMember?.id : selectedMemberForDues);
-                          setIsSubmitContribOpen(true);
-                        }}
-                        className="text-xs font-bold h-8 px-3 shadow-sm flex items-center gap-1.5"
-                      >
-                        <Plus className="h-3.5 w-3.5" /> {canManageFinance ? "Record Dues / Contribution" : "Submit Record"}
-                      </Button>
                     </div>
                   </div>
 
-                  {/* 2 Tabs: 1. Contribution, 2. Monthly Dues */}
+                  {/* 2 Tabs: 1. Contribution, 2. Monthly Dues (Retained - Req 4) */}
                   <div className="flex items-center gap-2 p-1 rounded-2xl bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/10 w-fit">
                     <button
                       type="button"
@@ -4181,12 +4434,12 @@ export default function AgilaHubApp() {
                     </button>
                   </div>
 
-                  {/* TAB 1: Contribution Content */}
+                  {/* TAB 1: Contribution Content (Excludes Alalayang Agila Grants, Only Member Inflows/Donations - Req 4) */}
                   {personalRecordsTab === "contributions" && (
                     <div className="space-y-3 pt-1">
                       <div className="flex items-center justify-between text-xs text-slate-500">
                         <span>
-                          Showing records for meeting contributions, special donations, Alalayang Agila support, and community activities.
+                          Showing records for meeting contributions, special donations, Alalayang Agila support donations, and community activities.
                         </span>
                         <span className="font-bold">{specialContributions.length} record{specialContributions.length === 1 ? "" : "s"}</span>
                       </div>
@@ -4279,7 +4532,7 @@ export default function AgilaHubApp() {
                     </div>
                   )}
 
-                  {/* TAB 2: Monthly Dues Summary Table Content */}
+                  {/* TAB 2: Monthly Dues Summary Table (Clickable Rows to Inspect/Edit, Multi-Month Spillover - Req 6) */}
                   {personalRecordsTab === "monthly_dues" && (
                     <div className="space-y-4 pt-1">
                       {/* Year Selector & Summary Metric Cards */}
@@ -4324,8 +4577,13 @@ export default function AgilaHubApp() {
                         </div>
                       </div>
 
-                      {/* 12-Month Summary Table */}
-                      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-white/10">
+                      <div className="flex items-center justify-between text-[11px] text-slate-500">
+                        <span>Click any month row below to inspect payments, edit amounts, or complete partial balances.</span>
+                        <span className="font-bold">12-Month Schedule</span>
+                      </div>
+
+                      {/* 12-Month Summary Table (Interactive Clickable Rows) */}
+                      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm">
                         <table className="w-full text-left text-xs">
                           <thead>
                             <tr className="bg-slate-100/80 dark:bg-white/[0.04] border-b border-slate-200 dark:border-white/10 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
@@ -4334,16 +4592,18 @@ export default function AgilaHubApp() {
                               <th className="py-3 px-4">Amount Paid</th>
                               <th className="py-3 px-4">Status</th>
                               <th className="py-3 px-4">Payment Details</th>
-                              {canManageFinance && <th className="py-3 px-4 text-right">Action</th>}
+                              <th className="py-3 px-4 text-right">Details & Action</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-medium">
                             {monthlyDuesSchedule.map((row) => (
                               <tr
                                 key={row.monthIndex}
-                                className="hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition"
+                                onClick={() => setInspectingDuesMonth(row)}
+                                className="hover:bg-blue-50/50 dark:hover:bg-white/[0.04] cursor-pointer transition group"
+                                title="Click to view payment breakdown, edit record, or settle"
                               >
-                                <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                                <td className="py-3 px-4 font-bold text-slate-900 dark:text-white group-hover:text-eagle-blue dark:group-hover:text-blue-400 transition-colors">
                                   {row.monthName} {duesSummaryYear}
                                 </td>
                                 <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-300">
@@ -4381,17 +4641,32 @@ export default function AgilaHubApp() {
                                   )}
                                 </td>
                                 <td className="py-3 px-4 text-slate-500 text-[11px]">
-                                  {row.primaryRecord ? (
+                                  {row.matchingRecords.length > 0 ? (
                                     <span>
-                                      {row.primaryRecord.payment_method} {row.primaryRecord.reference_number ? `• ${row.primaryRecord.reference_number}` : ""} • {row.primaryRecord.contribution_date}
+                                      {row.matchingRecords[0].payment_method} {row.matchingRecords[0].reference_number ? `• Ref: ${row.matchingRecords[0].reference_number}` : ""} • {row.matchingRecords[0].contribution_date || duesSummaryYear}
+                                      {row.matchingRecords.length > 1 ? ` (+${row.matchingRecords.length - 1} more)` : ""}
                                     </span>
                                   ) : (
                                     <span className="text-slate-400 italic">No payment logged</span>
                                   )}
                                 </td>
-                                {canManageFinance && (
-                                  <td className="py-3 px-4 text-right">
-                                    {row.status !== "paid" && (
+                                <td className="py-3 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                    {row.status === "partial" && canManageFinance && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSubmitModalInitialCategory("Monthly Dues");
+                                          setSubmitModalTargetMember(targetMemberId);
+                                          setSubmitModalInitialMonth(row.monthName);
+                                          setIsSubmitContribOpen(true);
+                                        }}
+                                        className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition text-[11px] font-bold shadow-sm"
+                                      >
+                                        Complete
+                                      </button>
+                                    )}
+                                    {row.status === "unpaid" && canManageFinance && (
                                       <button
                                         type="button"
                                         onClick={() => {
@@ -4402,11 +4677,18 @@ export default function AgilaHubApp() {
                                         }}
                                         className="px-2.5 py-1 rounded-lg bg-eagle-blue/10 hover:bg-eagle-blue text-eagle-blue hover:text-white transition text-[11px] font-bold"
                                       >
-                                        Record Payment
+                                        Record
                                       </button>
                                     )}
-                                  </td>
-                                )}
+                                    <button
+                                      type="button"
+                                      onClick={() => setInspectingDuesMonth(row)}
+                                      className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-slate-200 transition text-[11px] font-bold"
+                                    >
+                                      Inspect
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -4534,24 +4816,26 @@ export default function AgilaHubApp() {
                 </div>
               </div>
 
-              {/* Expenses List */}
+              {/* Expenses List & Action Bar */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-100 dark:border-white/10 gap-2">
                   <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                    Audited Expense Disbursements ({expenses.length} Records)
+                    Audited Expense Disbursements ({unifiedDisbursements.length} Records)
                   </span>
-                  {(currentRole === "admin" || currentRole === "officer") && (
-                    <button
-                      type="button"
+                  {canManageFinance && (
+                    <Button
+                      id="btn-tab-record-expense"
+                      size="sm"
+                      variant="primary"
                       onClick={() => setIsRecordExpenseOpen(true)}
-                      className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1"
+                      className="h-8 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition active:scale-95"
                     >
-                      <Plus className="h-3.5 w-3.5" /> New Disbursement
-                    </button>
+                      <ArrowUpRight className="h-3.5 w-3.5" /> Record Expense
+                    </Button>
                   )}
                 </div>
 
-                {expenses.length === 0 ? (
+                {unifiedDisbursements.length === 0 ? (
                   <div className="p-8 text-center rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 space-y-2">
                     <Receipt className="h-8 w-8 mx-auto text-slate-400" />
                     <h4 className="font-bold text-sm text-slate-800 dark:text-white">No Expense Disbursements</h4>
@@ -4560,21 +4844,29 @@ export default function AgilaHubApp() {
                     </p>
                   </div>
                 ) : (
-                  expenses.map((exp) => (
+                  unifiedDisbursements.map((exp: UnifiedDisbursementItem) => (
                     <div
                       key={exp.id}
-                      className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+                      className="p-4 rounded-2xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm hover:border-slate-300 dark:hover:border-white/20 transition"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-sm text-slate-900 dark:text-white">
                             {exp.title}
                           </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/20">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              exp.category.toLowerCase().includes("alalayang")
+                                ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20"
+                                : exp.category.toLowerCase().includes("community") || exp.category.toLowerCase().includes("service")
+                                ? "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20"
+                                : "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20"
+                            }`}
+                          >
                             {exp.category}
                           </span>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                            Released
+                            Disbursed
                           </span>
                         </div>
                         <span className="text-[11px] text-slate-500 block">
@@ -4586,7 +4878,7 @@ export default function AgilaHubApp() {
                           </p>
                         )}
                         <div className="text-[10px] text-slate-400 flex items-center gap-3 pt-0.5">
-                          <span>📅 {new Date(exp.disbursementDate).toLocaleDateString()}</span>
+                          <span>📅 {exp.disbursementDate ? new Date(exp.disbursementDate).toLocaleDateString() : "Audited"}</span>
                           <span>•</span>
                           <span>Authorized by: {exp.approvedBy}</span>
                         </div>
@@ -4596,7 +4888,7 @@ export default function AgilaHubApp() {
                         <span className="font-mono font-black text-base text-rose-600 dark:text-rose-400">
                           -₱{exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </span>
-                        <span className="text-[10px] font-mono text-slate-400">DISBURSED</span>
+                        <span className="text-[10px] font-mono text-slate-400">AUDITED RELEASE</span>
                       </div>
                     </div>
                   ))
@@ -5517,6 +5809,22 @@ export default function AgilaHubApp() {
         initialCategory={submitModalInitialCategory}
         initialTargetMemberId={submitModalTargetMember}
         initialMonth={submitModalInitialMonth}
+      />
+
+      {/* Monthly Dues Inspection & Adjustment Modal (Req 6) */}
+      <MonthlyDuesDetailModal
+        isOpen={Boolean(inspectingDuesMonth)}
+        onClose={() => setInspectingDuesMonth(null)}
+        data={inspectingDuesMonth}
+        canManageFinance={canManageFinance}
+        onRecordPayment={(monthName, memberId) => {
+          setSubmitModalInitialCategory("Monthly Dues");
+          setSubmitModalTargetMember(memberId);
+          setSubmitModalInitialMonth(monthName);
+          setIsSubmitContribOpen(true);
+        }}
+        onUpdateRecord={handleUpdateContribution}
+        onDeleteRecord={handleDeleteContribution}
       />
 
       {/* Monthly Contribution Policy Adjustment Modal */}
