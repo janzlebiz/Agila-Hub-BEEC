@@ -13,7 +13,10 @@ import {
   MapPin, 
   DollarSign, 
   Globe, 
-  CreditCard 
+  CreditCard,
+  UserCheck,
+  UserPlus,
+  Check
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
@@ -56,6 +59,9 @@ interface CommunityServiceDetailModalProps {
   onDelete?: (id: string) => void;
   onRecordContributionPayment?: (activityId: string, memberId: string, memberName: string, amount: number) => void;
   membersList?: Array<{ id: string; first_name: string; last_name: string; member_number?: string | null }>;
+  isVolunteered?: boolean;
+  onToggleVolunteer?: (serviceId: string) => void;
+  currentMember?: { id: string; name?: string; first_name?: string; last_name?: string } | null;
 }
 
 export function CommunityServiceDetailModal({
@@ -68,6 +74,9 @@ export function CommunityServiceDetailModal({
   onDelete,
   onRecordContributionPayment,
   membersList = [],
+  isVolunteered = false,
+  onToggleVolunteer,
+  currentMember,
 }: CommunityServiceDetailModalProps) {
   const [isEditing, setIsEditing] = useState(isNew);
   const [title, setTitle] = useState(service?.title || "");
@@ -421,6 +430,68 @@ export function CommunityServiceDetailModal({
                   Activity Details & Plan:
                 </span>
                 {description || "Community service and humanitarian outreach mission for the welfare of the public."}
+              </div>
+
+              {/* Enrolled Mission Volunteers Roster (Transparent to all members) */}
+              <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-300">
+                    <Users className="h-4 w-4" />
+                    <span>Enrolled Mission Volunteers ({(service.volunteersList || []).length})</span>
+                  </div>
+                  {onToggleVolunteer && currentMember && (
+                    <button
+                      type="button"
+                      onClick={() => onToggleVolunteer(service.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                        isVolunteered
+                          ? "bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30"
+                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      }`}
+                    >
+                      {isVolunteered ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>✓ Enrolled as Volunteer</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="h-3.5 w-3.5" />
+                          <span>Enroll as Volunteer</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {(service.volunteersList || []).length === 0 ? (
+                  <p className="text-[11px] text-slate-500 italic">
+                    No volunteer registrations yet. Be the first Kuya to volunteer for this outreach mission!
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5 text-[11px] max-h-36 overflow-y-auto pr-1">
+                    {(service.volunteersList || []).map((vol: any, idx: number) => {
+                      const volName = vol.memberName || vol.name || (vol.first_name ? `${vol.first_name} ${vol.last_name}` : `Kuya Volunteer #${idx + 1}`);
+                      const isCurrentUser = currentMember && (vol.memberId === currentMember.id || vol.id === currentMember.id);
+                      return (
+                        <li
+                          key={vol.memberId || vol.id || idx}
+                          className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/10 text-slate-800 dark:text-slate-200"
+                        >
+                          <span className="font-semibold flex items-center gap-1.5">
+                            <UserCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            Kuya {volName.replace(/^Kuya\s+/i, "")}
+                          </span>
+                          {isCurrentUser && (
+                            <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-white dark:bg-black/40 px-1.5 py-0.5 rounded">
+                              You
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
 
               {/* Contribution payment recording for officers */}

@@ -63,9 +63,10 @@ interface MeetingDetailModalProps {
   currentMember?: { id: string; name?: string; first_name?: string; last_name?: string } | null;
   onSave?: (meeting: MeetingItem) => void;
   onDelete?: (id: string) => void;
-  onRsvp?: (meetingId: string, status: "attending" | "declined", reason?: string) => void;
+  onRsvp?: (meetingId: string, status: "attending" | "declined" | "cancelled", reason?: string) => void;
   onRecordContributionPayment?: (meetingId: string, memberId: string, memberName: string, amount: number) => void;
   membersList?: Array<{ id: string; first_name: string; last_name: string; member_number?: string | null }>;
+  attendanceRecords?: Array<{ event_id: string; member_id: string; status: string; notes?: string }>;
 }
 
 export function MeetingDetailModal({
@@ -81,6 +82,7 @@ export function MeetingDetailModal({
   onRsvp,
   onRecordContributionPayment,
   membersList = [],
+  attendanceRecords = [],
 }: MeetingDetailModalProps) {
   const [isEditing, setIsEditing] = useState(isNew || initialEditMode);
   const [title, setTitle] = useState(meeting?.title || "");
@@ -180,6 +182,13 @@ export function MeetingDetailModal({
     setTimeout(() => setRsvpFeedback(null), 3000);
   };
 
+  const handleWithdrawRsvp = () => {
+    if (!currentMember || !onRsvp) return;
+    onRsvp(meeting.id, "cancelled");
+    setRsvpFeedback("Your RSVP has been removed.");
+    setTimeout(() => setRsvpFeedback(null), 3000);
+  };
+
   const handleDeclineRsvpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentMember || !onRsvp) return;
@@ -203,11 +212,84 @@ export function MeetingDetailModal({
     setSelectedPayMemberId("");
   };
 
-  // Compile RSVP lists
+  // Compile synchronized attendance and RSVP rosters
+  const meetingAttRecords = (attendanceRecords || []).filter((r) => r.event_id === meeting.id);
   const rsvps = meeting.rsvps || {};
-  const attendingList = Object.entries(rsvps).filter(([, v]) => v.status === "attending");
-  const declinedList = Object.entries(rsvps).filter(([, v]) => v.status === "declined");
+
+  interface AttendeeEntry {
+    id: string;
+    name: string;
+    isVerified: boolean;
+  }
+
+  interface DeclinedEntry {
+    id: string;
+    name: string;
+    reason: string;
+    isSecretariatExcused: boolean;
+  }
+
+  const attendingMap = new Map<string, AttendeeEntry>();
+  const declinedMap = new Map<string, DeclinedEntry>();
+
+  // 1. Process Secretariat / Officer Manual Attendance Checks
+  meetingAttRecords.forEach((att) => {
+    const mem = membersList.find((m) => m.id === att.member_id);
+    const memName = mem ? `${mem.first_name} ${mem.last_name}` : `Kuya Member`;
+    const st = (att.status || "").toLowerCase();
+    if (st === "excused" || st === "declined") {
+      declinedMap.set(att.member_id, {
+        id: att.member_id,
+        name: memName,
+        reason: att.notes || "Excused by Secretariat",
+        isSecretariatExcused: true,
+      });
+    } else if (st === "present" || st === "late" || st === "attended" || !st) {
+      attendingMap.set(att.member_id, {
+        id: att.member_id,
+        name: memName,
+        isVerified: true,
+      });
+    }
+  });
+
+  // 2. Process Member RSVPs (fill in intent to attend or regrets)
+  Object.entries(rsvps).forEach(([memId, rsvp]) => {
+    const mem = membersList.find((m) => m.id === memId);
+    const memName = rsvp.memberName || (mem ? `${mem.first_name} ${mem.last_name}` : `Kuya Member`);
+    if (rsvp.status === "attending") {
+      if (!attendingMap.has(memId) && !declinedMap.has(memId)) {
+        attendingMap.set(memId, {
+          id: memId,
+          name: memName,
+          isVerified: false,
+        });
+      }
+    } else if (rsvp.status === "declined") {
+      if (!declinedMap.has(memId) && !attendingMap.has(memId)) {
+        declinedMap.set(memId, {
+          id: memId,
+          name: memName,
+          reason: rsvp.reason || "Regrets filed",
+          isSecretariatExcused: false,
+        });
+      }
+    }
+  });
+
+  const attendingList = Array.from(attendingMap.values());
+  const declinedList = Array.from(declinedMap.values());
+
+  const userAtt = currentMember ? meetingAttRecords.find((r) => r.member_id === currentMember.id) : null;
   const userRsvp = currentMember ? rsvps[currentMember.id] : null;
+  const isUserAttending = Boolean(
+    (userAtt && (userAtt.status === "present" || userAtt.status === "late" || userAtt.status === "attended")) ||
+    (userRsvp && userRsvp.status === "attending")
+  );
+  const isUserExcused = Boolean(
+    (userAtt && (userAtt.status === "excused" || userAtt.status === "declined")) ||
+    (userRsvp && userRsvp.status === "declined")
+  );
   const paidMembers = meeting.paid_members || [];
 
   return (
@@ -274,9 +356,14 @@ export function MeetingDetailModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    When: Time *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      When: Time *
+                    </label>
+                    <span className="text-[11px] font-bold text-eagle-blue dark:text-amber-400">
+                      ({formatTimeTo12Hour(eventTime)})
+                    </span>
+                  </div>
                   <input
                     type="time"
                     value={eventTime}
@@ -458,35 +545,73 @@ export function MeetingDetailModal({
                   <span className="text-xs font-black uppercase text-slate-700 dark:text-slate-300">
                     Your Assembly RSVP
                   </span>
-                  {userRsvp && (
+                  {(isUserAttending || isUserExcused) && (
                     <span
                       className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border ${
-                        userRsvp.status === "attending"
+                        isUserAttending
                           ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
                           : "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
                       }`}
                     >
-                      {userRsvp.status === "attending" ? "Confirmed Attending" : "Regrets Recorded"}
+                      {isUserAttending ? "Confirmed Attending" : "Regrets Recorded"}
                     </span>
                   )}
                 </div>
 
                 {!isDeclining ? (
                   <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={handleAttendingRsvp}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition active:scale-95"
-                    >
-                      <UserCheck className="h-4 w-4" /> RSVP / Attending
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsDeclining(true)}
-                      className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1.5 transition active:scale-95"
-                    >
-                      <UserX className="h-4 w-4" /> Not Able to Attend
-                    </button>
+                    {isUserAttending ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleWithdrawRsvp}
+                          className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1.5 transition active:scale-95"
+                        >
+                          <UserX className="h-4 w-4" /> Cancel / Withdraw RSVP
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsDeclining(true)}
+                          className="px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 font-bold text-xs transition"
+                        >
+                          Change to Not Able to Attend
+                        </button>
+                      </>
+                    ) : isUserExcused ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleAttendingRsvp}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition active:scale-95"
+                        >
+                          <UserCheck className="h-4 w-4" /> Change to Attending
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleWithdrawRsvp}
+                          className="px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10 font-bold text-xs transition"
+                        >
+                          Clear Regrets
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleAttendingRsvp}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition active:scale-95"
+                        >
+                          <UserCheck className="h-4 w-4" /> RSVP / Attending
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsDeclining(true)}
+                          className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1.5 transition active:scale-95"
+                        >
+                          <UserX className="h-4 w-4" /> Not Able to Attend
+                        </button>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <form onSubmit={handleDeclineRsvpSubmit} className="space-y-2 pt-1 border-t border-slate-200 dark:border-white/10">
@@ -533,19 +658,30 @@ export function MeetingDetailModal({
                     </span>
                   </div>
                   {attendingList.length === 0 ? (
-                    <p className="text-[11px] text-slate-500 italic">No confirmed RSVPs yet.</p>
+                    <p className="text-[11px] text-slate-500 italic">No confirmed attendees or RSVPs yet.</p>
                   ) : (
-                    <ul className="space-y-1 text-[11px] max-h-28 overflow-y-auto pr-1">
-                      {attendingList.map(([id, info]) => (
-                        <li key={id} className="flex items-center justify-between py-0.5 border-b border-emerald-500/10">
+                    <ul className="space-y-1 text-[11px] max-h-32 overflow-y-auto pr-1">
+                      {attendingList.map((entry) => (
+                        <li key={entry.id} className="flex items-center justify-between py-1 border-b border-emerald-500/10">
                           <span className="font-medium text-slate-800 dark:text-slate-200">
-                            Kuya {info.memberName}
+                            Kuya {entry.name.replace(/^Kuya\s+/i, "")}
                           </span>
-                          {paidMembers.includes(id) && (
-                            <span className="text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded">
-                              Paid
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {entry.isVerified ? (
+                              <span className="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded">
+                                Present
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-bold text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-950/60 px-1.5 py-0.2 rounded">
+                                RSVP'd
+                              </span>
+                            )}
+                            {paidMembers.includes(entry.id) && (
+                              <span className="text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded">
+                                Paid
+                              </span>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -565,14 +701,17 @@ export function MeetingDetailModal({
                   {declinedList.length === 0 ? (
                     <p className="text-[11px] text-slate-500 italic">No regrets filed.</p>
                   ) : (
-                    <ul className="space-y-1.5 text-[11px] max-h-28 overflow-y-auto pr-1">
-                      {declinedList.map(([id, info]) => (
-                        <li key={id} className="py-1 border-b border-rose-500/10">
-                          <div className="font-bold text-slate-800 dark:text-slate-200">
-                            Kuya {info.memberName}
+                    <ul className="space-y-1.5 text-[11px] max-h-32 overflow-y-auto pr-1">
+                      {declinedList.map((entry) => (
+                        <li key={entry.id} className="py-1 border-b border-rose-500/10">
+                          <div className="flex items-center justify-between font-bold text-slate-800 dark:text-slate-200">
+                            <span>Kuya {entry.name.replace(/^Kuya\s+/i, "")}</span>
+                            <span className="text-[9px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/60 px-1.5 py-0.2 rounded">
+                              {entry.isSecretariatExcused ? "Excused" : "Regrets"}
+                            </span>
                           </div>
                           <div className="text-[10px] text-slate-500 dark:text-slate-400 italic">
-                            Reason: {info.reason || "Unspecified"}
+                            Reason: {entry.reason || "Unspecified"}
                           </div>
                         </li>
                       ))}

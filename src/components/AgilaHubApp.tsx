@@ -343,13 +343,17 @@ function parseMeetingRecord(evt: EventRecord): MeetingItem {
   let rsvps: Record<string, { status: "attending" | "declined"; memberName: string; reason?: string; timestamp: string }> = {};
   let paidMembers: string[] = [];
 
+  let metaFoundTime = false;
   const rawDesc = evt.description || "";
   if (rawDesc.startsWith("{") && (rawDesc.includes('"__isMeeting"') || rawDesc.includes('"contributionAmount"') || rawDesc.includes('"agenda"'))) {
     try {
       const meta = JSON.parse(rawDesc);
       what = meta.what || what;
       when = meta.when || when;
-      eventTime = meta.eventTime || meta.time || eventTime;
+      if (meta.eventTime || meta.time) {
+        eventTime = meta.eventTime || meta.time;
+        metaFoundTime = true;
+      }
       location = meta.where || meta.location || location;
       address = meta.address || address;
       attire = meta.attire || attire;
@@ -378,14 +382,15 @@ function parseMeetingRecord(evt: EventRecord): MeetingItem {
       const timePart = whenMatch[1].split("•")[1] || whenMatch[1].split("-")[1];
       if (timePart) {
         eventTime = timePart.trim().replace(/\s*(PST|PH Time)/gi, "");
+        metaFoundTime = true;
       }
     }
   } else {
     agenda = rawDesc;
   }
 
-  // Derive time from ISO event_date if present
-  if (evt.event_date && evt.event_date.includes("T")) {
+  // Derive time from ISO event_date only if not explicitly specified in metadata or notice
+  if (!metaFoundTime && evt.event_date && evt.event_date.includes("T")) {
     const timeMatch = evt.event_date.match(/T(\d{2}:\d{2})/);
     if (timeMatch && timeMatch[1]) {
       eventTime = timeMatch[1];
@@ -529,6 +534,7 @@ export default function AgilaHubApp() {
   const [userAttendedEventIds, setUserAttendedEventIds] = useState<Set<string>>(new Set());
   const [eventHeadcounts, setEventHeadcounts] = useState<Record<string, number>>({});
   const [eventExcusedCounts, setEventExcusedCounts] = useState<Record<string, number>>({});
+  const [attendanceRecords, setAttendanceRecords] = useState<Array<{ event_id: string; member_id: string; status: string; notes?: string }>>([]);
   const [rsvpdEvents, setRsvpdEvents] = useState<Record<string, boolean>>({});
   const [volunteeredServices, setVolunteeredServices] = useState<Record<string, boolean>>({});
   const [activeCheckInModalEvent, setActiveCheckInModalEvent] = useState<EventRecord | null>(null);
@@ -779,6 +785,9 @@ export default function AgilaHubApp() {
         if (rawA) cachedActivities = JSON.parse(rawA);
       } catch (_) {}
 
+      let mergedMeetings: EventRecord[] = cachedMeetings;
+      let mergedActivities: CommunityServiceItem[] = cachedActivities;
+
       if (evtData) {
         const cleanEvts = (evtData as any[]).filter((e) => {
           const title = (e.title || "").toLowerCase();
@@ -823,14 +832,14 @@ export default function AgilaHubApp() {
 
         // Merge with local cache by ID
         const allMeetingIds = new Set(remoteMeetings.map((m) => m.id));
-        const mergedMeetings = [...remoteMeetings];
+        mergedMeetings = [...remoteMeetings];
         cachedMeetings.forEach((cm) => {
           if (!allMeetingIds.has(cm.id)) mergedMeetings.push(cm);
         });
         setEvents(mergedMeetings);
 
         const allActivityIds = new Set(remoteActivities.map((a) => a.id));
-        const mergedActivities = [...remoteActivities];
+        mergedActivities = [...remoteActivities];
         cachedActivities.forEach((ca) => {
           if (!allActivityIds.has(ca.id)) mergedActivities.push(ca);
         });
@@ -1036,6 +1045,25 @@ export default function AgilaHubApp() {
               if (allUserAtt) {
                 setUserAttendedEventIds(new Set(allUserAtt.map((a) => a.event_id)));
               }
+
+              // Derive authoritative user RSVP states from meeting records
+              const rsvpMap: Record<string, boolean> = {};
+              mergedMeetings.forEach((m) => {
+                const parsed = parseMeetingRecord(m);
+                if (parsed.rsvps && parsed.rsvps[curMem.id]?.status === "attending") {
+                  rsvpMap[m.id] = true;
+                }
+              });
+              setRsvpdEvents(rsvpMap);
+
+              // Derive authoritative user volunteer states from activity records
+              const vMap: Record<string, boolean> = {};
+              mergedActivities.forEach((a) => {
+                if (a.volunteersList?.some((v: any) => v.memberId === curMem.id || v.id === curMem.id)) {
+                  vMap[a.id] = true;
+                }
+              });
+              setVolunteeredServices(vMap);
             }
           }
 
@@ -1043,6 +1071,8 @@ export default function AgilaHubApp() {
           const { data: allAttRows } = await supabase
             .from("attendance")
             .select("event_id, member_id, status, notes");
+
+          setAttendanceRecords(allAttRows || []);
 
           if (allAttRows && allAttRows.length > 0) {
             const counts: Record<string, number> = {};
@@ -1965,11 +1995,19 @@ export default function AgilaHubApp() {
     const contributionAmount = typeof meeting.contribution_amount === "number" ? meeting.contribution_amount : (typeof meeting.meetingContribution === "number" ? meeting.meetingContribution : 500);
     const agenda = meeting.agenda || meeting.description || "";
 
+    const pureDate = (eventDate || new Date().toISOString().split("T")[0]).split("T")[0];
+    const timeToUse = (eventTime && eventTime.includes(":")) ? eventTime.trim() : "09:00";
+    const [rawHh, rawMm] = timeToUse.split(":");
+    const cleanHh = (rawHh || "09").padStart(2, "0");
+    const cleanMm = (rawMm || "00").slice(0, 2).padStart(2, "0");
+    const cleanTime = `${cleanHh}:${cleanMm}`;
+    const isoDateTime = `${pureDate}T${cleanTime}:00+08:00`;
+
     const descriptionObj = {
       __isMeeting: true,
       what: meeting.what || meeting.title,
-      when: eventDate,
-      eventTime: eventTime,
+      when: pureDate,
+      eventTime: cleanTime,
       where: location,
       address: address,
       attire: attire,
@@ -1980,11 +2018,6 @@ export default function AgilaHubApp() {
     };
 
     const formattedDescription = JSON.stringify(descriptionObj);
-
-    const timeToUse = eventTime.includes(":") ? eventTime : "09:00";
-    const isoDateTime = eventDate.includes("T") 
-      ? eventDate 
-      : `${eventDate}T${timeToUse.length === 5 ? timeToUse : "09:00"}:00+08:00`;
 
     const { error } = await supabase.from("events").upsert({
       id: meetingId,
@@ -2052,39 +2085,28 @@ export default function AgilaHubApp() {
     setSelectedMeeting(null);
   };
 
-  const handleMeetingRsvp = async (meetingId: string, status: "attending" | "declined", reason?: string) => {
+  const handleMeetingRsvp = async (meetingId: string, status: "attending" | "declined" | "cancelled", reason?: string) => {
     if (!authMember) return;
-    const attStatus = status === "attending" ? "present" : "excused";
     const memberName = `${authMember.first_name} ${authMember.last_name}`;
 
-    const { error } = await supabase.from("attendance").upsert(
-      {
-        event_id: meetingId,
-        member_id: authMember.id,
-        status: attStatus as any,
-        check_in_time: new Date().toISOString(),
-        check_in_method: "code",
-        notes: reason || (status === "attending" ? "Confirmed RSVP" : "Regrets filed"),
-      },
-      { onConflict: "event_id,member_id" }
-    );
-
-    if (error) {
-      console.warn("Notice updating attendance RSVP:", error.message);
-    }
+    let updatedMetaPayload: any = null;
 
     setEvents((prev) => {
       const updated = prev.map((e) => {
         if (e.id !== meetingId) return e;
         const parsed = parseMeetingRecord(e);
         const rsvps = { ...(parsed.rsvps || {}) };
-        rsvps[authMember.id] = {
-          status: status,
-          memberName: memberName,
-          reason: reason,
-          timestamp: new Date().toISOString(),
-        };
-        const updatedMeta = {
+        if (status === "cancelled") {
+          delete rsvps[authMember.id];
+        } else {
+          rsvps[authMember.id] = {
+            status: status,
+            memberName: memberName,
+            reason: reason,
+            timestamp: new Date().toISOString(),
+          };
+        }
+        updatedMetaPayload = {
           __isMeeting: true,
           what: parsed.what,
           when: parsed.when,
@@ -2099,7 +2121,7 @@ export default function AgilaHubApp() {
         };
         return {
           ...e,
-          description: JSON.stringify(updatedMeta),
+          description: JSON.stringify(updatedMetaPayload),
         };
       });
       try {
@@ -2108,36 +2130,50 @@ export default function AgilaHubApp() {
       return updated;
     });
 
-    setRsvpdEvents((prev) => ({ ...prev, [meetingId]: status === "attending" }));
-    if (status === "attending") {
-      setUserAttendedEventIds((prev) => new Set([...prev, meetingId]));
-    } else {
-      setUserAttendedEventIds((prev) => {
-        const next = new Set(prev);
-        next.delete(meetingId);
-        return next;
-      });
+    if (updatedMetaPayload) {
+      // Authoritative persistence to database so all members can view confirmed RSVPs
+      const { error: updateErr } = await supabase
+        .from("events")
+        .update({ description: JSON.stringify(updatedMetaPayload) })
+        .eq("id", meetingId);
+      if (updateErr) console.warn("Notice updating meeting RSVP in db:", updateErr.message);
     }
+
+    setRsvpdEvents((prev) => {
+      const next = { ...prev };
+      if (status === "attending") {
+        next[meetingId] = true;
+      } else {
+        delete next[meetingId];
+      }
+      return next;
+    });
 
     if (selectedMeeting && selectedMeeting.id === meetingId) {
       setSelectedMeeting((prev) => {
         if (!prev) return null;
         const rsvps = { ...(prev.rsvps || {}) };
-        rsvps[authMember.id] = {
-          status: status,
-          memberName: memberName,
-          reason: reason,
-          timestamp: new Date().toISOString(),
-        };
+        if (status === "cancelled") {
+          delete rsvps[authMember.id];
+        } else {
+          rsvps[authMember.id] = {
+            status: status,
+            memberName: memberName,
+            reason: reason,
+            timestamp: new Date().toISOString(),
+          };
+        }
         return { ...prev, rsvps };
       });
     }
 
-    await fetchHubData();
-
     setRealtimeToast({
-      title: status === "attending" ? "RSVP Confirmed" : "Absence Noted",
-      message: status === "attending" ? "You are marked as attending this assembly." : `Regrets recorded: ${reason || "Not able to attend."}`,
+      title: status === "attending" ? "RSVP Confirmed" : status === "cancelled" ? "RSVP Withdrawn" : "Absence Noted",
+      message: status === "attending" 
+        ? "You are confirmed as attending this meeting." 
+        : status === "cancelled" 
+          ? "Your RSVP has been withdrawn." 
+          : `Regrets recorded: ${reason || "Not able to attend."}`,
       type: status === "attending" ? "success" : "info",
     });
   };
@@ -2309,22 +2345,78 @@ export default function AgilaHubApp() {
 
   const handleToggleRsvp = async (eventId: string) => {
     const isCurrentlyRsvpd = Boolean(rsvpdEvents[eventId]);
-    const nextStatus = isCurrentlyRsvpd ? "declined" : "attending";
-    const nextReason = isCurrentlyRsvpd ? "Withdrawn RSVP" : undefined;
-    await handleMeetingRsvp(eventId, nextStatus, nextReason);
+    const nextStatus = isCurrentlyRsvpd ? "cancelled" : "attending";
+    await handleMeetingRsvp(eventId, nextStatus);
   };
 
-  const handleToggleVolunteer = (serviceId: string) => {
-    setVolunteeredServices((prev) => {
-      const nextState = !prev[serviceId];
-      setRealtimeToast({
-        title: nextState ? "Volunteered Successfully" : "Volunteer Status Cancelled",
-        message: nextState
-          ? "Thank you for volunteering for this community outreach mission!"
-          : "Your volunteer registration has been updated.",
-        type: nextState ? "success" : "info",
-      });
-      return { ...prev, [serviceId]: nextState };
+  const handleToggleVolunteer = async (serviceId: string) => {
+    if (!authMember) {
+      setRealtimeToast({ title: "Sign-in Required", message: "Please log in to volunteer.", type: "warning" });
+      return;
+    }
+    const isCurrentlyVolunteered = Boolean(volunteeredServices[serviceId]);
+    const nextState = !isCurrentlyVolunteered;
+
+    setVolunteeredServices((prev) => ({ ...prev, [serviceId]: nextState }));
+
+    const srv = communityServices.find((s) => s.id === serviceId);
+    if (srv) {
+      let updatedVolunteers = [...(srv.volunteersList || [])];
+      if (nextState) {
+        if (!updatedVolunteers.some((v: any) => v.memberId === authMember.id || v.id === authMember.id)) {
+          updatedVolunteers.push({
+            memberId: authMember.id,
+            memberName: `Kuya ${authMember.first_name} ${authMember.last_name}`,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } else {
+        updatedVolunteers = updatedVolunteers.filter((v: any) => v.memberId !== authMember.id && v.id !== authMember.id);
+      }
+
+      const updatedSrv: CommunityServiceItem = {
+        ...srv,
+        volunteersList: updatedVolunteers,
+      };
+
+      setCommunityServices((prev) =>
+        prev.map((s) => (s.id === serviceId ? updatedSrv : s))
+      );
+
+      if (selectedService && selectedService.id === serviceId) {
+        setSelectedService(updatedSrv);
+      }
+
+      const metaPayload = {
+        description: srv.description,
+        mission: srv.mission,
+        status: srv.status,
+        projectDate: srv.projectDate,
+        scheduleFrom: srv.scheduleFrom,
+        scheduleTo: srv.scheduleTo,
+        assemblyTime: srv.assemblyTime,
+        proponent: srv.proponent,
+        projectScope: srv.projectScope,
+        contributionAmount: srv.contributionAmount,
+        targetBeneficiaries: srv.targetBeneficiaries,
+        leadCommittee: srv.leadCommittee,
+        volunteersList: updatedVolunteers,
+        contributionsList: srv.contributionsList || [],
+      };
+
+      const { error } = await supabase
+        .from("events")
+        .update({ description: JSON.stringify(metaPayload) })
+        .eq("id", serviceId);
+      if (error) console.error("Error saving volunteer status to backend:", error);
+    }
+
+    setRealtimeToast({
+      title: nextState ? "Volunteered Successfully" : "Volunteer Status Cancelled",
+      message: nextState
+        ? "Thank you for volunteering for this community outreach mission!"
+        : "Your volunteer registration has been updated.",
+      type: nextState ? "success" : "info",
     });
   };
 
@@ -2994,12 +3086,12 @@ export default function AgilaHubApp() {
               onClick={() => setAssemblySubTab("outreach")}
               className={`py-2 px-1 rounded-xl transition text-center flex items-center justify-center gap-1.5 ${
                 assemblySubTab === "outreach"
-                  ? "bg-eagle-blue text-white shadow-sm"
+                  ? "bg-emerald-600 text-white shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
-              <Users className="h-3.5 w-3.5 shrink-0 text-blue-500 dark:text-blue-400" />
-              <span className="truncate">Community Service</span>
+              <Users className={`h-3.5 w-3.5 shrink-0 ${assemblySubTab === "outreach" ? "text-white" : "text-emerald-500 dark:text-emerald-400"}`} />
+              <span className="whitespace-normal leading-tight text-[11px] sm:text-xs">Community Service</span>
             </button>
             <button
               type="button"
@@ -3119,6 +3211,10 @@ export default function AgilaHubApp() {
                   const isScheduled = lifecycle.lifecycle === "scheduled";
                   const isCancelled = lifecycle.lifecycle === "cancelled";
 
+                  const rsvpEntries = Object.values(parsedItem.rsvps || {});
+                  const confirmedRsvpsCount = rsvpEntries.filter((r) => r.status === "attending").length;
+                  const regretsRsvpsCount = rsvpEntries.filter((r) => r.status === "declined").length;
+
                   return (
                     <div
                       key={evt.id}
@@ -3158,7 +3254,7 @@ export default function AgilaHubApp() {
                         </p>
                       </div>
 
-                      {/* Metadata Row: Date, Time (PH Time without label), Venue, Attendance Headcount */}
+                      {/* Metadata Row: Date, Time, Venue, Attendance / RSVP Headcount */}
                       <div className="pt-2 border-t border-slate-100 dark:border-white/5 flex flex-wrap items-center gap-y-2 gap-x-5 text-xs text-slate-500 font-medium">
                         <span className="flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5 text-eagle-blue shrink-0" />
@@ -3175,16 +3271,34 @@ export default function AgilaHubApp() {
                           <span className="truncate max-w-[200px]">{parsedItem.location || "Agila Clubhouse & Conference Hall, QC"}</span>
                         </span>
 
-                        <span className="flex items-center gap-1.5">
-                          <Users className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                          <span>{headcount} Verified Attendee{headcount === 1 ? "" : "s"}</span>
-                        </span>
+                        {isScheduled ? (
+                          <>
+                            <span className="flex items-center gap-1.5">
+                              <Users className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                              <span>{confirmedRsvpsCount} Confirmed RSVP{confirmedRsvpsCount === 1 ? "" : "s"}</span>
+                            </span>
 
-                        {excusedCount > 0 && (
-                          <span className="flex items-center gap-1.5 text-rose-500 font-semibold">
-                            <UserX className="h-3.5 w-3.5 shrink-0" />
-                            <span>{excusedCount} Excused</span>
-                          </span>
+                            {regretsRsvpsCount > 0 && (
+                              <span className="flex items-center gap-1.5 text-rose-500 font-semibold">
+                                <UserX className="h-3.5 w-3.5 shrink-0" />
+                                <span>{regretsRsvpsCount} Regrets</span>
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex items-center gap-1.5">
+                              <Users className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                              <span>{headcount} Verified Attendee{headcount === 1 ? "" : "s"}</span>
+                            </span>
+
+                            {excusedCount > 0 && (
+                              <span className="flex items-center gap-1.5 text-rose-500 font-semibold">
+                                <UserX className="h-3.5 w-3.5 shrink-0" />
+                                <span>{excusedCount} Excused</span>
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
 
@@ -3192,10 +3306,17 @@ export default function AgilaHubApp() {
                       <div className="pt-2 border-t border-slate-100 dark:border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         {/* Attendance State Indicator */}
                         <div className="flex items-center gap-2 flex-wrap">
-                          {hasAttended && (
+                          {!isScheduled && hasAttended && (
                             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 rounded-xl border border-emerald-500/20">
                               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                               You Attended
+                            </span>
+                          )}
+
+                          {isScheduled && rsvpdEvents[evt.id] && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/30 px-2.5 py-1 rounded-xl border border-blue-500/20">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />
+                              RSVP Confirmed
                             </span>
                           )}
 
@@ -3253,21 +3374,6 @@ export default function AgilaHubApp() {
                             >
                               {rsvpdEvents[evt.id] ? "✓ RSVP Confirmed" : "RSVP / Register"}
                             </Button>
-                          )}
-
-                          {(currentRole === "admin" || currentRole === "officer") && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedMeeting(parsedItem);
-                                setIsMeetingEditMode(true);
-                              }}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-eagle-blue dark:hover:text-amber-300 hover:bg-slate-100 dark:hover:bg-white/10 transition"
-                              title="Edit Meeting"
-                            >
-                              <Edit3 className="h-4 w-4" />
-                            </button>
                           )}
                         </div>
                       </div>
@@ -3329,7 +3435,8 @@ export default function AgilaHubApp() {
                   <div
                     key={srv.id}
                     id={`community-service-card-${srv.id}`}
-                    className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-4 hover:border-emerald-500/50 transition group"
+                    onClick={() => setSelectedService(srv)}
+                    className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-4 hover:border-emerald-500/50 transition group cursor-pointer"
                   >
                     {/* Header: Category + Status */}
                     <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -3348,8 +3455,7 @@ export default function AgilaHubApp() {
                       </div>
                       <div className="flex-1">
                         <h4
-                          onClick={() => setSelectedService(srv)}
-                          className="font-display font-bold text-base text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors cursor-pointer"
+                          className="font-display font-bold text-base text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors"
                         >
                           {srv.title}
                         </h4>
@@ -3402,18 +3508,13 @@ export default function AgilaHubApp() {
                         <Button
                           size="sm"
                           variant={volunteeredServices[srv.id] ? "secondary" : "primary"}
-                          onClick={() => handleToggleVolunteer(srv.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleVolunteer(srv.id);
+                          }}
                           className="text-xs font-bold"
                         >
                           {volunteeredServices[srv.id] ? "✓ Registered" : "Volunteer"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSelectedService(srv)}
-                          className="text-xs font-bold"
-                        >
-                          View Details
                         </Button>
                       </div>
                     </div>
@@ -5806,6 +5907,7 @@ export default function AgilaHubApp() {
         onRecordContributionPayment={handleRecordMeetingPayment}
         currentMember={authMember ? { id: authMember.id, name: `${authMember.first_name} ${authMember.last_name}`, first_name: authMember.first_name, last_name: authMember.last_name } : null}
         membersList={allMembers}
+        attendanceRecords={attendanceRecords}
       />
 
       {/* Community Service Detail / Edit Modal */}
@@ -5822,6 +5924,9 @@ export default function AgilaHubApp() {
         onDelete={handleDeleteActivity}
         onRecordContributionPayment={handleRecordActivityPayment}
         membersList={allMembers}
+        isVolunteered={Boolean(selectedService && volunteeredServices[selectedService.id])}
+        onToggleVolunteer={handleToggleVolunteer}
+        currentMember={authMember ? { id: authMember.id, name: `${authMember.first_name} ${authMember.last_name}`, first_name: authMember.first_name, last_name: authMember.last_name } : null}
       />
 
       {/* Alalayang Agila Detail / Edit Modal */}
