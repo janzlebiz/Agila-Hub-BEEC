@@ -53,20 +53,39 @@ export function RecordAlalayangGrantModal({
   const [otherCategory, setOtherCategory] = useState("");
   const [reason, setReason] = useState("");
   const [amount, setAmount] = useState<string>("10000");
-  const [grantDate, setGrantDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
+  const [grantDate, setGrantDate] = useState<string>("");
   const [voucherNumber, setVoucherNumber] = useState<string>(
     `AA-GRANT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const isSubmittingRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setRecipientName("");
+      setRecipientRelationship("Member (Kuya)");
+      setChapterOrAffiliation("Bantayog Elite Eagles Club");
+      setContactNumber("");
+      setCategory("Medical & Hospitalization");
+      setOtherCategory("");
+      setReason("");
+      setAmount("10000");
+      setGrantDate("");
+      setVoucherNumber(`AA-GRANT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
+      setError(null);
+      setSuccess(false);
+      setSubmitting(false);
+      isSubmittingRef.current = false;
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || submitting) return;
     setError(null);
 
     const parsedAmount = parseFloat(amount);
@@ -88,6 +107,7 @@ export function RecordAlalayangGrantModal({
       return;
     }
 
+    isSubmittingRef.current = true;
     setSubmitting(true);
 
     const resolvedCategory = category === "Others" ? (otherCategory.trim() || "Others") : category;
@@ -101,10 +121,10 @@ export function RecordAlalayangGrantModal({
       category: resolvedCategory,
       reason: reason.trim(),
       amount: parsedAmount,
-      grantDate,
+      grantDate: grantDate || new Date().toISOString().split("T")[0],
       voucherNumber: voucherNumber.trim(),
       approvedBy: "President Joy M. Aragon & Directorate",
-      status: "disbursed",
+      status: "approved",
     };
 
     try {
@@ -113,10 +133,12 @@ export function RecordAlalayangGrantModal({
         if (!res.success) {
           setError(res.error || "Failed to persist Alalayang Agila grant transaction to backend database.");
           setSubmitting(false);
+          isSubmittingRef.current = false;
           return;
         }
+      } else {
+        onGrantRecorded(newGrant);
       }
-      onGrantRecorded(newGrant);
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
@@ -124,8 +146,8 @@ export function RecordAlalayangGrantModal({
       }, 1200);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error saving grant record.");
-    } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -311,11 +333,10 @@ export function RecordAlalayangGrantModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                Disbursement Date
+                Disbursement Date (Optional)
               </label>
               <input
                 type="date"
-                required
                 value={grantDate}
                 onChange={(e) => setGrantDate(e.target.value)}
                 className="w-full h-10 px-3 rounded-xl bg-slate-100 dark:bg-white/[0.08] border border-slate-300 dark:border-white/20 text-xs font-medium text-slate-900 dark:text-white focus:outline-none"
@@ -347,7 +368,7 @@ export function RecordAlalayangGrantModal({
             ) : (
               <HeartHandshake className="h-4 w-4" />
             )}
-            <span>Confirm & Disburse Alalayang Agila Grant</span>
+            <span>Confirm Alalayang Agila Grant</span>
           </button>
         </form>
       </div>

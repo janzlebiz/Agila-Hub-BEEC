@@ -88,7 +88,25 @@ export function CommunityServiceDetailModal({
   const [selectedPayMemberId, setSelectedPayMemberId] = useState("");
 
   React.useEffect(() => {
-    if (service) {
+    if (!isOpen) return;
+
+    if (isNew) {
+      // Pristine reset on new activity creation - never carry over prior activity inputs
+      setTitle("");
+      setDescription("");
+      setStatus("Active Community Mission");
+      setProponent("");
+      setProjectScope("Club");
+      setScheduleFrom(new Date().toISOString().split("T")[0]);
+      setScheduleTo(new Date().toISOString().split("T")[0]);
+      setScheduleTime("08:00 AM");
+      setContributionAmount(0);
+      setLocation("");
+      setLeadCommittee("Community Service & Outreach");
+      setBeneficiaries("");
+      setIsEditing(true);
+      setSelectedPayMemberId("");
+    } else if (service) {
       setTitle(service.title.replace("[ACTIVITY] ", ""));
       setDescription(service.description);
       setStatus(service.status || "Active Community Mission");
@@ -102,8 +120,9 @@ export function CommunityServiceDetailModal({
       setLeadCommittee(service.lead_committee || "Community Service & Outreach");
       setBeneficiaries(service.beneficiaries || "Community Residents");
       setIsEditing(isNew);
+      setSelectedPayMemberId("");
     }
-  }, [service, isNew]);
+  }, [service, isNew, isOpen]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -410,11 +429,11 @@ export function CommunityServiceDetailModal({
                   <span className="font-black text-xs text-eagle-blue dark:text-blue-400 uppercase flex items-center gap-1.5">
                     <CreditCard className="h-4 w-4" /> Record Activity Fund Contribution
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <select
                       value={selectedPayMemberId}
                       onChange={(e) => setSelectedPayMemberId(e.target.value)}
-                      className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-canvas-slate border border-slate-300 dark:border-white/10 text-xs font-bold text-slate-900 dark:text-white"
+                      className="w-full min-w-0 flex-1 px-3 py-2 rounded-xl bg-white dark:bg-canvas-slate border border-slate-300 dark:border-white/10 text-xs font-bold text-slate-900 dark:text-white truncate"
                     >
                       <option value="">-- Select Member to Record Payment --</option>
                       {membersList.map((m) => {
@@ -430,7 +449,7 @@ export function CommunityServiceDetailModal({
                       type="button"
                       disabled={!selectedPayMemberId}
                       onClick={handlePayActivity}
-                      className="px-3 py-2 rounded-xl bg-emerald-600 hover:brightness-110 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition active:scale-95 shrink-0"
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:brightness-110 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition active:scale-95 shrink-0 text-center flex items-center justify-center"
                     >
                       Record Inflow
                     </button>

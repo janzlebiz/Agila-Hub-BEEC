@@ -13,6 +13,7 @@ import {
   formatDate, 
   formatDateTime, 
   formatTime,
+  formatTimeTo12Hour,
   isDateTodayManila, 
   isMeetingPastManila 
 } from "@/lib/utils";
@@ -27,6 +28,8 @@ import {
   CheckCircle2,
   Shield,
   Users,
+  UserX,
+  RefreshCw,
   Check,
   Sparkles,
   Loader2,
@@ -324,6 +327,91 @@ interface DocumentRecord {
 }
 const DEFAULT_DOCUMENTS: DocumentRecord[] = [];
 
+/**
+ * Parses an event record into a structured MeetingItem, supporting both JSON metadata
+ * and legacy formatted notice strings without loss of user-provided details.
+ */
+function parseMeetingRecord(evt: EventRecord): MeetingItem {
+  let eventTime = "09:00";
+  let location = evt.location || "";
+  let address = "";
+  let attire = "";
+  let contributionAmount = 500;
+  let agenda = "";
+  let what = evt.title ? evt.title.replace("[SEED] ", "") : "";
+  let when = evt.event_date ? evt.event_date.split("T")[0] : "";
+  let rsvps: Record<string, { status: "attending" | "declined"; memberName: string; reason?: string; timestamp: string }> = {};
+  let paidMembers: string[] = [];
+
+  const rawDesc = evt.description || "";
+  if (rawDesc.startsWith("{") && (rawDesc.includes('"__isMeeting"') || rawDesc.includes('"contributionAmount"') || rawDesc.includes('"agenda"'))) {
+    try {
+      const meta = JSON.parse(rawDesc);
+      what = meta.what || what;
+      when = meta.when || when;
+      eventTime = meta.eventTime || meta.time || eventTime;
+      location = meta.where || meta.location || location;
+      address = meta.address || address;
+      attire = meta.attire || attire;
+      contributionAmount = typeof meta.contributionAmount === "number" ? meta.contributionAmount : (typeof meta.meetingContribution === "number" ? meta.meetingContribution : contributionAmount);
+      agenda = meta.agenda || meta.description || agenda;
+      rsvps = meta.rsvps || rsvps;
+      paidMembers = meta.paidMembers || meta.paid_members || paidMembers;
+    } catch (_) {}
+  } else if (rawDesc.includes("Attention All Club Members!")) {
+    const whatMatch = rawDesc.match(/What:\s*([^\n]+)/i);
+    const whenMatch = rawDesc.match(/When:\s*([^\n]+)/i);
+    const whereMatch = rawDesc.match(/Where:\s*([^\n]+)/i);
+    const addressMatch = rawDesc.match(/Address:\s*([^\n]+)/i);
+    const attireMatch = rawDesc.match(/Attire:\s*([^\n]+)/i);
+    const feeMatch = rawDesc.match(/(?:Meeting Contribution|Fee \/ Dues):\s*₱?([\d,.]+)/i);
+    const agendaMatch = rawDesc.match(/Agenda:\s*([\s\S]+)/i);
+
+    if (whatMatch) what = whatMatch[1].trim();
+    if (whereMatch) location = whereMatch[1].trim();
+    if (addressMatch) address = addressMatch[1].trim();
+    if (attireMatch) attire = attireMatch[1].trim();
+    if (feeMatch) contributionAmount = parseFloat(feeMatch[1].replace(/,/g, "")) || 500;
+    if (agendaMatch) agenda = agendaMatch[1].trim();
+
+    if (whenMatch) {
+      const timePart = whenMatch[1].split("•")[1] || whenMatch[1].split("-")[1];
+      if (timePart) {
+        eventTime = timePart.trim().replace(/\s*(PST|PH Time)/gi, "");
+      }
+    }
+  } else {
+    agenda = rawDesc;
+  }
+
+  // Derive time from ISO event_date if present
+  if (evt.event_date && evt.event_date.includes("T")) {
+    const timeMatch = evt.event_date.match(/T(\d{2}:\d{2})/);
+    if (timeMatch && timeMatch[1]) {
+      eventTime = timeMatch[1];
+    }
+  }
+
+  return {
+    ...evt,
+    title: what,
+    what,
+    when,
+    event_date: when || (evt.event_date ? evt.event_date.split("T")[0] : ""),
+    event_time: eventTime,
+    location,
+    where: location,
+    address,
+    attire,
+    contribution_amount: contributionAmount,
+    meetingContribution: contributionAmount,
+    agenda: agenda || evt.description || "",
+    description: agenda || evt.description || "",
+    rsvps,
+    paid_members: paidMembers,
+  };
+}
+
 
 export default function AgilaHubApp() {
   const supabase = createClient();
@@ -440,11 +528,58 @@ export default function AgilaHubApp() {
   // Assemblies & Outreach Specific Enhanced States
   const [userAttendedEventIds, setUserAttendedEventIds] = useState<Set<string>>(new Set());
   const [eventHeadcounts, setEventHeadcounts] = useState<Record<string, number>>({});
+  const [eventExcusedCounts, setEventExcusedCounts] = useState<Record<string, number>>({});
   const [rsvpdEvents, setRsvpdEvents] = useState<Record<string, boolean>>({});
   const [volunteeredServices, setVolunteeredServices] = useState<Record<string, boolean>>({});
   const [activeCheckInModalEvent, setActiveCheckInModalEvent] = useState<EventRecord | null>(null);
   const [modalCheckInCode, setModalCheckInCode] = useState("");
   const [modalCheckInFeedback, setModalCheckInFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [isMeetingEditMode, setIsMeetingEditMode] = useState(false);
+
+  // Pull-to-Refresh States (Requirement 1 - swipe down refresh across all screens)
+  const [pullStartY, setPullStartY] = useState<number | null>(null);
+  const [pullMoveDistance, setPullMoveDistance] = useState<number>(0);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (typeof window !== "undefined" && (window.scrollY === 0 || document.documentElement.scrollTop === 0)) {
+      setPullStartY(e.touches[0].clientY);
+    } else {
+      setPullStartY(null);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (pullStartY === null || isRefreshing) return;
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - pullStartY;
+    if (diff > 0 && typeof window !== "undefined" && (window.scrollY === 0 || document.documentElement.scrollTop === 0)) {
+      setPullMoveDistance(Math.min(diff * 0.4, 80));
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (pullMoveDistance >= 50 && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullMoveDistance(50);
+      try {
+        await fetchHubData();
+        setRealtimeToast({
+          title: "Data Refreshed",
+          message: "Latest club assemblies and records updated.",
+          type: "success",
+        });
+      } catch (_) {}
+      setTimeout(() => {
+        setIsRefreshing(false);
+        setPullMoveDistance(0);
+        setPullStartY(null);
+      }, 500);
+    } else {
+      setPullMoveDistance(0);
+      setPullStartY(null);
+    }
+  };
 
   // Onboarding & Direct Login States
   const [loginEmail, setLoginEmail] = useState("");
@@ -904,27 +1039,37 @@ export default function AgilaHubApp() {
             }
           }
 
-          // Authoritative Quorum Headcounts Across All Events
-          if (activeRole === "admin" || activeRole === "officer") {
-            const { data: allAttRows } = await supabase
-              .from("attendance")
-              .select("event_id");
-            if (allAttRows) {
-              const counts: Record<string, number> = {};
-              allAttRows.forEach((row) => {
+          // Authoritative Quorum & Excused Headcounts Across All Events (Transparent to all members)
+          const { data: allAttRows } = await supabase
+            .from("attendance")
+            .select("event_id, member_id, status, notes");
+
+          if (allAttRows && allAttRows.length > 0) {
+            const counts: Record<string, number> = {};
+            const excused: Record<string, number> = {};
+            allAttRows.forEach((row: any) => {
+              const st = (row.status || "").toLowerCase();
+              if (st === "excused" || st === "declined") {
+                excused[row.event_id] = (excused[row.event_id] || 0) + 1;
+              } else if (st === "present" || st === "late" || st === "attended" || !st) {
                 counts[row.event_id] = (counts[row.event_id] || 0) + 1;
-              });
-              setEventHeadcounts(counts);
-            }
+              }
+            });
+            setEventHeadcounts(counts);
+            setEventExcusedCounts(excused);
+            try {
+              localStorage.setItem("agila_attendance_counts", JSON.stringify({ counts, excused }));
+            } catch (_) {}
           } else {
-            // For regular members, establish authoritative quorum records
-            const initialCounts: Record<string, number> = {
-              "20000000-0000-0000-0000-000000000001": 3,
-            };
-            if (targetEvt && attCount) {
-              initialCounts[targetEvt.id] = Math.max(initialCounts[targetEvt.id] || 0, attCount);
-            }
-            setEventHeadcounts(initialCounts);
+            // Read cached attendance counts if offline / unmigrated
+            try {
+              const rawCounts = localStorage.getItem("agila_attendance_counts");
+              if (rawCounts) {
+                const parsed = JSON.parse(rawCounts);
+                if (parsed.counts) setEventHeadcounts(parsed.counts);
+                if (parsed.excused) setEventExcusedCounts(parsed.excused);
+              }
+            } catch (_) {}
           }
         } else {
           setAssemblyHeadcount(0);
@@ -1596,11 +1741,8 @@ export default function AgilaHubApp() {
     if (!canManageFinance) {
       return { success: false, error: "Unauthorized: Only the Treasurer or Secretary can record Alalayang Agila grants." };
     }
-    // Prevent duplicate grant voucher submissions
-    const isDuplicateGrant = newGrant.voucherNumber && (
-      alalayangGrants.some((g) => g.voucherNumber === newGrant.voucherNumber) ||
-      contributions.some((c) => c.reference_number === newGrant.voucherNumber)
-    );
+    // Prevent duplicate grant voucher submissions against active grants
+    const isDuplicateGrant = newGrant.voucherNumber && alalayangGrants.some((g) => g.voucherNumber === newGrant.voucherNumber);
     if (isDuplicateGrant) {
       return { success: false, error: `Duplicate transaction rejected: Grant voucher ${newGrant.voucherNumber} already recorded.` };
     }
@@ -1759,40 +1901,50 @@ export default function AgilaHubApp() {
           } catch (__) {}
         }
 
-        // Trigger Android Share Sheet if Web Share with Files is available
-        if (typeof navigator !== "undefined" && navigator.canShare && navigator.share) {
-          const file = new File([blob], filename, { type: blob.type || "image/png" });
-          if (navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: filename,
-              text: "Official TFOE-PE AGILA Emblem",
-            });
-          }
+        // Trigger Share sheet on mobile device
+        if (typeof navigator !== "undefined" && navigator.share) {
+          try {
+            const file = new File([blob], filename, { type: blob.type || "image/png" });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                files: [file],
+                title: filename,
+                text: "Official TFOE-PE AGILA Emblem",
+              });
+            } else {
+              await navigator.share({
+                title: filename,
+                text: "Download official TFOE-PE AGILA logo asset",
+                url: window.location.origin + src,
+              });
+            }
+          } catch (_) {}
         }
       } catch (_) {}
 
-      // Browser Fallback: standard anchor download
+      // Browser download trigger
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
       link.download = filename;
+      link.target = "_blank";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 3000);
 
       setRealtimeToast({
-        title: "Asset Saved",
-        message: `${filename} has been saved to your device.`,
+        title: "Asset Downloaded",
+        message: `${filename} downloaded. If on mobile, check your Downloads or Share sheet.`,
         type: "success",
       });
     } catch {
-      const link = document.createElement("a");
-      link.href = src;
-      link.download = filename;
-      link.target = "_blank";
-      link.click();
+      window.open(src, "_blank");
+      setRealtimeToast({
+        title: "Asset Opened",
+        message: `Opened ${filename} in a new window for direct saving.`,
+        type: "info",
+      });
     }
   };
 
@@ -1806,30 +1958,41 @@ export default function AgilaHubApp() {
     }
     const meetingId = meeting.id && meeting.id.length > 20 && !meeting.id.startsWith("evt-") ? meeting.id : crypto.randomUUID();
     const eventDate = meeting.when || meeting.event_date || new Date().toISOString().split("T")[0];
-    
-    // Structured description formatted with Attention All Club Members! header and metadata
+    const eventTime = meeting.event_time || "09:00";
+    const location = meeting.where || meeting.location || "";
+    const address = meeting.address || "";
+    const attire = meeting.attire || "";
+    const contributionAmount = typeof meeting.contribution_amount === "number" ? meeting.contribution_amount : (typeof meeting.meetingContribution === "number" ? meeting.meetingContribution : 500);
+    const agenda = meeting.agenda || meeting.description || "";
+
     const descriptionObj = {
-      header: "Attention All Club Members!",
+      __isMeeting: true,
       what: meeting.what || meeting.title,
-      when: meeting.when || meeting.event_date,
-      where: meeting.where || meeting.location || "Daet Clubhouse",
-      address: meeting.address || "Daet, Camarines Norte",
-      attire: meeting.attire || "Type B Eagle Uniform",
-      meetingContribution: meeting.meetingContribution || 0,
-      agenda: meeting.agenda || meeting.description || "",
-      rsvps: meeting.rsvpsList || [],
-      payments: meeting.paymentsList || [],
+      when: eventDate,
+      eventTime: eventTime,
+      where: location,
+      address: address,
+      attire: attire,
+      contributionAmount: contributionAmount,
+      agenda: agenda,
+      rsvps: meeting.rsvps || {},
+      paidMembers: meeting.paid_members || [],
     };
 
-    const formattedDescription = `Attention All Club Members!\n\nWhat: ${descriptionObj.what}\nWhen: ${descriptionObj.when}\nWhere: ${descriptionObj.where}\nAddress: ${descriptionObj.address}\nAttire: ${descriptionObj.attire}\nMeeting Contribution: ₱${Number(descriptionObj.meetingContribution).toLocaleString(undefined, { minimumFractionDigits: 2 })}\n\nAgenda:\n${descriptionObj.agenda}`;
+    const formattedDescription = JSON.stringify(descriptionObj);
+
+    const timeToUse = eventTime.includes(":") ? eventTime : "09:00";
+    const isoDateTime = eventDate.includes("T") 
+      ? eventDate 
+      : `${eventDate}T${timeToUse.length === 5 ? timeToUse : "09:00"}:00+08:00`;
 
     const { error } = await supabase.from("events").upsert({
       id: meetingId,
       title: meeting.title,
       description: formattedDescription,
-      event_date: eventDate.includes("T") ? eventDate : `${eventDate}T09:00:00+00:00`,
-      location: meeting.where || meeting.location || "Daet Clubhouse",
-      checkin_code: "AGILA-" + Math.floor(1000 + Math.random() * 9000),
+      event_date: isoDateTime,
+      location: location || "Club Clubhouse",
+      checkin_code: meeting.checkin_code || ("AGILA-" + Math.floor(1000 + Math.random() * 9000)),
       checkin_open: false,
       status: "published",
       created_by: authMember.id,
@@ -1843,8 +2006,8 @@ export default function AgilaHubApp() {
       id: meetingId,
       title: meeting.title,
       description: formattedDescription,
-      event_date: eventDate,
-      location: meeting.where || meeting.location,
+      event_date: isoDateTime,
+      location: location || "Club Clubhouse",
       checkin_open: false,
       status: "published",
     };
@@ -1858,13 +2021,16 @@ export default function AgilaHubApp() {
       return updated;
     });
 
+    await fetchHubData();
+
     setRealtimeToast({
-      title: "Meeting Scheduled",
+      title: "Meeting Saved",
       message: `"${meeting.title}" saved and announced to club members.`,
       type: "success",
     });
     setSelectedMeeting(null);
     setIsNewMeetingModal(false);
+    setIsMeetingEditMode(false);
   };
 
   const handleDeleteMeeting = async (meetingId: string) => {
@@ -1888,12 +2054,87 @@ export default function AgilaHubApp() {
 
   const handleMeetingRsvp = async (meetingId: string, status: "attending" | "declined", reason?: string) => {
     if (!authMember) return;
+    const attStatus = status === "attending" ? "present" : "excused";
+    const memberName = `${authMember.first_name} ${authMember.last_name}`;
+
+    const { error } = await supabase.from("attendance").upsert(
+      {
+        event_id: meetingId,
+        member_id: authMember.id,
+        status: attStatus as any,
+        check_in_time: new Date().toISOString(),
+        check_in_method: "code",
+        notes: reason || (status === "attending" ? "Confirmed RSVP" : "Regrets filed"),
+      },
+      { onConflict: "event_id,member_id" }
+    );
+
+    if (error) {
+      console.warn("Notice updating attendance RSVP:", error.message);
+    }
+
     setEvents((prev) => {
-      return prev.map((e) => {
+      const updated = prev.map((e) => {
         if (e.id !== meetingId) return e;
-        return { ...e };
+        const parsed = parseMeetingRecord(e);
+        const rsvps = { ...(parsed.rsvps || {}) };
+        rsvps[authMember.id] = {
+          status: status,
+          memberName: memberName,
+          reason: reason,
+          timestamp: new Date().toISOString(),
+        };
+        const updatedMeta = {
+          __isMeeting: true,
+          what: parsed.what,
+          when: parsed.when,
+          eventTime: parsed.event_time,
+          where: parsed.location,
+          address: parsed.address,
+          attire: parsed.attire,
+          contributionAmount: parsed.contribution_amount,
+          agenda: parsed.agenda,
+          rsvps: rsvps,
+          paidMembers: parsed.paid_members || [],
+        };
+        return {
+          ...e,
+          description: JSON.stringify(updatedMeta),
+        };
       });
+      try {
+        localStorage.setItem("agila_meetings", JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
     });
+
+    setRsvpdEvents((prev) => ({ ...prev, [meetingId]: status === "attending" }));
+    if (status === "attending") {
+      setUserAttendedEventIds((prev) => new Set([...prev, meetingId]));
+    } else {
+      setUserAttendedEventIds((prev) => {
+        const next = new Set(prev);
+        next.delete(meetingId);
+        return next;
+      });
+    }
+
+    if (selectedMeeting && selectedMeeting.id === meetingId) {
+      setSelectedMeeting((prev) => {
+        if (!prev) return null;
+        const rsvps = { ...(prev.rsvps || {}) };
+        rsvps[authMember.id] = {
+          status: status,
+          memberName: memberName,
+          reason: reason,
+          timestamp: new Date().toISOString(),
+        };
+        return { ...prev, rsvps };
+      });
+    }
+
+    await fetchHubData();
+
     setRealtimeToast({
       title: status === "attending" ? "RSVP Confirmed" : "Absence Noted",
       message: status === "attending" ? "You are marked as attending this assembly." : `Regrets recorded: ${reason || "Not able to attend."}`,
@@ -2043,15 +2284,20 @@ export default function AgilaHubApp() {
 
   const handleDeleteGrant = async (grantId: string) => {
     if (!authMember) return;
+    const targetGrant = alalayangGrants.find((g) => g.id === grantId);
+    const targetVoucher = targetGrant?.voucherNumber;
+
     const { error } = await supabase.from("contributions").delete().eq("id", grantId);
     if (error) console.error("Error deleting grant from db:", error);
     setAlalayangGrants((prev) => {
-      const updated = prev.filter((g) => g.id !== grantId);
+      const updated = prev.filter((g) => g.id !== grantId && (targetVoucher ? g.voucherNumber !== targetVoucher : true));
       try {
         localStorage.setItem("agila_grants", JSON.stringify(updated));
       } catch (_) {}
       return updated;
     });
+    setContributions((prev) => prev.filter((c) => c.id !== grantId && (targetVoucher ? c.reference_number !== targetVoucher : true)));
+    setExpenses((prev) => prev.filter((e) => e.id !== grantId && (targetVoucher ? e.voucherNumber !== targetVoucher : true)));
     await fetchHubData();
     setRealtimeToast({
       title: "Grant Record Deleted",
@@ -2061,18 +2307,11 @@ export default function AgilaHubApp() {
     setSelectedAlalayang(null);
   };
 
-  const handleToggleRsvp = (eventId: string) => {
-    setRsvpdEvents((prev) => {
-      const nextState = !prev[eventId];
-      setRealtimeToast({
-        title: nextState ? "RSVP Confirmed" : "RSVP Cancelled",
-        message: nextState
-          ? "You are registered to attend this scheduled assembly."
-          : "Your RSVP for this assembly has been withdrawn.",
-        type: nextState ? "success" : "info",
-      });
-      return { ...prev, [eventId]: nextState };
-    });
+  const handleToggleRsvp = async (eventId: string) => {
+    const isCurrentlyRsvpd = Boolean(rsvpdEvents[eventId]);
+    const nextStatus = isCurrentlyRsvpd ? "declined" : "attending";
+    const nextReason = isCurrentlyRsvpd ? "Withdrawn RSVP" : undefined;
+    await handleMeetingRsvp(eventId, nextStatus, nextReason);
   };
 
   const handleToggleVolunteer = (serviceId: string) => {
@@ -2297,7 +2536,23 @@ export default function AgilaHubApp() {
   }
 
   return (
-    <div data-hydrated={hydrated} className="min-h-screen flex flex-col pb-28 text-slate-900 dark:text-white transition-colors duration-300">
+    <div
+      data-hydrated={hydrated}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className="min-h-screen flex flex-col pb-28 text-slate-900 dark:text-white transition-colors duration-300 relative"
+    >
+      {/* Pull-to-Refresh Visual Indicator (Requirement 1 - swipe down refresh across all screens) */}
+      <div
+        style={{ height: `${pullMoveDistance}px` }}
+        className="w-full flex items-center justify-center overflow-hidden transition-[height] duration-150 ease-out bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur-sm sticky top-0 z-50 border-b border-eagle-blue/20"
+      >
+        <div className="flex items-center gap-2 text-xs font-bold text-eagle-blue dark:text-amber-400 py-2">
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+          <span>{isRefreshing ? "Refreshing club data..." : pullMoveDistance >= 50 ? "Release to refresh" : "Pull down to refresh"}</span>
+        </div>
+      </div>
       
       {/* ===================================================================== */}
       {/* A. HOME VIEW (Contains Header, Greetings, Next Assembly, Digital ID, Announcements) */}
@@ -2313,7 +2568,10 @@ export default function AgilaHubApp() {
             textSize={textSize}
             onChangeTextSize={setTextSize}
             authMember={authMember}
-            onOpenProfile={() => setIsProfileSettingsOpen(true)}
+            onOpenProfile={() => {
+              setProfileInitialTab("profile");
+              setIsProfileSettingsOpen(true);
+            }}
             onLogout={() => setIsLogoutConfirmOpen(true)}
           />
 
@@ -2528,23 +2786,20 @@ export default function AgilaHubApp() {
                   <div className="flex items-center justify-between text-xs pt-0.5">
                     <button
                       type="button"
-                      onClick={() => setSelectedMeeting({
-                        id: activeEvent.id,
-                        title: activeEvent.title,
-                        description: activeEvent.description,
-                        event_date: activeEvent.event_date,
-                        location: activeEvent.location,
-                        checkin_code: activeEvent.checkin_code,
-                        checkin_open: activeEvent.checkin_open,
-                        status: activeEvent.status,
-                      })}
+                      onClick={() => {
+                        setSelectedMeeting(parseMeetingRecord(activeEvent));
+                        setIsMeetingEditMode(false);
+                      }}
                       className="text-xs font-bold text-eagle-blue dark:text-amber-300 hover:underline flex items-center gap-1"
                     >
                       View Agenda & Assembly Details <ChevronRight className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
-                      onClick={() => setActiveTab("assemblies")}
+                      onClick={() => {
+                        setActiveTab("assemblies");
+                        setAssemblySubTab("meetings");
+                      }}
                       className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                     >
                       All Meetings ({events.length}) →
@@ -2582,7 +2837,10 @@ export default function AgilaHubApp() {
                 officialIdUrl={officialIdUrl || (inspectedMember?.official_id_url ?? null)}
                 idCardBackUrl={idCardBackUrl || (inspectedMember?.id_card_back_url ?? null)}
                 onOpenScanModal={() => setIsOfficialIdScannerOpen(true)}
-                onUploadSelfieClick={() => setIsProfileSettingsOpen(true)}
+                onUploadSelfieClick={() => {
+                  setProfileInitialTab("selfie");
+                  setIsProfileSettingsOpen(true);
+                }}
                 onRemoveOfficialId={async () => {
                   setOfficialIdUrl(null);
                   setIdCardBackUrl(null);
@@ -2728,7 +2986,7 @@ export default function AgilaHubApp() {
               }`}
             >
               <Calendar className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Meetings ({events.length})</span>
+              <span className="truncate">Meetings</span>
             </button>
             <button
               type="button"
@@ -2741,7 +2999,7 @@ export default function AgilaHubApp() {
               }`}
             >
               <Users className="h-3.5 w-3.5 shrink-0 text-blue-500 dark:text-blue-400" />
-              <span className="truncate">Community Service ({communityServices.length})</span>
+              <span className="truncate">Community Service</span>
             </button>
             <button
               type="button"
@@ -2754,7 +3012,7 @@ export default function AgilaHubApp() {
               }`}
             >
               <HeartHandshake className="h-3.5 w-3.5 shrink-0 text-amber-500 dark:text-amber-400" />
-              <span className="truncate">Alalayang Agila ({alalayangGrants.length})</span>
+              <span className="truncate">Alalayang Agila</span>
             </button>
           </div>
 
@@ -2796,20 +3054,24 @@ export default function AgilaHubApp() {
                       id="btn-schedule-meeting"
                       onClick={() => {
                         setIsNewMeetingModal(true);
+                        setIsMeetingEditMode(true);
                         setSelectedMeeting({
                           id: crypto.randomUUID(),
                           title: "",
                           description: "",
                           event_date: new Date().toISOString().split("T")[0],
-                          location: "Daet Clubhouse",
+                          event_time: "09:00",
+                          location: "",
+                          address: "",
+                          attire: "",
+                          contribution_amount: 500,
                           checkin_code: "AGILA-" + Math.floor(1000 + Math.random() * 9000),
                           checkin_open: false,
                           status: "published",
-                          when: "",
-                          where: "Daet Clubhouse",
-                          address: "Daet, Camarines Norte",
-                          attire: "Type B Eagle Uniform",
-                          meetingContribution: 0,
+                          what: "",
+                          when: new Date().toISOString().split("T")[0],
+                          where: "",
+                          meetingContribution: 500,
                           agenda: "",
                         });
                       }}
@@ -2847,7 +3109,9 @@ export default function AgilaHubApp() {
               ) : (
                 events.map((evt) => {
                   const lifecycle = getEventLifecycleStatus(evt);
+                  const parsedItem = parseMeetingRecord(evt);
                   const headcount = eventHeadcounts[evt.id] ?? (userAttendedEventIds.has(evt.id) ? 1 : 0);
+                  const excusedCount = eventExcusedCounts[evt.id] ?? 0;
                   const quorum = getEventQuorumStatus(evt, headcount);
                   const hasAttended = userAttendedEventIds.has(evt.id);
                   const isPastOrClosed = lifecycle.lifecycle === "closed";
@@ -2859,7 +3123,11 @@ export default function AgilaHubApp() {
                     <div
                       key={evt.id}
                       id={`assembly-card-${evt.id}`}
-                      className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-4 hover:border-eagle-blue/50 dark:hover:border-amber-400/40 transition group"
+                      onClick={() => {
+                        setSelectedMeeting(parsedItem);
+                        setIsMeetingEditMode(false);
+                      }}
+                      className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-canvas-slate border border-slate-200 dark:border-white/10 shadow-sm space-y-4 hover:border-eagle-blue/50 dark:hover:border-amber-400/40 transition group cursor-pointer"
                     >
                       {/* Top Header: Category Pill + Lifecycle Status + Quorum Status */}
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2882,38 +3150,42 @@ export default function AgilaHubApp() {
 
                       {/* Title and Description */}
                       <div>
-                        <h4
-                          onClick={() => setSelectedMeeting(evt)}
-                          className="font-display font-bold text-base sm:text-lg text-slate-900 dark:text-white group-hover:text-eagle-blue dark:group-hover:text-amber-300 transition-colors cursor-pointer"
-                        >
-                          {evt.title.replace("[SEED] ", "")}
+                        <h4 className="font-display font-bold text-base sm:text-lg text-slate-900 dark:text-white group-hover:text-eagle-blue dark:group-hover:text-amber-300 transition-colors">
+                          {parsedItem.title}
                         </h4>
                         <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-3xl line-clamp-2 leading-relaxed">
-                          {evt.description}
+                          {parsedItem.agenda || parsedItem.description}
                         </p>
                       </div>
 
-                      {/* Metadata Row: Date, Time (Manila PST), Venue, Attendance Headcount (No Emojis!) */}
+                      {/* Metadata Row: Date, Time (PH Time without label), Venue, Attendance Headcount */}
                       <div className="pt-2 border-t border-slate-100 dark:border-white/5 flex flex-wrap items-center gap-y-2 gap-x-5 text-xs text-slate-500 font-medium">
                         <span className="flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5 text-eagle-blue shrink-0" />
-                          <span>{formatDate(evt.event_date, { month: "short", day: "numeric", year: "numeric" })}</span>
+                          <span>{formatDate(parsedItem.event_date, { month: "short", day: "numeric", year: "numeric" })}</span>
                         </span>
 
                         <span className="flex items-center gap-1.5">
                           <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                          <span>{formatTime(evt.event_date)} (PST)</span>
+                          <span>{formatTimeTo12Hour(parsedItem.event_time || evt.event_date)}</span>
                         </span>
 
                         <span className="flex items-center gap-1.5">
                           <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate max-w-[200px]">{evt.location || "Agila Clubhouse & Conference Hall, QC"}</span>
+                          <span className="truncate max-w-[200px]">{parsedItem.location || "Agila Clubhouse & Conference Hall, QC"}</span>
                         </span>
 
                         <span className="flex items-center gap-1.5">
                           <Users className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                           <span>{headcount} Verified Attendee{headcount === 1 ? "" : "s"}</span>
                         </span>
+
+                        {excusedCount > 0 && (
+                          <span className="flex items-center gap-1.5 text-rose-500 font-semibold">
+                            <UserX className="h-3.5 w-3.5 shrink-0" />
+                            <span>{excusedCount} Excused</span>
+                          </span>
+                        )}
                       </div>
 
                       {/* Action Bar & Attendance State */}
@@ -2951,93 +3223,46 @@ export default function AgilaHubApp() {
 
                         {/* Context-Appropriate Interactive Action Buttons */}
                         <div className="flex items-center gap-2 self-end sm:self-auto">
-                          {isPastOrClosed && (
+                          {isOpen && !hasAttended && (
                             <Button
                               size="sm"
-                              variant="secondary"
-                              onClick={() => setSelectedMeeting(evt)}
-                              className="text-xs font-bold"
+                              variant="primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveCheckInModalEvent(evt);
+                                setModalCheckInFeedback(null);
+                                setModalCheckInCode("");
+                              }}
+                              className="text-xs font-bold shadow-sm flex items-center gap-1.5"
                             >
-                              View Summary
+                              <QrCode className="h-3.5 w-3.5" />
+                              Check In
                             </Button>
                           )}
 
-                          {isOpen && (
-                            <>
-                              {!hasAttended ? (
-                                <Button
-                                  size="sm"
-                                  variant="primary"
-                                  onClick={() => {
-                                    setActiveCheckInModalEvent(evt);
-                                    setModalCheckInFeedback(null);
-                                    setModalCheckInCode("");
-                                  }}
-                                  className="text-xs font-bold shadow-sm flex items-center gap-1.5"
-                                >
-                                  <QrCode className="h-3.5 w-3.5" />
-                                  Check In
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() => setSelectedMeeting(evt)}
-                                  className="text-xs font-bold"
-                                >
-                                  View Details
-                                </Button>
-                              )}
-                              {!hasAttended && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setSelectedMeeting(evt)}
-                                  className="text-xs font-bold"
-                                >
-                                  Details
-                                </Button>
-                              )}
-                            </>
-                          )}
-
                           {isScheduled && (
-                            <>
-                              <Button
-                                id={`btn-rsvp-${evt.id}`}
-                                size="sm"
-                                variant={rsvpdEvents[evt.id] ? "secondary" : "outline"}
-                                onClick={() => handleToggleRsvp(evt.id)}
-                                className="text-xs font-bold"
-                              >
-                                {rsvpdEvents[evt.id] ? "✓ RSVP Confirmed" : "RSVP / Register"}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setSelectedMeeting(evt)}
-                                className="text-xs font-bold"
-                              >
-                                View Details
-                              </Button>
-                            </>
-                          )}
-
-                          {isCancelled && (
                             <Button
+                              id={`btn-rsvp-${evt.id}`}
                               size="sm"
-                              variant="outline"
-                              onClick={() => setSelectedMeeting(evt)}
+                              variant={rsvpdEvents[evt.id] ? "secondary" : "outline"}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleRsvp(evt.id);
+                              }}
                               className="text-xs font-bold"
                             >
-                              View Details
+                              {rsvpdEvents[evt.id] ? "✓ RSVP Confirmed" : "RSVP / Register"}
                             </Button>
                           )}
 
                           {(currentRole === "admin" || currentRole === "officer") && (
                             <button
                               type="button"
-                              onClick={() => setSelectedMeeting(evt)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedMeeting(parsedItem);
+                                setIsMeetingEditMode(true);
+                              }}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-eagle-blue dark:hover:text-amber-300 hover:bg-slate-100 dark:hover:bg-white/10 transition"
                               title="Edit Meeting"
                             >
@@ -3070,18 +3295,18 @@ export default function AgilaHubApp() {
                         id: crypto.randomUUID(),
                         title: "",
                         description: "",
-                        mission: "Community Service Outreach",
-                        status: "Mobilizing Volunteers",
+                        mission: "",
+                        status: "Active Community Mission",
                         projectDate: new Date().toISOString().split("T")[0],
                         scheduleFrom: new Date().toISOString().split("T")[0],
                         scheduleTo: new Date().toISOString().split("T")[0],
                         assemblyTime: "08:00 AM",
-                        proponent: "Community Service Committee",
+                        proponent: "",
                         projectScope: "Club",
                         contributionAmount: 0,
-                        targetBeneficiaries: "Camarines Norte Communities",
-                        leadCommittee: "Community Service",
-                        location: "Camarines Norte Sector",
+                        targetBeneficiaries: "",
+                        leadCommittee: "Community Service & Outreach",
+                        location: "",
                       });
                     }}
                     className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm flex items-center gap-1.5 transition"
@@ -5235,24 +5460,33 @@ export default function AgilaHubApp() {
         currentRole={currentRole}
         onSaveGrant={handleSaveGrant}
         onGrantRecorded={(newGrant) => {
-          setAlalayangGrants((prev) => [newGrant, ...prev]);
-          // Sync to expense releases
-          const grantExp: ExpenseRecord = {
-            id: `exp-${Date.now()}`,
-            title: `Alalayang Agila: ${newGrant.recipientName}`,
-            category: "Alalayang Agila",
-            amount: newGrant.amount,
-            disbursedTo: `${newGrant.recipientName} (${newGrant.recipientRelationship})`,
-            disbursementDate: newGrant.grantDate,
-            voucherNumber: newGrant.voucherNumber,
-            approvedBy: newGrant.approvedBy,
-            status: "released",
-            notes: newGrant.reason,
-            created_at: new Date().toISOString(),
-          };
-          setExpenses((prev) => [grantExp, ...prev]);
+          setAlalayangGrants((prev) => {
+            if (prev.some((g) => g.id === newGrant.id || (newGrant.voucherNumber && g.voucherNumber === newGrant.voucherNumber))) {
+              return prev;
+            }
+            return [newGrant, ...prev];
+          });
+          setExpenses((prev) => {
+            if (prev.some((e) => e.voucherNumber === newGrant.voucherNumber)) {
+              return prev;
+            }
+            const grantExp: ExpenseRecord = {
+              id: `exp-${Date.now()}`,
+              title: `Alalayang Agila: ${newGrant.recipientName}`,
+              category: "Alalayang Agila",
+              amount: newGrant.amount,
+              disbursedTo: `${newGrant.recipientName} (${newGrant.recipientRelationship})`,
+              disbursementDate: newGrant.grantDate,
+              voucherNumber: newGrant.voucherNumber,
+              approvedBy: newGrant.approvedBy,
+              status: "released",
+              notes: newGrant.reason,
+              created_at: new Date().toISOString(),
+            };
+            return [grantExp, ...prev];
+          });
           setRealtimeToast({
-            title: "Alalayang Agila Disbursed",
+            title: "Alalayang Agila Recorded",
             message: `₱${newGrant.amount.toLocaleString()} grant recorded for ${newGrant.recipientName}.`,
             type: "success",
           });
@@ -5560,9 +5794,11 @@ export default function AgilaHubApp() {
         onClose={() => {
           setSelectedMeeting(null);
           setIsNewMeetingModal(false);
+          setIsMeetingEditMode(false);
         }}
         meeting={selectedMeeting}
         isNew={isNewMeetingModal}
+        initialEditMode={isMeetingEditMode}
         canEdit={currentRole === "admin" || currentRole === "officer" || canManageAttendance}
         onSave={handleSaveMeeting}
         onDelete={handleDeleteMeeting}

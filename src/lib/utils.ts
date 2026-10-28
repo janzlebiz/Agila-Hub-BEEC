@@ -133,3 +133,32 @@ export function formatTime(
   }
 }
 
+/**
+ * Converts a 24-hour time string (e.g. "17:00", "09:30") or ISO string to 12-hour format (e.g. "5:00 PM", "9:30 AM")
+ * without redundant timezone labels.
+ */
+export function formatTimeTo12Hour(timeStr?: string | null): string {
+  if (!timeStr) return "TBA";
+  const trimmed = timeStr.trim();
+  if (/am|pm/i.test(trimmed)) {
+    return trimmed.replace(/\s*\((ph\s*time|pst)\)/gi, "").replace(/\s*(ph\s*time|pst)/gi, "").trim();
+  }
+  const parts = trimmed.split(":");
+  if (parts.length >= 2) {
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    if (!isNaN(hours) && !isNaN(minutes)) {
+      const period = hours >= 12 ? "PM" : "AM";
+      const h12 = hours % 12 || 12;
+      const mm = minutes.toString().padStart(2, "0");
+      return `${h12}:${mm} ${period}`;
+    }
+  }
+  const d = new Date(trimmed);
+  if (!isNaN(d.getTime())) {
+    return formatTime(d);
+  }
+  return trimmed;
+}
+
+

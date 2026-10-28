@@ -20,7 +20,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatTimeTo12Hour } from "@/lib/utils";
 
 export interface MeetingItem {
   id: string;
@@ -59,6 +59,7 @@ interface MeetingDetailModalProps {
   meeting: MeetingItem | null;
   canEdit?: boolean;
   isNew?: boolean;
+  initialEditMode?: boolean;
   currentMember?: { id: string; name?: string; first_name?: string; last_name?: string } | null;
   onSave?: (meeting: MeetingItem) => void;
   onDelete?: (id: string) => void;
@@ -73,6 +74,7 @@ export function MeetingDetailModal({
   meeting,
   canEdit = false,
   isNew = false,
+  initialEditMode = false,
   currentMember,
   onSave,
   onDelete,
@@ -80,15 +82,15 @@ export function MeetingDetailModal({
   onRecordContributionPayment,
   membersList = [],
 }: MeetingDetailModalProps) {
-  const [isEditing, setIsEditing] = useState(isNew);
+  const [isEditing, setIsEditing] = useState(isNew || initialEditMode);
   const [title, setTitle] = useState(meeting?.title || "");
   const [description, setDescription] = useState(meeting?.description || "");
   const [eventDate, setEventDate] = useState(meeting?.event_date ? meeting.event_date.split("T")[0] : "");
-  const [eventTime, setEventTime] = useState(meeting?.event_time || "14:00");
-  const [location, setLocation] = useState(meeting?.location || "Daet Clubhouse");
-  const [address, setAddress] = useState(meeting?.address || "Laniton, Basud, Camarines Norte");
-  const [attire, setAttire] = useState(meeting?.attire || "Club Uniform / Type A");
-  const [contributionAmount, setContributionAmount] = useState<number>(meeting?.contribution_amount ?? 200);
+  const [eventTime, setEventTime] = useState(meeting?.event_time || "09:00");
+  const [location, setLocation] = useState(meeting?.location || "");
+  const [address, setAddress] = useState(meeting?.address || "");
+  const [attire, setAttire] = useState(meeting?.attire || "");
+  const [contributionAmount, setContributionAmount] = useState<number>(meeting?.contribution_amount ?? 500);
 
   // RSVP decline flow state
   const [isDeclining, setIsDeclining] = useState(false);
@@ -99,21 +101,39 @@ export function MeetingDetailModal({
   const [selectedPayMemberId, setSelectedPayMemberId] = useState("");
 
   React.useEffect(() => {
-    if (meeting) {
-      setTitle(meeting.title.replace("[SEED] ", ""));
-      setDescription(meeting.description || "");
-      setEventDate(meeting.event_date ? meeting.event_date.split("T")[0] : "");
-      setEventTime(meeting.event_time || "14:00");
-      setLocation(meeting.location || "Daet Clubhouse");
-      setAddress(meeting.address || "Laniton, Basud, Camarines Norte");
-      setAttire(meeting.attire || "Club Uniform / Type A");
-      setContributionAmount(meeting.contribution_amount ?? 200);
-      setIsEditing(isNew);
+    if (!isOpen) return;
+
+    if (isNew) {
+      // Pristine reset on new meeting creation - never carry over prior meeting inputs
+      setTitle("");
+      setDescription("");
+      setEventDate(new Date().toISOString().split("T")[0]);
+      setEventTime("09:00");
+      setLocation("");
+      setAddress("");
+      setAttire("");
+      setContributionAmount(500);
+      setIsEditing(true);
       setIsDeclining(false);
       setDeclineReason("");
       setRsvpFeedback(null);
+      setSelectedPayMemberId("");
+    } else if (meeting) {
+      setTitle(meeting.title.replace("[SEED] ", ""));
+      setDescription(meeting.agenda || meeting.description || "");
+      setEventDate(meeting.event_date ? meeting.event_date.split("T")[0] : "");
+      setEventTime(meeting.event_time || "09:00");
+      setLocation(meeting.where || meeting.location || "");
+      setAddress(meeting.address || "");
+      setAttire(meeting.attire || "");
+      setContributionAmount(typeof meeting.contribution_amount === "number" ? meeting.contribution_amount : (typeof meeting.meetingContribution === "number" ? meeting.meetingContribution : 500));
+      setIsEditing(isNew || Boolean(initialEditMode));
+      setIsDeclining(false);
+      setDeclineReason("");
+      setRsvpFeedback(null);
+      setSelectedPayMemberId("");
     }
-  }, [meeting, isNew]);
+  }, [meeting, isNew, initialEditMode, isOpen]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -141,6 +161,11 @@ export function MeetingDetailModal({
         address: address.trim(),
         attire: attire.trim(),
         contribution_amount: Number(contributionAmount) || 0,
+        what: title.trim(),
+        when: eventDate,
+        where: location.trim(),
+        meetingContribution: Number(contributionAmount) || 0,
+        agenda: description.trim(),
         status: "scheduled",
       });
     }
@@ -366,7 +391,7 @@ export function MeetingDetailModal({
                       When:
                     </span>
                     <span className="font-bold text-slate-800 dark:text-slate-200">
-                      {eventDate ? formatDate(eventDate, { month: "long" }) : "TBA"} • {eventTime || "TBA"}
+                      {eventDate ? formatDate(eventDate, { month: "long", day: "numeric", year: "numeric" }) : "TBA"} • {formatTimeTo12Hour(eventTime)}
                     </span>
                   </div>
 
@@ -393,7 +418,7 @@ export function MeetingDetailModal({
                       Attire:
                     </span>
                     <span className="font-bold text-blue-700 dark:text-blue-300">
-                      {attire || "Club Uniform / Type A"}
+                      {attire || "Type B / Eagle Decorum"}
                     </span>
                   </div>
 
@@ -403,7 +428,7 @@ export function MeetingDetailModal({
                         Fee / Dues:
                       </span>
                       <span className="font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
-                        ₱{contributionAmount.toLocaleString()} per Kuya (Linked to Financials)
+                        ₱{contributionAmount.toLocaleString()} per Kuya
                       </span>
                     </div>
                   )}
@@ -570,11 +595,11 @@ export function MeetingDetailModal({
                   <p className="text-[11px] text-slate-500">
                     Recorded payments automatically post to Financials under Inflows.
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <select
                       value={selectedPayMemberId}
                       onChange={(e) => setSelectedPayMemberId(e.target.value)}
-                      className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-canvas-slate border border-slate-300 dark:border-white/10 text-xs font-bold text-slate-900 dark:text-white"
+                      className="w-full min-w-0 flex-1 px-3 py-2 rounded-xl bg-white dark:bg-canvas-slate border border-slate-300 dark:border-white/10 text-xs font-bold text-slate-900 dark:text-white truncate"
                     >
                       <option value="">-- Select Member to Record Payment --</option>
                       {membersList.map((m) => {
@@ -590,7 +615,7 @@ export function MeetingDetailModal({
                       type="button"
                       disabled={!selectedPayMemberId}
                       onClick={handlePayContribution}
-                      className="px-3 py-2 rounded-xl bg-eagle-blue hover:brightness-110 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition active:scale-95 shrink-0"
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-eagle-blue hover:brightness-110 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition active:scale-95 shrink-0 text-center flex items-center justify-center"
                     >
                       Record Inflow
                     </button>
